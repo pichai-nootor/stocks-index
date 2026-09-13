@@ -35,8 +35,14 @@ function HotCard({ title, stats, hint }: { title: string; stats: DigitStat[]; hi
 export default async function DigitsPage({ searchParams }: PageProps<"/digits">) {
   const { userId } = await requireUser();
   const sp = await searchParams;
-  const stocks = await prisma.stock.findMany({ where: { userId }, orderBy: { symbol: "asc" } });
-  const stockId = typeof sp.stock === "string" && stocks.some((s) => s.id === sp.stock) ? sp.stock : stocks[0]?.id ?? "";
+  const stocks = await prisma.stock.findMany({
+    where: { userId },
+    include: { _count: { select: { records: true } } },
+    orderBy: { symbol: "asc" },
+  });
+  // ค่าเริ่มต้น: หุ้นที่มีสถิติมากที่สุด
+  const defaultStock = [...stocks].sort((a, b) => b._count.records - a._count.records)[0];
+  const stockId = typeof sp.stock === "string" && stocks.some((s) => s.id === sp.stock) ? sp.stock : defaultStock?.id ?? "";
   const window = WINDOWS.includes(Number(sp.n)) ? Number(sp.n) : 10;
   const selected = stocks.find((s) => s.id === stockId);
 
