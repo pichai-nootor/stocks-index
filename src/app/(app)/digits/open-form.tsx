@@ -1,0 +1,40 @@
+"use client";
+
+import { useActionState } from "react";
+import { saveOpenAndForecast } from "@/app/actions/stocks";
+import { FormError } from "@/components/form-error";
+
+type Stock = { id: string; symbol: string; name: string | null };
+
+export function OpenForm({ stocks, stockId, date, openValue, openChange }: {
+  stocks: Stock[]; stockId: string; date: string; openValue: string; openChange: string;
+}) {
+  const [state, action, pending] = useActionState(saveOpenAndForecast, undefined);
+  return (
+    <form action={action} className="card space-y-3">
+      <div className="grid gap-4 sm:grid-cols-[1fr_1fr_1fr_1fr_auto] sm:items-end">
+        <div>
+          <label htmlFor="stockId" className="label">หุ้น / ดัชนี</label>
+          <select id="stockId" name="stockId" className="input" defaultValue={stockId}>
+            {stocks.map((s) => <option key={s.id} value={s.id}>{s.symbol}{s.name ? ` — ${s.name}` : ""}</option>)}
+          </select>
+        </div>
+        <div>
+          <label htmlFor="date" className="label">วันที่</label>
+          <input id="date" name="date" type="date" className="input" defaultValue={date} required />
+        </div>
+        <div>
+          <label htmlFor="openValue" className="label">ค่าดัชนีตอนเปิด</label>
+          <input id="openValue" name="openValue" type="number" step="any" inputMode="decimal" className="input" defaultValue={openValue} placeholder="74309.16" required />
+        </div>
+        <div>
+          <label htmlFor="openChange" className="label">เปิดวันนี้ เปลี่ยนแปลง (+/−)</label>
+          <input id="openChange" name="openChange" type="number" step="any" inputMode="decimal" className="input" defaultValue={openChange} placeholder="-593.43" required />
+        </div>
+        <button type="submit" className="btn-primary" disabled={pending}>{pending ? "..." : "บันทึกเปิด + ฟันธง"}</button>
+      </div>
+      <FormError message={state?.error} />
+      <p className="text-xs text-slate-500">เลขเปิดจะถูกบันทึกไว้ ตอนเย็นกลับมาเติมผลปิดในส่วน "รอผลปิด" ด้านล่าง</p>
+    </form>
+  );
+}

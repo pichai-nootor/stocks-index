@@ -10,7 +10,7 @@ import { Change, PatternBadge } from "@/components/change";
 import { PatternMatrix } from "@/components/pattern-matrix";
 import { Digits } from "@/components/digit-badges";
 import { RecordForm } from "./record-form";
-import { CloseForm } from "./close-form";
+import { CloseForm } from "@/components/close-form";
 
 export default async function StockDetailPage({ params }: PageProps<"/stocks/[id]">) {
   const { id } = await params;

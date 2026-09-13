@@ -75,6 +75,31 @@ export async function createRecord(_prev: ActionState, formData: FormData): Prom
   return undefined;
 }
 
+/** หน้าวิเคราะห์: บันทึกเลขเปิดของวัน (ถ้ามีอยู่แล้วและยังไม่ปิด → อัปเดต) แล้วพาไปดูฟันธง */
+export async function saveOpenAndForecast(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const { userId } = await requireUser();
+  const parsed = recordSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
+
+  const { stockId, date, openValue, openChange } = parsed.data;
+  const stock = await prisma.stock.findFirst({ where: { id: stockId, userId } });
+  if (!stock) return { error: "ไม่พบหุ้น" };
+
+  const existing = await prisma.record.findFirst({ where: { stockId, date: new Date(date) } });
+  if (existing && existing.closeValue !== null) {
+    return { error: "วันนี้มีผลปิดแล้ว — แก้ไขได้จากหน้าหุ้น" };
+  }
+  if (existing) {
+    await prisma.record.update({ where: { id: existing.id }, data: { openValue, openChange } });
+  } else {
+    await prisma.record.create({ data: { stockId, date: new Date(date), openValue, openChange } });
+  }
+  revalidatePath(`/stocks/${stockId}`);
+  revalidatePath("/digits");
+  revalidatePath("/dashboard");
+  redirect(`/digits?stock=${stockId}&date=${date}&openValue=${openValue}&openChange=${openChange}&saved=1`);
+}
+
 /** เติมค่าปิดให้วันที่บันทึกเปิดไว้แล้ว */
 export async function fillClose(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const { userId } = await requireUser();

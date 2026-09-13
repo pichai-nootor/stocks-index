@@ -4,6 +4,8 @@ import { requireUser } from "@/lib/auth";
 import { toDayDigits, scoreFromOpen, backtest, fitModel, top2, bottom2, POSITIONS, positionLabel, positionDigits } from "@/lib/digits";
 import { fmtNum, fmtChange, hasClose } from "@/lib/stats";
 import { Digits } from "@/components/digit-badges";
+import { CloseForm } from "@/components/close-form";
+import { OpenForm } from "./open-form";
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 
@@ -18,13 +20,17 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
   const defaultStock = [...stocks].sort((a, b) => b._count.records - a._count.records)[0];
   const stockId = typeof sp.stock === "string" && stocks.some((s) => s.id === sp.stock) ? sp.stock : defaultStock?.id ?? "";
   const selected = stocks.find((s) => s.id === stockId);
+  const dateRaw = typeof sp.date === "string" ? sp.date : new Date().toISOString().slice(0, 10);
+  const saved = sp.saved === "1";
   const openValueRaw = typeof sp.openValue === "string" ? sp.openValue : "";
   const openChangeRaw = typeof sp.openChange === "string" ? sp.openChange : "";
   const openValue = Number(openValueRaw);
   const openChange = Number(openChangeRaw);
   const hasOpen = openValueRaw !== "" && openChangeRaw !== "" && Number.isFinite(openValue) && Number.isFinite(openChange);
 
-  const records = (selected ? await prisma.record.findMany({ where: { stockId: selected.id }, orderBy: { date: "asc" } }) : []).filter(hasClose);
+  const allRecords = selected ? await prisma.record.findMany({ where: { stockId: selected.id }, orderBy: { date: "asc" } }) : [];
+  const records = allRecords.filter(hasClose);
+  const pendingRecords = allRecords.filter((r) => !hasClose(r)).reverse();
   const days = toDayDigits(records);
   const model = fitModel(days);
   const posRate = (k: (typeof POSITIONS)[number]) => (model.position[k].n ? model.position[k].hit / model.position[k].n : 0);
@@ -46,23 +52,8 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
         </p>
       </div>
 
-      <form method="get" className="card grid gap-4 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end">
-        <div>
-          <label htmlFor="stock" className="label">หุ้น / ดัชนี</label>
-          <select id="stock" name="stock" className="input" defaultValue={stockId}>
-            {stocks.map((s) => <option key={s.id} value={s.id}>{s.symbol}{s.name ? ` — ${s.name}` : ""}</option>)}
-          </select>
-        </div>
-        <div>
-          <label htmlFor="openValue" className="label">ค่าดัชนีตอนเปิด</label>
-          <input id="openValue" name="openValue" type="number" step="any" inputMode="decimal" className="input" defaultValue={openValueRaw} placeholder="74309.16" required />
-        </div>
-        <div>
-          <label htmlFor="openChange" className="label">เปิดวันนี้ เปลี่ยนแปลง (+/−)</label>
-          <input id="openChange" name="openChange" type="number" step="any" inputMode="decimal" className="input" defaultValue={openChangeRaw} placeholder="-593.43" required />
-        </div>
-        <button type="submit" className="btn-primary">ฟันธง</button>
-      </form>
+      <OpenForm stocks={stocks} stockId={stockId} date={dateRaw} openValue={openValueRaw} openChange={openChangeRaw} />
+      {saved && <p className="rounded-md bg-emerald-50 px-4 py-2 text-sm text-emerald-800">✓ บันทึกเลขเปิดวันที่ {new Date(dateRaw).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" })} แล้ว — ตอนเย็นมาเติมผลปิดด้านล่าง</p>}
 
       {!selected ? (
         <p className="text-sm text-slate-500">ยังไม่มีหุ้น — <Link href="/stocks" className="text-blue-600 hover:underline">เพิ่มหุ้นก่อน</Link></p>
@@ -108,6 +99,32 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
                     </li>
                   ))}
                 </ul>
+              </div>
+            </section>
+          )}
+
+          {pendingRecords.length > 0 && (
+            <section className="card border-amber-200">
+              <h2 className="font-medium">รอผลปิด ({pendingRecords.length})</h2>
+              <p className="text-xs text-slate-500">กรอกค่าปิด + เปลี่ยนแปลง แล้วระบบจะตรวจให้ว่าเลขที่ฟันโผล่ไหม</p>
+              <div className="mt-3 divide-y divide-slate-100">
+                {pendingRecords.map((r) => {
+                  const t = top2(r.openValue), b = bottom2(r.openChange);
+                  const rk = scoreFromOpen(days.filter((d) => d.date.getTime() < r.date.getTime()), t, b);
+                  return (
+                    <div key={r.id} className="flex flex-wrap items-center gap-4 py-3 text-sm">
+                      <span className="w-20 whitespace-nowrap">{r.date.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" })}</span>
+                      <span className="text-slate-600">เปิด {fmtNum(r.openValue)} {fmtChange(r.openChange)}</span>
+                      <span><Digits value={t} /> <Digits value={b} /></span>
+                      <span className="flex items-center gap-1">
+                        <span className="text-xs text-slate-500">ฟัน</span>
+                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-400 font-mono text-lg font-bold text-white">{rk[0].digit}</span>
+                        {rk[1] && <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100 font-mono text-lg font-bold text-amber-900">{rk[1].digit}</span>}
+                      </span>
+                      <span className="ml-auto"><CloseForm recordId={r.id} /></span>
+                    </div>
+                  );
+                })}
               </div>
             </section>
           )}
