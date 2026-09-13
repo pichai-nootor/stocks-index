@@ -2,26 +2,46 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
-import { summarize, fmtChange, fmtNum, openPct, closePct } from "@/lib/stats";
+import { summarize, fmtChange, fmtNum, hasClose } from "@/lib/stats";
+import { toDayDigits, scoreDigits, top2, bottom2 } from "@/lib/digits";
 import { deleteRecord, deleteStock } from "@/app/actions/stocks";
 import { StatCard } from "@/components/stat-card";
 import { Change, PatternBadge } from "@/components/change";
 import { PatternMatrix } from "@/components/pattern-matrix";
-import { RecordForm } from "./record-form";
-import { top2, bottom2 } from "@/lib/digits";
 import { Digits } from "@/components/digit-badges";
+import { RecordForm } from "./record-form";
+import { CloseForm } from "./close-form";
 
 export default async function StockDetailPage({ params }: PageProps<"/stocks/[id]">) {
   const { id } = await params;
   const { userId } = await requireUser();
   const stock = await prisma.stock.findFirst({
     where: { id, userId },
-    include: { records: { orderBy: { date: "desc" } } },
+    include: { records: { orderBy: { date: "asc" } } },
   });
   if (!stock) notFound();
 
-  const st = summarize(stock.records);
-  const tone = (x: number): "up" | "down" | "neutral" => (x > 0 ? "up" : x < 0 ? "down" : "neutral");
+  const closed = stock.records.filter(hasClose);
+  const st = summarize(closed);
+  const allDays = toDayDigits(closed);
+
+  // ฟันธงของแต่ละวัน: ใช้เฉพาะวันที่ปิดแล้ว "ก่อนหน้า" วันนั้น
+  const rows = stock.records.map((r) => {
+    const history = allDays.filter((d) => d.date.getTime() < r.date.getTime());
+    const oTop = top2(r.openValue), oBot = bottom2(r.openChange);
+    const ranked = history.length ? scoreDigits(history, oTop, oBot) : null;
+    const pick = ranked ? ranked[0].digit : null;
+    const pair = ranked ? [ranked[0].digit, ranked[1].digit] : null;
+    const closeDigits = hasClose(r) ? [...new Set((top2(r.closeValue) + bottom2(r.closeChange)).split(""))] : null;
+    const hit1 = pick !== null && closeDigits ? closeDigits.includes(pick) : null;
+    const hit2 = pair && closeDigits ? pair.filter((d) => closeDigits.includes(d)) : null;
+    return { r, oTop, oBot, pick, pair, p: ranked?.[0].p ?? null, closeDigits, hit1, hit2 };
+  }).reverse();
+
+  const judged = rows.filter((x) => x.hit1 !== null);
+  const hit1Count = judged.filter((x) => x.hit1).length;
+  const hit2Count = judged.filter((x) => x.hit2 && x.hit2.length > 0).length;
+  const pending = stock.records.filter((r) => !hasClose(r)).length;
 
   return (
     <div className="space-y-6">
@@ -34,8 +54,8 @@ export default async function StockDetailPage({ params }: PageProps<"/stocks/[id
           </h1>
         </div>
         <div className="flex gap-2">
-          <Link href={`/digits?stock=${stock.id}`} className="btn-ghost border border-slate-200">วิเคราะห์เลข</Link>
-          <Link href={`/predict?stock=${stock.id}`} className="btn-primary">คาดการณ์ราคาปิด</Link>
+          <Link href={`/digits?stock=${stock.id}`} className="btn-ghost border border-slate-200">วิเคราะห์เลขปิด</Link>
+          <Link href={`/predict?stock=${stock.id}`} className="btn-ghost border border-slate-200">คาดการณ์ราคาปิด</Link>
           <form action={deleteStock}>
             <input type="hidden" name="id" value={stock.id} />
             <button type="submit" className="btn-danger">ลบหุ้น</button>
@@ -43,77 +63,100 @@ export default async function StockDetailPage({ params }: PageProps<"/stocks/[id
         </div>
       </div>
 
-      {st.count > 0 && (
-        <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
-          <PatternMatrix summary={st} />
-          <div className="grid gap-4 sm:grid-cols-2">
-            <StatCard label="จำนวนสถิติ" value={String(st.count)} hint={`ปิดบวก ${(st.all.closeUpRate * 100).toFixed(0)}% ของทั้งหมด`} />
-            <StatCard
-              label="เฉลี่ยเปลี่ยนแปลงตอนปิด"
-              value={fmtChange(st.all.avgCloseChange)}
-              hint={`มัธยฐาน ${fmtChange(st.all.medianCloseChange)}`}
-              tone={tone(st.all.avgCloseChange)}
-            />
-            <StatCard
-              label="เมื่อเปิด + → ปิดเฉลี่ย"
-              value={st.whenOpenUp.count ? fmtChange(st.whenOpenUp.avgCloseChange) : "-"}
-              hint={st.whenOpenUp.count ? `โอกาสปิดบวก ${(st.whenOpenUp.closeUpRate * 100).toFixed(0)}% (${st.whenOpenUp.count} ครั้ง)` : "ยังไม่มีข้อมูล"}
-              tone={tone(st.whenOpenUp.avgCloseChange)}
-            />
-            <StatCard
-              label="เมื่อเปิด − → ปิดเฉลี่ย"
-              value={st.whenOpenDown.count ? fmtChange(st.whenOpenDown.avgCloseChange) : "-"}
-              hint={st.whenOpenDown.count ? `โอกาสปิดบวก ${(st.whenOpenDown.closeUpRate * 100).toFixed(0)}% (${st.whenOpenDown.count} ครั้ง)` : "ยังไม่มีข้อมูล"}
-              tone={tone(st.whenOpenDown.avgCloseChange)}
-            />
-          </div>
-        </div>
-      )}
+      {/* ผลงานการฟันธง */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <StatCard
+          label="ฟันธง 1 ตัว ถูก"
+          value={judged.length ? `${hit1Count} / ${judged.length} วัน` : "-"}
+          hint={judged.length ? `${Math.round((hit1Count / judged.length) * 100)}% · สุ่มเดา ≈ 40%` : "ต้องมีวันที่ปิดแล้วอย่างน้อย 1 วันก่อนหน้า"}
+          tone={judged.length ? (hit1Count / judged.length > 0.4 ? "up" : "down") : "neutral"}
+        />
+        <StatCard
+          label="คู่ 2 ตัว โผล่อย่างน้อย 1"
+          value={judged.length ? `${hit2Count} / ${judged.length} วัน` : "-"}
+          hint={judged.length ? `${Math.round((hit2Count / judged.length) * 100)}% · สุ่มเดา ≈ 67%` : undefined}
+          tone={judged.length ? (hit2Count / judged.length > 0.67 ? "up" : "down") : "neutral"}
+        />
+        <StatCard
+          label="รอผลปิด"
+          value={String(pending)}
+          hint={pending ? "เติมค่าปิดในตารางด้านล่าง" : "ครบทุกวันแล้ว"}
+        />
+      </div>
 
-      <div className="grid gap-6 md:grid-cols-[340px_1fr]">
+      <div className="grid gap-6 md:grid-cols-[320px_1fr]">
         <section className="card h-fit">
-          <h2 className="font-medium">บันทึกสถิติ เปิด/ปิด</h2>
+          <h2 className="font-medium">บันทึกเปิดวันนี้</h2>
           <RecordForm stockId={stock.id} />
         </section>
 
         <section className="card p-0">
-          <h2 className="border-b border-slate-200 px-5 py-3 font-medium">ประวัติ</h2>
-          {stock.records.length === 0 ? (
-            <p className="px-5 py-8 text-center text-sm text-slate-500">ยังไม่มีข้อมูล เริ่มบันทึกได้จากฟอร์มด้านซ้าย</p>
+          <div className="border-b border-slate-200 px-5 py-3">
+            <h2 className="font-medium">ประวัติ + ผลฟันธงรายวัน</h2>
+            <p className="text-xs text-slate-500">ฟันธงของแต่ละวันคำนวณจากเลขเปิดวันนั้น + ข้อมูลก่อนหน้าเท่านั้น · เหลือง = เลขที่ฟันแล้วโผล่จริง</p>
+          </div>
+          {rows.length === 0 ? (
+            <p className="px-5 py-8 text-center text-sm text-slate-500">ยังไม่มีข้อมูล เริ่มบันทึกเปิดได้จากฟอร์มด้านซ้าย</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
                   <tr>
-                    <th className="px-4 py-2">วันที่</th>
-                    <th className="px-4 py-2 text-right">เปิด</th>
-                    <th className="px-4 py-2 text-right">เปลี่ยน</th>
-                    <th className="px-4 py-2 text-right">ปิด</th>
-                    <th className="px-4 py-2 text-right">เปลี่ยน</th>
-                    <th className="px-4 py-2">บน / ล่าง</th>
-                    <th className="px-4 py-2">รูปแบบ</th>
-                    <th className="px-4 py-2">หมายเหตุ</th>
-                    <th className="px-4 py-2" />
+                    <th className="px-3 py-2">วันที่</th>
+                    <th className="px-3 py-2">เปิด</th>
+                    <th className="px-3 py-2">เลขเปิด</th>
+                    <th className="px-3 py-2 bg-amber-50 text-amber-800">ฟันธง</th>
+                    <th className="px-3 py-2">ปิด</th>
+                    <th className="px-3 py-2">เลขปิด</th>
+                    <th className="px-3 py-2 bg-amber-50 text-amber-800">ผล</th>
+                    <th className="px-3 py-2" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {stock.records.map((r) => (
+                  {rows.map(({ r, oTop, oBot, pick, pair, p, hit1, hit2 }) => (
                     <tr key={r.id} className="hover:bg-slate-50">
-                      <td className="px-4 py-2 whitespace-nowrap">
-                        {r.date.toLocaleDateString("th-TH", { year: "2-digit", month: "short", day: "numeric" })}
+                      <td className="px-3 py-2 whitespace-nowrap">{r.date.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" })}</td>
+                      <td className="px-3 py-2 whitespace-nowrap tabular-nums">
+                        {fmtNum(r.openValue)}<br /><Change value={r.openChange} className="text-xs" />
                       </td>
-                      <td className="px-4 py-2 text-right tabular-nums">{fmtNum(r.openValue)}</td>
-                      <td className="px-4 py-2 text-right whitespace-nowrap"><Change value={r.openChange} pct={openPct(r)} /></td>
-                      <td className="px-4 py-2 text-right tabular-nums">{fmtNum(r.closeValue)}</td>
-                      <td className="px-4 py-2 text-right whitespace-nowrap"><Change value={r.closeChange} pct={closePct(r)} /></td>
-                      <td className="px-4 py-2 whitespace-nowrap"><Digits value={top2(r.closeValue)} tone="blue" /> <Digits value={bottom2(r.closeChange)} tone="blue" /></td>
-                      <td className="px-4 py-2 whitespace-nowrap"><PatternBadge open={r.openChange} close={r.closeChange} /></td>
-                      <td className="px-4 py-2 text-slate-500">{r.note}</td>
-                      <td className="px-4 py-2 text-right">
-                        <form action={deleteRecord}>
-                          <input type="hidden" name="id" value={r.id} />
-                          <button type="submit" className="text-xs text-red-600 hover:underline">ลบ</button>
-                        </form>
+                      <td className="px-3 py-2 whitespace-nowrap"><Digits value={oTop} /> <Digits value={oBot} /></td>
+                      <td className="px-3 py-2 whitespace-nowrap bg-amber-50/50">
+                        {pick === null ? (
+                          <span className="text-xs text-slate-400">ไม่มีข้อมูลก่อนหน้า</span>
+                        ) : (
+                          <span className="flex items-center gap-2">
+                            <span className={`flex h-9 w-9 items-center justify-center rounded-lg font-mono text-xl font-bold ${hit1 ? "bg-amber-400 text-white" : hit1 === false ? "bg-slate-200 text-slate-500 line-through" : "bg-amber-100 text-amber-900"}`}>{pick}</span>
+                            <span className="text-xs text-slate-500">
+                              {Math.round((p ?? 0) * 100)}%<br />คู่ <span className="font-mono">{pair!.join(" ")}</span>
+                            </span>
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap tabular-nums">
+                        {hasClose(r) ? (<>{fmtNum(r.closeValue)}<br /><Change value={r.closeChange} className="text-xs" /></>) : <CloseForm recordId={r.id} />}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {hasClose(r) ? <><Digits value={top2(r.closeValue)} hilite={hit2 ?? []} tone="blue" /> <Digits value={bottom2(r.closeChange)} hilite={hit2 ?? []} tone="blue" /></> : <span className="text-xs text-slate-400">รอปิด</span>}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap bg-amber-50/50 text-xs">
+                        {hit1 === null ? (
+                          <span className="text-slate-400">{hasClose(r) ? "–" : "รอผล"}</span>
+                        ) : hit1 ? (
+                          <span className="rounded bg-emerald-100 px-2 py-0.5 font-medium text-emerald-800">✓ ถูก</span>
+                        ) : hit2 && hit2.length ? (
+                          <span className="rounded bg-amber-100 px-2 py-0.5 font-medium text-amber-800">คู่ถูก {hit2.join(" ")}</span>
+                        ) : (
+                          <span className="rounded bg-red-100 px-2 py-0.5 font-medium text-red-800">✗ ผิด</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <span className="flex flex-col items-end gap-1">
+                          {hasClose(r) && <PatternBadge open={r.openChange} close={r.closeChange} />}
+                          <form action={deleteRecord}>
+                            <input type="hidden" name="id" value={r.id} />
+                            <button type="submit" className="text-xs text-red-600 hover:underline">ลบ</button>
+                          </form>
+                        </span>
                       </td>
                     </tr>
                   ))}
@@ -123,6 +166,21 @@ export default async function StockDetailPage({ params }: PageProps<"/stocks/[id
           )}
         </section>
       </div>
+
+      {st.count > 0 && (
+        <details className="card">
+          <summary className="cursor-pointer font-medium">สถิติราคา เปิด/ปิด (+/−)</summary>
+          <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1fr]">
+            <PatternMatrix summary={st} />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <StatCard label="จำนวนวันที่ปิดแล้ว" value={String(st.count)} hint={`ปิดบวก ${(st.all.closeUpRate * 100).toFixed(0)}%`} />
+              <StatCard label="เฉลี่ยเปลี่ยนแปลงตอนปิด" value={fmtChange(st.all.avgCloseChange)} hint={`มัธยฐาน ${fmtChange(st.all.medianCloseChange)}`} tone={st.all.avgCloseChange > 0 ? "up" : st.all.avgCloseChange < 0 ? "down" : "neutral"} />
+              <StatCard label="เมื่อเปิด + → ปิดเฉลี่ย" value={st.whenOpenUp.count ? fmtChange(st.whenOpenUp.avgCloseChange) : "-"} hint={st.whenOpenUp.count ? `โอกาสปิดบวก ${(st.whenOpenUp.closeUpRate * 100).toFixed(0)}% (${st.whenOpenUp.count} ครั้ง)` : "ยังไม่มีข้อมูล"} />
+              <StatCard label="เมื่อเปิด − → ปิดเฉลี่ย" value={st.whenOpenDown.count ? fmtChange(st.whenOpenDown.avgCloseChange) : "-"} hint={st.whenOpenDown.count ? `โอกาสปิดบวก ${(st.whenOpenDown.closeUpRate * 100).toFixed(0)}% (${st.whenOpenDown.count} ครั้ง)` : "ยังไม่มีข้อมูล"} />
+            </div>
+          </div>
+        </details>
+      )}
     </div>
   );
 }

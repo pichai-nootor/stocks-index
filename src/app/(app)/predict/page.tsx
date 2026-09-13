@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
-import { predictClose, fmtNum, fmtChange, signLabel, type Group } from "@/lib/stats";
+import { predictClose, fmtNum, fmtChange, signLabel, hasClose, type Group } from "@/lib/stats";
 import { StatCard } from "@/components/stat-card";
 import { PatternMatrix } from "@/components/pattern-matrix";
 
@@ -52,9 +52,9 @@ export default async function PredictPage({ searchParams }: PageProps<"/predict"
 
   const stocks = await prisma.stock.findMany({ where: { userId }, orderBy: { symbol: "asc" } });
   const selected = stockId ? stocks.find((s) => s.id === stockId) : undefined;
-  const records = selected
+  const records = (selected
     ? await prisma.record.findMany({ where: { stockId: selected.id }, orderBy: { date: "asc" } })
-    : [];
+    : []).filter(hasClose);
   const ready = selected && openChangeRaw !== "" && Number.isFinite(openChange) && (openValue === null || openValue > 0);
   const p = ready ? predictClose(records, openChange, openValue) : null;
 

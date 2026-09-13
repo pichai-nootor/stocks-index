@@ -2,7 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { toDayDigits, scoreDigits, backtest, fitModel, top2, bottom2, POSITIONS, positionLabel, type DigitScore } from "@/lib/digits";
-import { fmtNum, fmtChange } from "@/lib/stats";
+import { fmtNum, fmtChange, hasClose } from "@/lib/stats";
 import { Digits } from "@/components/digit-badges";
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
@@ -51,7 +51,7 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
   const openChange = Number(openChangeRaw);
   const hasOpen = openValueRaw !== "" && openChangeRaw !== "" && Number.isFinite(openValue) && Number.isFinite(openChange);
 
-  const records = selected ? await prisma.record.findMany({ where: { stockId: selected.id }, orderBy: { date: "asc" } }) : [];
+  const records = (selected ? await prisma.record.findMany({ where: { stockId: selected.id }, orderBy: { date: "asc" } }) : []).filter(hasClose);
   const days = toDayDigits(records);
   const last = days[days.length - 1] ?? null;
 

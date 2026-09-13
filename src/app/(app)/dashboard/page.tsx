@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
-import { summarize, fmtNum, fmtChange } from "@/lib/stats";
+import { summarize, fmtNum, fmtChange, hasClose } from "@/lib/stats";
 import { StatCard } from "@/components/stat-card";
 import { Change, PatternBadge } from "@/components/change";
 
@@ -14,7 +14,7 @@ export default async function DashboardPage() {
   });
 
   const totalRecords = stocks.reduce((n, s) => n + s.records.length, 0);
-  const overall = summarize(stocks.flatMap((s) => s.records));
+  const overall = summarize(stocks.flatMap((s) => s.records.filter(hasClose)));
   const pct = (n: number, d: number) => (d ? `${Math.round((n / d) * 100)}%` : "-");
 
   return (
@@ -69,8 +69,8 @@ export default async function DashboardPage() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {stocks.map((s) => {
-                  const st = summarize(s.records);
-                  const last = s.records[0];
+                  const st = summarize(s.records.filter(hasClose));
+                  const last = s.records.find(hasClose);
                   return (
                     <tr key={s.id} className="hover:bg-slate-50">
                       <td className="px-5 py-2.5">

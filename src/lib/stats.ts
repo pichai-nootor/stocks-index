@@ -195,3 +195,9 @@ export const fmtNum = (x: number, digits = 2) =>
 /** แสดงค่าเปลี่ยนแปลงพร้อมเครื่องหมาย เช่น +120.83 / −120.83 */
 export const fmtChange = (x: number, digits = 2) =>
   x > 0 ? `+${fmtNum(x, digits)}` : x < 0 ? `−${fmtNum(-x, digits)}` : fmtNum(0, digits);
+
+/** รายการที่มีค่าปิดครบแล้ว (ใช้กรองก่อนส่งเข้า summarize / predictClose / digits) */
+export type MaybeClosed = { closeValue: number | null; closeChange: number | null };
+export function hasClose<T extends MaybeClosed>(r: T): r is T & { closeValue: number; closeChange: number } {
+  return r.closeValue !== null && r.closeChange !== null;
+}

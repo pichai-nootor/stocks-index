@@ -44,9 +44,14 @@ const recordSchema = z.object({
   date: z.string().min(1, "กรุณาระบุวันที่"),
   openValue: z.coerce.number({ message: "ค่าเปิดต้องเป็นตัวเลข" }).positive("ค่าเปิดต้องมากกว่า 0"),
   openChange: z.coerce.number({ message: "เปลี่ยนแปลงตอนเปิดต้องเป็นตัวเลข" }),
-  closeValue: z.coerce.number({ message: "ค่าปิดต้องเป็นตัวเลข" }).positive("ค่าปิดต้องมากกว่า 0"),
-  closeChange: z.coerce.number({ message: "เปลี่ยนแปลงตอนปิดต้องเป็นตัวเลข" }),
   note: z.string().trim().optional(),
+});
+
+const emptyToUndef = (v: unknown) => (v === "" || v === null ? undefined : v);
+const closeSchema = z.object({
+  id: z.string().min(1),
+  closeValue: z.preprocess(emptyToUndef, z.coerce.number({ message: "ค่าปิดต้องเป็นตัวเลข" }).positive("ค่าปิดต้องมากกว่า 0")),
+  closeChange: z.preprocess(emptyToUndef, z.coerce.number({ message: "เปลี่ยนแปลงตอนปิดต้องเป็นตัวเลข" })),
 });
 
 export async function createRecord(_prev: ActionState, formData: FormData): Promise<ActionState> {
@@ -54,16 +59,37 @@ export async function createRecord(_prev: ActionState, formData: FormData): Prom
   const parsed = recordSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
-  const { stockId, date, openValue, openChange, closeValue, closeChange, note } = parsed.data;
+  const { stockId, date, openValue, openChange, note } = parsed.data;
   const stock = await prisma.stock.findFirst({ where: { id: stockId, userId } });
   if (!stock) return { error: "ไม่พบหุ้น" };
 
+  const dup = await prisma.record.findFirst({ where: { stockId, date: new Date(date) } });
+  if (dup) return { error: "วันนี้บันทึกไปแล้ว — เติมค่าปิดได้ในตารางประวัติ" };
+
   await prisma.record.create({
-    data: { stockId, date: new Date(date), openValue, openChange, closeValue, closeChange, note: note || null },
+    data: { stockId, date: new Date(date), openValue, openChange, note: note || null },
   });
   revalidatePath(`/stocks/${stockId}`);
   revalidatePath("/dashboard");
   revalidatePath("/predict");
+  return undefined;
+}
+
+/** เติมค่าปิดให้วันที่บันทึกเปิดไว้แล้ว */
+export async function fillClose(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const { userId } = await requireUser();
+  const parsed = closeSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
+
+  const { id, closeValue, closeChange } = parsed.data;
+  const record = await prisma.record.findFirst({ where: { id, stock: { userId } }, select: { stockId: true } });
+  if (!record) return { error: "ไม่พบรายการ" };
+
+  await prisma.record.update({ where: { id }, data: { closeValue, closeChange } });
+  revalidatePath(`/stocks/${record.stockId}`);
+  revalidatePath("/dashboard");
+  revalidatePath("/predict");
+  revalidatePath("/digits");
   return undefined;
 }
 

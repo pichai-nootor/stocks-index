@@ -36,8 +36,8 @@ model Record {
   date        DateTime
   openValue   Float    // ค่าดัชนีตอนเปิด
   openChange  Float    // เปลี่ยนแปลงตอนเปิด (เทียบปิดวันก่อน) มีเครื่องหมาย
-  closeValue  Float    // ค่าดัชนีตอนปิด
-  closeChange Float    // เปลี่ยนแปลงตอนปิด (เทียบปิดวันก่อน) มีเครื่องหมาย
+  closeValue  Float?   // ค่าดัชนีตอนปิด (กรอกทีหลังได้ — เช้ากรอกเปิด เย็นเติมปิด)
+  closeChange Float?   // เปลี่ยนแปลงตอนปิด (เทียบปิดวันก่อน) มีเครื่องหมาย
   note        String?
   createdAt   DateTime @default(now())
 
