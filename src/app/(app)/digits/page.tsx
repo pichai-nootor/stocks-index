@@ -7,7 +7,7 @@ import { TopToBottom } from "./top-to-bottom";
 import { fmtNum, fmtChange, hasClose } from "@/lib/stats";
 import { Digits } from "@/components/digit-badges";
 import { CloseForm } from "@/components/close-form";
-import { OpenForm } from "./open-form";
+import { OpenForm } from "@/components/open-form";
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 
@@ -162,9 +162,11 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
                     <p className="mt-2 text-xs text-slate-500">วันนี้ (D = {String(D).padStart(2, "0")}) ทุกเลขมีโอกาสเท่ากัน ~{Math.round(exact[0].p * 100)}% — ไม่มีเลขเด่นตามคณิตศาสตร์</p>
                   ) : (
                     <p className="mt-2 text-xs text-slate-500">
-                      เลขเด่นตามคณิตศาสตร์: <span className="font-mono font-semibold text-emerald-700">{exact.filter((e) => e.p >= exact[0].p - 0.005).map((e) => e.digit).join(" ")}</span>
-                      {" "}· โอกาสน้อยสุด: <span className="font-mono">{exact.filter((e) => e.p <= exact[exact.length - 1].p + 0.005).map((e) => e.digit).join(" ")}</span>
-                      {" "}(ต่างกันแค่ไม่กี่ % — บอกไว้ตรง ๆ)
+                      {exact.filter((e) => e.p >= exact[0].p - 0.005).length <= 4
+                        ? <>เลขเด่น: <span className="font-mono font-semibold text-emerald-700">{exact.filter((e) => e.p >= exact[0].p - 0.005).map((e) => e.digit).join(" ")}</span> ({(exact[0].p * 100).toFixed(0)}%)</>
+                        : <>ส่วนใหญ่ ~{(exact[0].p * 100).toFixed(0)}%</>}
+                      {" "}· โอกาสน้อยสุด: <span className="font-mono font-semibold text-red-600">{exact.filter((e) => e.p <= exact[exact.length - 1].p + 0.005).map((e) => e.digit).join(" ")}</span> ({(exact[exact.length - 1].p * 100).toFixed(0)}%)
+                      {" "}— ต่างกันแค่ไม่กี่ % บอกไว้ตรง ๆ
                     </p>
                   )}
                 </div>

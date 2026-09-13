@@ -97,6 +97,7 @@ export async function saveOpenAndForecast(_prev: ActionState, formData: FormData
   revalidatePath(`/stocks/${stockId}`);
   revalidatePath("/digits");
   revalidatePath("/dashboard");
+  if (formData.get("redirectTo") === "dashboard") redirect("/dashboard?saved=1");
   redirect(`/digits?stock=${stockId}&date=${date}&openValue=${openValue}&openChange=${openChange}&saved=1`);
 }
 

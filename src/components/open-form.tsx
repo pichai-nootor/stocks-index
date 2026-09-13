@@ -6,12 +6,13 @@ import { FormError } from "@/components/form-error";
 
 type Stock = { id: string; symbol: string; name: string | null };
 
-export function OpenForm({ stocks, stockId, date, openValue, openChange }: {
-  stocks: Stock[]; stockId: string; date: string; openValue: string; openChange: string;
+export function OpenForm({ stocks, stockId, date, openValue = "", openChange = "", redirectTo = "digits" }: {
+  stocks: Stock[]; stockId: string; date: string; openValue?: string; openChange?: string; redirectTo?: "digits" | "dashboard";
 }) {
   const [state, action, pending] = useActionState(saveOpenAndForecast, undefined);
   return (
     <form action={action} className="card space-y-3">
+      <input type="hidden" name="redirectTo" value={redirectTo} />
       <div className="grid gap-4 sm:grid-cols-[1fr_1fr_1fr_1fr_auto] sm:items-end">
         <div>
           <label htmlFor="stockId" className="label">หุ้น / ดัชนี</label>
@@ -34,7 +35,7 @@ export function OpenForm({ stocks, stockId, date, openValue, openChange }: {
         <button type="submit" className="btn-primary" disabled={pending}>{pending ? "..." : "บันทึกเปิด + ฟันธง"}</button>
       </div>
       <FormError message={state?.error} />
-      <p className="text-xs text-slate-500">เลขเปิดจะถูกบันทึกไว้ ตอนเย็นกลับมาเติมผลปิดในส่วน "รอผลปิด" ด้านล่าง</p>
+      <p className="text-xs text-slate-500">เลขเปิดจะถูกบันทึกไว้ ตอนเย็นกลับมาเติมผลปิดได้ที่หน้าแรก</p>
     </form>
   );
 }
