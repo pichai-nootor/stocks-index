@@ -27,16 +27,19 @@ model Stock {
   @@unique([userId, symbol])
 }
 
-// สถิติ 1 แถว = การเปิด/ปิด 1 รอบ (เช่น 1 วัน)
+// สถิติ 1 แถว = 1 วัน: ค่าดัชนี + ค่าเปลี่ยนแปลง (มีเครื่องหมาย +/-) ตอนเปิดและตอนปิด
+// เช่น เปิด 74,781.76 (-120.83) ปิด 74,900.10 (+2.51)
 model Record {
-  id        String   @id @default(cuid())
-  stockId   String
-  stock     Stock    @relation(fields: [stockId], references: [id], onDelete: Cascade)
-  date      DateTime
-  open      Float
-  close     Float
-  note      String?
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  stockId     String
+  stock       Stock    @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  date        DateTime
+  openValue   Float    // ค่าดัชนีตอนเปิด
+  openChange  Float    // เปลี่ยนแปลงตอนเปิด (เทียบปิดวันก่อน) มีเครื่องหมาย
+  closeValue  Float    // ค่าดัชนีตอนปิด
+  closeChange Float    // เปลี่ยนแปลงตอนปิด (เทียบปิดวันก่อน) มีเครื่องหมาย
+  note        String?
+  createdAt   DateTime @default(now())
 
   @@index([stockId, date])
 }

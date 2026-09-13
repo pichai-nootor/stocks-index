@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
-import { summarize, fmtPct, fmtNum } from "@/lib/stats";
+import { summarize, fmtNum, fmtChange } from "@/lib/stats";
 import { StatCard } from "@/components/stat-card";
+import { Change, PatternBadge } from "@/components/change";
 
 export default async function DashboardPage() {
   const { userId } = await requireUser();
@@ -13,8 +14,8 @@ export default async function DashboardPage() {
   });
 
   const totalRecords = stocks.reduce((n, s) => n + s.records.length, 0);
-  const allRecords = stocks.flatMap((s) => s.records);
-  const overall = summarize(allRecords);
+  const overall = summarize(stocks.flatMap((s) => s.records));
+  const pct = (n: number, d: number) => (d ? `${Math.round((n / d) * 100)}%` : "-");
 
   return (
     <div className="space-y-6">
@@ -23,14 +24,24 @@ export default async function DashboardPage() {
         <Link href="/predict" className="btn-primary">คาดการณ์ราคาปิด</Link>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard label="จำนวนหุ้น" value={String(stocks.length)} />
-        <StatCard label="สถิติที่บันทึก" value={String(totalRecords)} hint="รวมทุกหุ้น" />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="หุ้น / สถิติ" value={`${stocks.length} / ${totalRecords}`} hint="จำนวนหุ้น / จำนวนวันที่บันทึก" />
         <StatCard
-          label="สัดส่วนปิดบวก (รวม)"
-          value={totalRecords ? `${(overall.upRate * 100).toFixed(0)}%` : "-"}
-          tone={overall.upRate >= 0.5 ? "up" : "down"}
-          hint={totalRecords ? `เฉลี่ย ${fmtPct(overall.avgPct)} ต่อรอบ` : undefined}
+          label="ปิดกลับทิศจากเปิด"
+          value={totalRecords ? `${Math.round(overall.reversalRate * 100)}%` : "-"}
+          hint="เปิด+ปิด− หรือ เปิด−ปิด+"
+        />
+        <StatCard
+          label="เปิด + → ปิด +"
+          value={pct(overall.patterns.upUp, overall.whenOpenUp.count)}
+          hint={`${overall.patterns.upUp} จาก ${overall.whenOpenUp.count} ครั้ง`}
+          tone={overall.whenOpenUp.count ? (overall.whenOpenUp.closeUpRate >= 0.5 ? "up" : "down") : "neutral"}
+        />
+        <StatCard
+          label="เปิด − → ปิด +"
+          value={pct(overall.patterns.downUp, overall.whenOpenDown.count)}
+          hint={`${overall.patterns.downUp} จาก ${overall.whenOpenDown.count} ครั้ง`}
+          tone={overall.whenOpenDown.count ? (overall.whenOpenDown.closeUpRate >= 0.5 ? "up" : "down") : "neutral"}
         />
       </div>
 
@@ -49,10 +60,11 @@ export default async function DashboardPage() {
               <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
                 <tr>
                   <th className="px-5 py-2">หุ้น</th>
-                  <th className="px-5 py-2 text-right">จำนวนสถิติ</th>
-                  <th className="px-5 py-2 text-right">ปิดบวก</th>
-                  <th className="px-5 py-2 text-right">เฉลี่ย %</th>
-                  <th className="px-5 py-2 text-right">ล่าสุด (เปิด → ปิด)</th>
+                  <th className="px-5 py-2 text-right">สถิติ</th>
+                  <th className="px-5 py-2 text-right">เปิด+→ปิด+</th>
+                  <th className="px-5 py-2 text-right">เปิด−→ปิด+</th>
+                  <th className="px-5 py-2 text-right">ปิดเฉลี่ย</th>
+                  <th className="px-5 py-2">ล่าสุด</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -62,24 +74,20 @@ export default async function DashboardPage() {
                   return (
                     <tr key={s.id} className="hover:bg-slate-50">
                       <td className="px-5 py-2.5">
-                        <Link href={`/stocks/${s.id}`} className="font-medium text-blue-600 hover:underline">
-                          {s.symbol}
-                        </Link>
+                        <Link href={`/stocks/${s.id}`} className="font-medium text-blue-600 hover:underline">{s.symbol}</Link>
                         {s.name && <span className="ml-2 text-slate-500">{s.name}</span>}
                       </td>
                       <td className="px-5 py-2.5 text-right">{st.count}</td>
-                      <td className="px-5 py-2.5 text-right">
-                        {st.count ? `${(st.upRate * 100).toFixed(0)}%` : "-"}
-                      </td>
-                      <td
-                        className={`px-5 py-2.5 text-right ${
-                          st.avgPct > 0 ? "text-emerald-600" : st.avgPct < 0 ? "text-red-600" : ""
-                        }`}
-                      >
-                        {st.count ? fmtPct(st.avgPct) : "-"}
-                      </td>
-                      <td className="px-5 py-2.5 text-right text-slate-600">
-                        {last ? `${fmtNum(last.open)} → ${fmtNum(last.close)}` : "-"}
+                      <td className="px-5 py-2.5 text-right">{pct(st.patterns.upUp, st.whenOpenUp.count)}</td>
+                      <td className="px-5 py-2.5 text-right">{pct(st.patterns.downUp, st.whenOpenDown.count)}</td>
+                      <td className="px-5 py-2.5 text-right">{st.count ? <Change value={st.all.avgCloseChange} /> : "-"}</td>
+                      <td className="px-5 py-2.5 whitespace-nowrap text-slate-600">
+                        {last ? (
+                          <span className="inline-flex items-center gap-2">
+                            <PatternBadge open={last.openChange} close={last.closeChange} />
+                            <span className="tabular-nums">{fmtNum(last.closeValue)} ({fmtChange(last.closeChange)})</span>
+                          </span>
+                        ) : "-"}
                       </td>
                     </tr>
                   );

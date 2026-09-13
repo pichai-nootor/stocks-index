@@ -42,8 +42,10 @@ export async function deleteStock(formData: FormData) {
 const recordSchema = z.object({
   stockId: z.string().min(1),
   date: z.string().min(1, "กรุณาระบุวันที่"),
-  open: z.coerce.number({ message: "ค่าเปิดต้องเป็นตัวเลข" }).positive("ค่าเปิดต้องมากกว่า 0"),
-  close: z.coerce.number({ message: "ค่าปิดต้องเป็นตัวเลข" }).positive("ค่าปิดต้องมากกว่า 0"),
+  openValue: z.coerce.number({ message: "ค่าเปิดต้องเป็นตัวเลข" }).positive("ค่าเปิดต้องมากกว่า 0"),
+  openChange: z.coerce.number({ message: "เปลี่ยนแปลงตอนเปิดต้องเป็นตัวเลข" }),
+  closeValue: z.coerce.number({ message: "ค่าปิดต้องเป็นตัวเลข" }).positive("ค่าปิดต้องมากกว่า 0"),
+  closeChange: z.coerce.number({ message: "เปลี่ยนแปลงตอนปิดต้องเป็นตัวเลข" }),
   note: z.string().trim().optional(),
 });
 
@@ -52,12 +54,12 @@ export async function createRecord(_prev: ActionState, formData: FormData): Prom
   const parsed = recordSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
-  const { stockId, date, open, close, note } = parsed.data;
+  const { stockId, date, openValue, openChange, closeValue, closeChange, note } = parsed.data;
   const stock = await prisma.stock.findFirst({ where: { id: stockId, userId } });
   if (!stock) return { error: "ไม่พบหุ้น" };
 
   await prisma.record.create({
-    data: { stockId, date: new Date(date), open, close, note: note || null },
+    data: { stockId, date: new Date(date), openValue, openChange, closeValue, closeChange, note: note || null },
   });
   revalidatePath(`/stocks/${stockId}`);
   revalidatePath("/dashboard");

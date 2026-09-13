@@ -2,9 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
-import { summarize, fmtPct, fmtNum } from "@/lib/stats";
+import { summarize, fmtChange, fmtNum, openPct, closePct } from "@/lib/stats";
 import { deleteRecord, deleteStock } from "@/app/actions/stocks";
 import { StatCard } from "@/components/stat-card";
+import { Change, PatternBadge } from "@/components/change";
+import { PatternMatrix } from "@/components/pattern-matrix";
 import { RecordForm } from "./record-form";
 
 export default async function StockDetailPage({ params }: PageProps<"/stocks/[id]">) {
@@ -17,6 +19,7 @@ export default async function StockDetailPage({ params }: PageProps<"/stocks/[id
   if (!stock) notFound();
 
   const st = summarize(stock.records);
+  const tone = (x: number): "up" | "down" | "neutral" => (x > 0 ? "up" : x < 0 ? "down" : "neutral");
 
   return (
     <div className="space-y-6">
@@ -37,29 +40,34 @@ export default async function StockDetailPage({ params }: PageProps<"/stocks/[id
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="จำนวนสถิติ" value={String(st.count)} />
-        <StatCard
-          label="ปิดบวก / ลบ / เท่า"
-          value={`${st.up} / ${st.down} / ${st.flat}`}
-          hint={st.count ? `โอกาสปิดบวก ${(st.upRate * 100).toFixed(0)}%` : undefined}
-          tone={st.count ? (st.upRate >= 0.5 ? "up" : "down") : "neutral"}
-        />
-        <StatCard
-          label="เฉลี่ย ปิด-เปิด"
-          value={st.count ? fmtPct(st.avgPct) : "-"}
-          hint={st.count ? `มัธยฐาน ${fmtPct(st.medianPct)} · SD ${(st.stdPct * 100).toFixed(2)}%` : undefined}
-          tone={st.avgPct > 0 ? "up" : st.avgPct < 0 ? "down" : "neutral"}
-        />
-        <StatCard
-          label={`เฉลี่ย ${st.recentN} ครั้งล่าสุด`}
-          value={st.count ? fmtPct(st.recentAvgPct) : "-"}
-          hint={st.count ? `สูงสุด ${fmtPct(st.maxPct)} · ต่ำสุด ${fmtPct(st.minPct)}` : undefined}
-          tone={st.recentAvgPct > 0 ? "up" : st.recentAvgPct < 0 ? "down" : "neutral"}
-        />
-      </div>
+      {st.count > 0 && (
+        <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
+          <PatternMatrix summary={st} />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <StatCard label="จำนวนสถิติ" value={String(st.count)} hint={`ปิดบวก ${(st.all.closeUpRate * 100).toFixed(0)}% ของทั้งหมด`} />
+            <StatCard
+              label="เฉลี่ยเปลี่ยนแปลงตอนปิด"
+              value={fmtChange(st.all.avgCloseChange)}
+              hint={`มัธยฐาน ${fmtChange(st.all.medianCloseChange)}`}
+              tone={tone(st.all.avgCloseChange)}
+            />
+            <StatCard
+              label="เมื่อเปิด + → ปิดเฉลี่ย"
+              value={st.whenOpenUp.count ? fmtChange(st.whenOpenUp.avgCloseChange) : "-"}
+              hint={st.whenOpenUp.count ? `โอกาสปิดบวก ${(st.whenOpenUp.closeUpRate * 100).toFixed(0)}% (${st.whenOpenUp.count} ครั้ง)` : "ยังไม่มีข้อมูล"}
+              tone={tone(st.whenOpenUp.avgCloseChange)}
+            />
+            <StatCard
+              label="เมื่อเปิด − → ปิดเฉลี่ย"
+              value={st.whenOpenDown.count ? fmtChange(st.whenOpenDown.avgCloseChange) : "-"}
+              hint={st.whenOpenDown.count ? `โอกาสปิดบวก ${(st.whenOpenDown.closeUpRate * 100).toFixed(0)}% (${st.whenOpenDown.count} ครั้ง)` : "ยังไม่มีข้อมูล"}
+              tone={tone(st.whenOpenDown.avgCloseChange)}
+            />
+          </div>
+        </div>
+      )}
 
-      <div className="grid gap-6 md:grid-cols-[320px_1fr]">
+      <div className="grid gap-6 md:grid-cols-[340px_1fr]">
         <section className="card h-fit">
           <h2 className="font-medium">บันทึกสถิติ เปิด/ปิด</h2>
           <RecordForm stockId={stock.id} />
@@ -76,39 +84,34 @@ export default async function StockDetailPage({ params }: PageProps<"/stocks/[id
                   <tr>
                     <th className="px-4 py-2">วันที่</th>
                     <th className="px-4 py-2 text-right">เปิด</th>
+                    <th className="px-4 py-2 text-right">เปลี่ยน</th>
                     <th className="px-4 py-2 text-right">ปิด</th>
                     <th className="px-4 py-2 text-right">เปลี่ยน</th>
-                    <th className="px-4 py-2 text-right">%</th>
+                    <th className="px-4 py-2">รูปแบบ</th>
                     <th className="px-4 py-2">หมายเหตุ</th>
                     <th className="px-4 py-2" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {stock.records.map((r) => {
-                    const diff = r.close - r.open;
-                    const pct = r.open ? diff / r.open : 0;
-                    const color = diff > 0 ? "text-emerald-600" : diff < 0 ? "text-red-600" : "text-slate-500";
-                    return (
-                      <tr key={r.id} className="hover:bg-slate-50">
-                        <td className="px-4 py-2 whitespace-nowrap">
-                          {r.date.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "numeric" })}
-                        </td>
-                        <td className="px-4 py-2 text-right tabular-nums">{fmtNum(r.open)}</td>
-                        <td className="px-4 py-2 text-right tabular-nums">{fmtNum(r.close)}</td>
-                        <td className={`px-4 py-2 text-right tabular-nums ${color}`}>
-                          {diff >= 0 ? "+" : ""}{fmtNum(diff)}
-                        </td>
-                        <td className={`px-4 py-2 text-right tabular-nums ${color}`}>{fmtPct(pct)}</td>
-                        <td className="px-4 py-2 text-slate-500">{r.note}</td>
-                        <td className="px-4 py-2 text-right">
-                          <form action={deleteRecord}>
-                            <input type="hidden" name="id" value={r.id} />
-                            <button type="submit" className="text-xs text-red-600 hover:underline">ลบ</button>
-                          </form>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {stock.records.map((r) => (
+                    <tr key={r.id} className="hover:bg-slate-50">
+                      <td className="px-4 py-2 whitespace-nowrap">
+                        {r.date.toLocaleDateString("th-TH", { year: "2-digit", month: "short", day: "numeric" })}
+                      </td>
+                      <td className="px-4 py-2 text-right tabular-nums">{fmtNum(r.openValue)}</td>
+                      <td className="px-4 py-2 text-right whitespace-nowrap"><Change value={r.openChange} pct={openPct(r)} /></td>
+                      <td className="px-4 py-2 text-right tabular-nums">{fmtNum(r.closeValue)}</td>
+                      <td className="px-4 py-2 text-right whitespace-nowrap"><Change value={r.closeChange} pct={closePct(r)} /></td>
+                      <td className="px-4 py-2 whitespace-nowrap"><PatternBadge open={r.openChange} close={r.closeChange} /></td>
+                      <td className="px-4 py-2 text-slate-500">{r.note}</td>
+                      <td className="px-4 py-2 text-right">
+                        <form action={deleteRecord}>
+                          <input type="hidden" name="id" value={r.id} />
+                          <button type="submit" className="text-xs text-red-600 hover:underline">ลบ</button>
+                        </form>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
