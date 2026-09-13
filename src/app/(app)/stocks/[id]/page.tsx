@@ -12,9 +12,12 @@ import { Digits } from "@/components/digit-badges";
 import { RecordForm } from "./record-form";
 import { CloseForm } from "@/components/close-form";
 import { ImportForm } from "./import-form";
+import { Pagination, paginate } from "@/components/pagination";
 
-export default async function StockDetailPage({ params }: PageProps<"/stocks/[id]">) {
+export default async function StockDetailPage({ params, searchParams }: PageProps<"/stocks/[id]">) {
   const { id } = await params;
+  const sp = await searchParams;
+  const page = Number(sp.page) || 1;
   const { userId } = await requireUser();
   const stock = await prisma.stock.findFirst({
     where: { id, userId },
@@ -39,6 +42,7 @@ export default async function StockDetailPage({ params }: PageProps<"/stocks/[id
     return { r, oTop, oBot, pick, pair, p: ranked[0].p, closeDigits, hit1, hit2 };
   }).reverse();
 
+  const paged = paginate(rows, page);
   const judged = rows.filter((x) => x.hit1 !== null);
   const hit1Count = judged.filter((x) => x.hit1).length;
   const hit2Count = judged.filter((x) => x.hit2 && x.hit2.length > 0).length;
@@ -114,7 +118,7 @@ export default async function StockDetailPage({ params }: PageProps<"/stocks/[id
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {rows.map(({ r, oTop, oBot, pick, pair, p, hit1, hit2 }) => (
+                  {paged.items.map(({ r, oTop, oBot, pick, pair, p, hit1, hit2 }) => (
                     <tr key={r.id} className="hover:bg-slate-50">
                       <td className="px-3 py-2 whitespace-nowrap">{r.date.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" })}</td>
                       <td className="px-3 py-2 whitespace-nowrap tabular-nums">
@@ -159,6 +163,7 @@ export default async function StockDetailPage({ params }: PageProps<"/stocks/[id
                   ))}
                 </tbody>
               </table>
+              <Pagination {...paged} href={(n) => `/stocks/${stock.id}?page=${n}`} />
             </div>
           )}
         </section>

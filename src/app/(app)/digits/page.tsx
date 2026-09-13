@@ -8,6 +8,7 @@ import { fmtNum, fmtChange, hasClose } from "@/lib/stats";
 import { Digits } from "@/components/digit-badges";
 import { CloseForm } from "@/components/close-form";
 import { OpenForm } from "@/components/open-form";
+import { Pagination, paginate } from "@/components/pagination";
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 
@@ -23,6 +24,7 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
   const stockId = typeof sp.stock === "string" && stocks.some((s) => s.id === sp.stock) ? sp.stock : defaultStock?.id ?? "";
   const selected = stocks.find((s) => s.id === stockId);
   const dateRaw = typeof sp.date === "string" ? sp.date : new Date().toISOString().slice(0, 10);
+  const page = Number(sp.page) || 1;
   const saved = sp.saved === "1";
   const openValueRaw = typeof sp.openValue === "string" ? sp.openValue : "";
   const openChangeRaw = typeof sp.openChange === "string" ? sp.openChange : "";
@@ -246,8 +248,13 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
             </section>
           )}
 
-          {days.length > 0 && (
-            <section className="card p-0">
+          {days.length > 0 && (() => {
+            const paged = paginate([...days].reverse(), page);
+            const keep = new URLSearchParams();
+            keep.set("stock", stockId);
+            if (hasOpen) { keep.set("openValue", openValueRaw); keep.set("openChange", openChangeRaw); keep.set("date", dateRaw); }
+            return (
+            <section id="history" className="card p-0">
               <h2 className="border-b border-slate-200 px-5 py-3 font-medium">ประวัติ: ตำแหน่งไหนของเลขเปิดมาปิด ({days.length} วัน)</h2>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -262,7 +269,7 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {[...days].reverse().slice(0, 30).map((d) => {
+                    {paged.items.map((d) => {
                       const r = records.find((x) => x.date.getTime() === d.date.getTime())!;
                       return (
                         <tr key={d.date.toISOString()} className="hover:bg-slate-50">
@@ -279,9 +286,11 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
                     })}
                   </tbody>
                 </table>
+                <Pagination {...paged} href={(n) => { keep.set("page", String(n)); return `/digits?${keep.toString()}#history`; }} />
               </div>
             </section>
-          )}
+            );
+          })()}
 
           <p className="text-xs text-slate-500">* นับจากสถิติที่บันทึกไว้เท่านั้น ยิ่งมีข้อมูลมาก % ต่อตำแหน่งยิ่งนิ่ง</p>
         </>
