@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
-import { toDayDigits, scoreDigits, backtest, top2, bottom2, type DigitScore } from "@/lib/digits";
+import { toDayDigits, scoreDigits, backtest, fitModel, top2, bottom2, POSITIONS, positionLabel, type DigitScore } from "@/lib/digits";
 import { fmtNum, fmtChange } from "@/lib/stats";
 import { Digits } from "@/components/digit-badges";
 
@@ -59,6 +59,10 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
   const oBot = hasOpen ? bottom2(openChange) : "";
   const ranked = hasOpen && days.length ? scoreDigits(days, oTop, oBot) : null;
   const bt = days.length >= 3 ? backtest(days) : null;
+  const model = fitModel(days);
+  const posRate = (k: (typeof POSITIONS)[number]) => (model.position[k].n ? model.position[k].hit / model.position[k].n : 0);
+  const anyRate = model.anyPosition.n ? model.anyPosition.hit / model.anyPosition.n : 0;
+  const top1 = bt?.topK[0];
   const byDigit = ranked ? [...ranked].sort((a, b) => a.digit.localeCompare(b.digit)) : null;
 
   return (
@@ -107,6 +111,37 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
                     · ปิดเมื่อวาน ({last.date.toLocaleDateString("th-TH", { day: "numeric", month: "short" })}) บน <Digits value={last.closeTop2} /> ล่าง <Digits value={last.closeBottom2} />
                   </span>
                 )}
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-[1fr_2fr]">
+                <div className="card flex flex-col items-center justify-center bg-amber-50 text-center">
+                  <p className="text-xs font-medium uppercase tracking-wide text-amber-800">ฟันธง 1 ตัว</p>
+                  <span className="mt-2 flex h-28 w-28 items-center justify-center rounded-3xl bg-amber-400 font-mono text-7xl font-bold text-white shadow">
+                    {ranked[0].digit}
+                  </span>
+                  <p className="mt-3 text-sm text-amber-900">โอกาสโผล่ตอนปิด <span className="font-semibold">{pct(ranked[0].p)}</span></p>
+                  <p className="mt-1 text-xs text-amber-800">
+                    {top1 && bt ? `ฟันธงแบบนี้ย้อนหลังถูก ${pct(top1.atLeastOne)} (${bt.days} วัน)` : "ยังไม่มีข้อมูลพอทดสอบย้อนหลัง"}
+                  </p>
+                  <p className="mt-2 text-xs text-amber-700">คู่: <span className="font-mono text-base font-semibold">{ranked[0].digit} {ranked[1].digit}</span></p>
+                </div>
+                <div className="card">
+                  <h3 className="text-sm font-medium">พฤติกรรม {selected.symbol}: ตำแหน่งไหนของเลขเปิดที่ "มาปิด"</h3>
+                  <p className="text-xs text-slate-500">มีอย่างน้อย 1 ตำแหน่งมาปิด {pct(anyRate)} ของวัน ({model.anyPosition.n} วัน)</p>
+                  <div className="mt-3 space-y-2">
+                    {POSITIONS.map((k) => {
+                      const d = k === "topTens" ? oTop[0] : k === "topUnits" ? oTop[1] : k === "botTens" ? oBot[0] : oBot[1];
+                      return (
+                        <div key={k} className="flex items-center gap-3 text-sm">
+                          <span className="w-28 text-slate-600">{positionLabel[k]}</span>
+                          <span className="flex h-7 w-7 items-center justify-center rounded border border-slate-200 bg-slate-100 font-mono font-semibold">{d}</span>
+                          <div className="h-2 flex-1 rounded-full bg-slate-200"><div className="h-full rounded-full bg-blue-500" style={{ width: pct(posRate(k)) }} /></div>
+                          <span className="w-20 text-right tabular-nums">{pct(posRate(k))} <span className="text-xs text-slate-400">({model.position[k].hit}/{model.position[k].n})</span></span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
 
               <div>
@@ -200,7 +235,7 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
                     <th className="px-4 py-2">เปิด บน/ล่าง</th>
                     <th className="px-4 py-2">ปิด</th>
                     <th className="px-4 py-2">ปิด บน/ล่าง</th>
-                    <th className="px-4 py-2">จากเปิด</th>
+                    <th className="px-4 py-2">เอามาปิดจากตำแหน่ง</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -213,7 +248,11 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
                         <td className="px-4 py-2 whitespace-nowrap"><Digits value={d.openTop2} /> <Digits value={d.openBottom2} /></td>
                         <td className="px-4 py-2 whitespace-nowrap tabular-nums text-slate-600">{fmtNum(r.closeValue)} <span className={r.closeChange < 0 ? "text-red-600" : "text-emerald-600"}>{fmtChange(r.closeChange)}</span></td>
                         <td className="px-4 py-2 whitespace-nowrap"><Digits value={d.closeTop2} hilite={d.bouncedFromPrev} tone="blue" /> <Digits value={d.closeBottom2} hilite={d.bouncedFromPrev} tone="blue" /></td>
-                        <td className="px-4 py-2 text-xs">{d.fromOpen.length ? <span className="rounded bg-blue-100 px-1.5 py-0.5 text-blue-800">{d.fromOpen.join(" ")}</span> : <span className="text-slate-300">–</span>}</td>
+                        <td className="px-4 py-2 text-xs">
+                          {d.carriedPositions.length ? d.carriedPositions.map((k) => (
+                            <span key={k} className="mr-1 rounded bg-blue-100 px-1.5 py-0.5 text-blue-800">{positionLabel[k]}</span>
+                          )) : <span className="text-slate-300">–</span>}
+                        </td>
                       </tr>
                     );
                   })}

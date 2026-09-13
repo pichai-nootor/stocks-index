@@ -36,6 +36,19 @@ export function bottom2(change: number): string {
 
 export const uniqueDigits = (s: string) => [...new Set(s.split(""))];
 
+/** ตำแหน่งของเลขเปิด 4 ตำแหน่ง ที่อาจถูก "เอามาปิด" */
+export const POSITIONS = ["topTens", "topUnits", "botTens", "botUnits"] as const;
+export type Position = (typeof POSITIONS)[number];
+export const positionLabel: Record<Position, string> = {
+  topTens: "บน หลักสิบ",
+  topUnits: "บน หลักหน่วย",
+  botTens: "ล่าง หลักสิบ",
+  botUnits: "ล่าง หลักหน่วย",
+};
+export const positionDigits = (top: string, bot: string): Record<Position, string> => ({
+  topTens: top[0], topUnits: top[1], botTens: bot[0], botUnits: bot[1],
+});
+
 export type DayDigits = {
   date: Date;
   openTop2: string;
@@ -48,6 +61,8 @@ export type DayDigits = {
   bouncedFromPrev: string[];
   /** เลขปิดวันนี้ที่ซ้ำกับเลขเปิดวันนี้ */
   fromOpen: string[];
+  /** ตำแหน่งของเลขเปิดที่ถูกเอามาปิด */
+  carriedPositions: Position[];
 };
 
 export function toDayDigits(records: DigitSource[]): DayDigits[] {
@@ -61,10 +76,12 @@ export function toDayDigits(records: DigitSource[]): DayDigits[] {
     const openDigits = uniqueDigits(openTop2 + openBottom2);
     const closeDigits = uniqueDigits(closeTop2 + closeBottom2);
     const prev = out[out.length - 1];
+    const pos = positionDigits(openTop2, openBottom2);
     out.push({
       date: r.date, openTop2, openBottom2, closeTop2, closeBottom2, openDigits, closeDigits,
       bouncedFromPrev: prev ? closeDigits.filter((d) => prev.closeDigits.includes(d)) : [],
       fromOpen: closeDigits.filter((d) => openDigits.includes(d)),
+      carriedPositions: POSITIONS.filter((k) => closeDigits.includes(pos[k])),
     });
   }
   return out;
@@ -96,6 +113,10 @@ export type Model = {
   /** เงื่อนไขแบบรวมทุกเลข (pooled) ใช้เป็น prior เมื่อข้อมูลรายเลขน้อย */
   pooled: { open: Rate; prev: Rate; streak2: Rate; base: Rate };
   perDigit: Record<string, { open: Rate; prev: Rate; streak2: Rate; base: Rate }>;
+  /** เลขในตำแหน่งนี้ของเลขเปิด ถูกเอามาปิดกี่ครั้ง (ไม่แยกเลข) */
+  position: Record<Position, Rate>;
+  /** วันที่มีอย่างน้อย 1 ตำแหน่งถูกเอามาปิด */
+  anyPosition: Rate;
 };
 
 /** สร้างโมเดลจากประวัติ days[0..end) */
@@ -105,10 +126,15 @@ export function fitModel(days: DayDigits[], end = days.length, window = 20): Mod
   const perDigit: Model["perDigit"] = {};
   for (const d of DIGITS) perDigit[d] = { open: empty(), prev: empty(), streak2: empty(), base: empty() };
 
+  const position = { topTens: empty(), topUnits: empty(), botTens: empty(), botUnits: empty() };
+  const anyPosition = empty();
+
   const start = Math.max(0, end - window);
   for (let i = 0; i < end; i++) {
     const day = days[i];
     const prev = i > 0 ? days[i - 1] : null;
+    for (const k of POSITIONS) { position[k].n++; if (day.carriedPositions.includes(k)) position[k].hit++; }
+    anyPosition.n++; if (day.carriedPositions.length) anyPosition.hit++;
     for (const d of DIGITS) {
       const hit = day.closeDigits.includes(d) ? 1 : 0;
       const pd = perDigit[d];
@@ -118,7 +144,7 @@ export function fitModel(days: DayDigits[], end = days.length, window = 20): Mod
       if (streakBefore(days, i, d) >= 2) { pd.streak2.n++; pd.streak2.hit += hit; pooled.streak2.n++; pooled.streak2.hit += hit; }
     }
   }
-  return { pooled, perDigit };
+  return { pooled, perDigit, position, anyPosition };
 }
 
 /**
@@ -128,6 +154,7 @@ export function fitModel(days: DayDigits[], end = days.length, window = 20): Mod
  */
 export function scoreDigits(history: DayDigits[], openTop2: string, openBottom2: string, model = fitModel(history)): DigitScore[] {
   const openDigits = uniqueDigits(openTop2 + openBottom2);
+  const openPos = positionDigits(openTop2, openBottom2);
   const prev = history[history.length - 1] ?? null;
   // prior ระดับบนสุด: ปิดมี ~4 เลขจาก 10 → ~0.4
   const basePrior = rate(model.pooled.base.hit, model.pooled.base.n, 0.4, 5);
@@ -143,7 +170,19 @@ export function scoreDigits(history: DayDigits[], openTop2: string, openBottom2:
 
     const base = rate(pd.base.hit, pd.base.n, basePrior);
     const evidence: Evidence[] = [{ kind: "base", label: `ความถี่ช่วงหลัง ${pd.base.hit}/${pd.base.n} วัน`, p: base, n: pd.base.n }];
-    if (inOpen) evidence.push({ kind: "open", label: `อยู่ในเลขเปิดวันนี้ (${openTop2}/${openBottom2})`, p: rate(pd.open.hit, pd.open.n, pooledOpen), n: pd.open.n });
+    if (inOpen) {
+      // ตำแหน่งที่เลขนี้อยู่ในเลขเปิด → ใช้อัตราของตำแหน่งที่ "มาปิด" บ่อยสุดเป็น prior
+      const positions = POSITIONS.filter((k) => openPos[k] === digit);
+      const best = positions
+        .map((k) => ({ k, p: rate(model.position[k].hit, model.position[k].n, pooledOpen, 3) }))
+        .sort((a, b) => b.p - a.p)[0];
+      evidence.push({
+        kind: "open",
+        label: `อยู่ในเลขเปิดวันนี้: ${positions.map((k) => positionLabel[k]).join(", ")} (ตำแหน่งนี้มาปิด ${Math.round(best.p * 100)}%)`,
+        p: rate(pd.open.hit, pd.open.n, best.p),
+        n: pd.open.n,
+      });
+    }
     if (inPrevClose) evidence.push({ kind: "prev", label: `อยู่ในเลขปิดเมื่อวาน (${prev!.closeTop2}/${prev!.closeBottom2})`, p: rate(pd.prev.hit, pd.prev.n, pooledPrev), n: pd.prev.n });
     if (streak >= 2) evidence.push({ kind: "streak", label: `เด้งติดกัน ${streak} วัน`, p: rate(pd.streak2.hit, pd.streak2.n, pooledStreak), n: pd.streak2.n });
 
