@@ -8,7 +8,7 @@ import { StatCard } from "@/components/stat-card";
 import { Change, PatternBadge } from "@/components/change";
 import { PatternMatrix } from "@/components/pattern-matrix";
 import { RecordForm } from "./record-form";
-import { top3, bottom2 } from "@/lib/digits";
+import { top2, bottom2 } from "@/lib/digits";
 import { Digits } from "@/components/digit-badges";
 
 export default async function StockDetailPage({ params }: PageProps<"/stocks/[id]">) {
@@ -106,7 +106,7 @@ export default async function StockDetailPage({ params }: PageProps<"/stocks/[id
                       <td className="px-4 py-2 text-right whitespace-nowrap"><Change value={r.openChange} pct={openPct(r)} /></td>
                       <td className="px-4 py-2 text-right tabular-nums">{fmtNum(r.closeValue)}</td>
                       <td className="px-4 py-2 text-right whitespace-nowrap"><Change value={r.closeChange} pct={closePct(r)} /></td>
-                      <td className="px-4 py-2 whitespace-nowrap"><Digits value={top3(r.closeValue)} tone="blue" /> <Digits value={bottom2(r.closeChange)} tone="blue" /></td>
+                      <td className="px-4 py-2 whitespace-nowrap"><Digits value={top2(r.closeValue)} tone="blue" /> <Digits value={bottom2(r.closeChange)} tone="blue" /></td>
                       <td className="px-4 py-2 whitespace-nowrap"><PatternBadge open={r.openChange} close={r.closeChange} /></td>
                       <td className="px-4 py-2 text-slate-500">{r.note}</td>
                       <td className="px-4 py-2 text-right">
