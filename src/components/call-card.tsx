@@ -1,4 +1,4 @@
-import type { DirectionCall } from "@/lib/stats";
+import { CALL_MIN_GAP_PCT, type DirectionCall } from "@/lib/stats";
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 
@@ -14,7 +14,7 @@ export function CallCard({ c, score }: { c: DirectionCall; score?: { called: num
           <div>
             <p className="text-2xl font-semibold text-slate-700">วันนี้ไม่ฟัน</p>
             <p className="mt-1 text-sm text-slate-600">{c.reason}</p>
-            <p className="mt-1 text-xs text-slate-500">ฟันเฉพาะวันที่เปิดห่างจากปิดวันก่อน ≥ 0.5% (ราว 1 ใน 4 ของวัน)</p>
+            <p className="mt-1 text-xs text-slate-500">ฟันเฉพาะวันที่เปิดห่างจากปิดวันก่อน ≥ {CALL_MIN_GAP_PCT}% (ราว 1 ใน 15 ของวัน · ถูก 84–94%)</p>
           </div>
         </div>
         {score && score.called > 0 && <p className="mt-3 text-xs text-slate-500">ผลงานวันที่ฟัน: ถูก {score.hits}/{score.called} ({pct(score.hits / score.called)})</p>}

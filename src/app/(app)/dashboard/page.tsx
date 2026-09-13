@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
-import { summarize, fmtNum, fmtChange, hasClose, evaluateCalls } from "@/lib/stats";
+import { summarize, fmtNum, fmtChange, hasClose, evaluateCalls, CALL_MIN_GAP_PCT } from "@/lib/stats";
 import { toDayDigits, pickDigits } from "@/lib/digits";
 import { Digits } from "@/components/digit-badges";
 import { OpenForm } from "@/components/open-form";
@@ -76,7 +76,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
       {/* ผลการฟันทิศทาง (เฉพาะวันที่มั่นใจ) */}
       <section className="card p-0">
         <div className="border-b border-slate-200 px-5 py-3">
-          <h2 className="font-medium">ผลการฟันทิศทาง — เฉพาะวันที่เปิดห่าง ≥ 0.5%</h2>
+          <h2 className="font-medium">ผลการฟันทิศทาง — เฉพาะวันที่เปิดห่าง ≥ {CALL_MIN_GAP_PCT}%</h2>
           <p className="text-xs text-slate-500">วันอื่น ๆ ระบบไม่ฟัน (โอกาสถูกไม่พอ) · นับเฉพาะวันที่ฟันและมีผลปิดแล้ว</p>
         </div>
         <div className="overflow-x-auto">

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
-import { summarize, fmtChange, fmtNum, hasClose, evaluateCalls } from "@/lib/stats";
+import { summarize, fmtChange, fmtNum, hasClose, evaluateCalls, CALL_MIN_GAP_PCT } from "@/lib/stats";
 import { pickDigits, top2, bottom2 } from "@/lib/digits";
 import { deleteRecord, deleteStock } from "@/app/actions/stocks";
 import { StatCard } from "@/components/stat-card";
@@ -84,7 +84,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
           tone={judged.length ? (hit2Count / judged.length > 0.67 ? "up" : "down") : "neutral"}
         />
         <StatCard
-          label="ฟันทิศทาง (เปิดห่าง ≥0.5%)"
+          label={`ฟันทิศทาง (เปิดห่าง ≥${CALL_MIN_GAP_PCT}%)`}
           value={calls.called ? `${calls.hits} / ${calls.called} วัน` : "-"}
           hint={calls.called ? `${Math.round((calls.hits / calls.called) * 100)}% · ไม่ฟัน ${calls.skipped} วัน` : "ยังไม่มีวันที่เข้าเกณฑ์"}
           tone={calls.called ? (calls.hits / calls.called >= 0.7 ? "up" : "down") : "neutral"}

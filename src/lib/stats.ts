@@ -303,7 +303,7 @@ export function forecastClose(openValue: number, openChange: number, history: Re
 /* ---------- โหมดฟันเฉพาะวันที่มั่นใจ ---------- */
 
 /** เกณฑ์ขั้นต่ำ (% ที่เปิดห่างจากปิดวันก่อน) ที่จะฟันทิศทาง */
-export const CALL_MIN_GAP_PCT = 0.5;
+export const CALL_MIN_GAP_PCT = 1.0;
 
 export type DirectionCall = {
   call: "up" | "down" | null;   // null = วันนี้ไม่ฟัน
