@@ -1,0 +1,21 @@
+export function StatCard({
+  label,
+  value,
+  hint,
+  tone = "neutral",
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  tone?: "neutral" | "up" | "down";
+}) {
+  const color =
+    tone === "up" ? "text-emerald-600" : tone === "down" ? "text-red-600" : "text-slate-900";
+  return (
+    <div className="card">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
+      <p className={`mt-1 text-2xl font-semibold ${color}`}>{value}</p>
+      {hint && <p className="mt-1 text-xs text-slate-500">{hint}</p>}
+    </div>
+  );
+}

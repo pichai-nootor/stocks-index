@@ -1,0 +1,42 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  stocks       Stock[]
+}
+
+model Stock {
+  id        String   @id @default(cuid())
+  symbol    String
+  name      String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  records   Record[]
+  createdAt DateTime @default(now())
+
+  @@unique([userId, symbol])
+}
+
+// สถิติ 1 แถว = การเปิด/ปิด 1 รอบ (เช่น 1 วัน)
+model Record {
+  id        String   @id @default(cuid())
+  stockId   String
+  stock     Stock    @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  date      DateTime
+  open      Float
+  close     Float
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@index([stockId, date])
+}
