@@ -6,6 +6,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import type { ActionState } from "./auth";
+import { parseInvestingCsv } from "@/lib/csv-import";
 
 const stockSchema = z.object({
   symbol: z.string().trim().min(1, "กรุณาระบุชื่อหุ้น").toUpperCase(),
@@ -131,4 +132,35 @@ export async function deleteRecord(formData: FormData) {
   revalidatePath(`/stocks/${record.stockId}`);
   revalidatePath("/dashboard");
   revalidatePath("/predict");
+}
+
+export type ImportState = { error?: string; imported?: number; skipped?: number; duplicates?: number } | undefined;
+
+/** นำเข้า CSV ประวัติราคา (Investing.com) เข้าหุ้นที่เลือก — ข้ามวันที่ที่มีอยู่แล้ว */
+export async function importCsv(_prev: ImportState, formData: FormData): Promise<ImportState> {
+  const { userId } = await requireUser();
+  const stockId = String(formData.get("stockId") ?? "");
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) return { error: "กรุณาเลือกไฟล์ CSV" };
+  if (file.size > 2_000_000) return { error: "ไฟล์ใหญ่เกิน 2MB" };
+
+  const stock = await prisma.stock.findFirst({ where: { id: stockId, userId } });
+  if (!stock) return { error: "ไม่พบหุ้น" };
+
+  const { rows, skipped, error } = parseInvestingCsv(await file.text());
+  if (error) return { error };
+  if (!rows.length) return { error: "ไม่มีแถวที่นำเข้าได้" };
+
+  const existing = new Set(
+    (await prisma.record.findMany({ where: { stockId }, select: { date: true } })).map((r) => r.date.getTime()),
+  );
+  const fresh = rows.filter((r) => !existing.has(r.date.getTime()));
+  if (fresh.length) {
+    await prisma.record.createMany({ data: fresh.map((r) => ({ stockId, ...r })) });
+  }
+  revalidatePath(`/stocks/${stockId}`);
+  revalidatePath("/dashboard");
+  revalidatePath("/digits");
+  revalidatePath("/predict");
+  return { imported: fresh.length, skipped, duplicates: rows.length - fresh.length };
 }

@@ -11,6 +11,7 @@ import { PatternMatrix } from "@/components/pattern-matrix";
 import { Digits } from "@/components/digit-badges";
 import { RecordForm } from "./record-form";
 import { CloseForm } from "@/components/close-form";
+import { ImportForm } from "./import-form";
 
 export default async function StockDetailPage({ params }: PageProps<"/stocks/[id]">) {
   const { id } = await params;
@@ -162,6 +163,8 @@ export default async function StockDetailPage({ params }: PageProps<"/stocks/[id
           )}
         </section>
       </div>
+
+      <ImportForm stockId={stock.id} />
 
       {st.count > 0 && (
         <details className="card">
