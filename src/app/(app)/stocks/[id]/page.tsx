@@ -8,6 +8,8 @@ import { StatCard } from "@/components/stat-card";
 import { Change, PatternBadge } from "@/components/change";
 import { PatternMatrix } from "@/components/pattern-matrix";
 import { RecordForm } from "./record-form";
+import { top3, bottom2 } from "@/lib/digits";
+import { Digits } from "@/components/digit-badges";
 
 export default async function StockDetailPage({ params }: PageProps<"/stocks/[id]">) {
   const { id } = await params;
@@ -32,6 +34,7 @@ export default async function StockDetailPage({ params }: PageProps<"/stocks/[id
           </h1>
         </div>
         <div className="flex gap-2">
+          <Link href={`/digits?stock=${stock.id}`} className="btn-ghost border border-slate-200">วิเคราะห์เลข</Link>
           <Link href={`/predict?stock=${stock.id}`} className="btn-primary">คาดการณ์ราคาปิด</Link>
           <form action={deleteStock}>
             <input type="hidden" name="id" value={stock.id} />
@@ -87,6 +90,7 @@ export default async function StockDetailPage({ params }: PageProps<"/stocks/[id
                     <th className="px-4 py-2 text-right">เปลี่ยน</th>
                     <th className="px-4 py-2 text-right">ปิด</th>
                     <th className="px-4 py-2 text-right">เปลี่ยน</th>
+                    <th className="px-4 py-2">บน / ล่าง</th>
                     <th className="px-4 py-2">รูปแบบ</th>
                     <th className="px-4 py-2">หมายเหตุ</th>
                     <th className="px-4 py-2" />
@@ -102,6 +106,7 @@ export default async function StockDetailPage({ params }: PageProps<"/stocks/[id
                       <td className="px-4 py-2 text-right whitespace-nowrap"><Change value={r.openChange} pct={openPct(r)} /></td>
                       <td className="px-4 py-2 text-right tabular-nums">{fmtNum(r.closeValue)}</td>
                       <td className="px-4 py-2 text-right whitespace-nowrap"><Change value={r.closeChange} pct={closePct(r)} /></td>
+                      <td className="px-4 py-2 whitespace-nowrap"><Digits value={top3(r.closeValue)} tone="blue" /> <Digits value={bottom2(r.closeChange)} tone="blue" /></td>
                       <td className="px-4 py-2 whitespace-nowrap"><PatternBadge open={r.openChange} close={r.closeChange} /></td>
                       <td className="px-4 py-2 text-slate-500">{r.note}</td>
                       <td className="px-4 py-2 text-right">

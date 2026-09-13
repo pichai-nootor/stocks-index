@@ -8,6 +8,7 @@ const links = [
   { href: "/dashboard", label: "ภาพรวม" },
   { href: "/stocks", label: "หุ้น" },
   { href: "/predict", label: "คาดการณ์" },
+  { href: "/digits", label: "วิเคราะห์เลข" },
 ] as const;
 
 export function Nav({ username }: { username: string }) {
