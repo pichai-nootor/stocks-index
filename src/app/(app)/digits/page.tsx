@@ -158,11 +158,15 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
                       );
                     })}
                   </div>
-                  <p className="mt-2 text-xs text-slate-500">
-                    เลขเด่นตามคณิตศาสตร์: <span className="font-mono font-semibold text-emerald-700">{exact.filter((e) => e.p >= exact[0].p - 0.005).map((e) => e.digit).join(" ")}</span>
-                    {" "}· เลขที่โอกาสน้อยสุด: <span className="font-mono">{exact.filter((e) => e.p <= exact[exact.length - 1].p + 0.005).map((e) => e.digit).join(" ")}</span>
-                    {" "}(ต่างกันแค่ไม่กี่ % — บอกไว้ตรง ๆ)
-                  </p>
+                  {exact[0].p - exact[exact.length - 1].p < 0.01 ? (
+                    <p className="mt-2 text-xs text-slate-500">วันนี้ (D = {String(D).padStart(2, "0")}) ทุกเลขมีโอกาสเท่ากัน ~{Math.round(exact[0].p * 100)}% — ไม่มีเลขเด่นตามคณิตศาสตร์</p>
+                  ) : (
+                    <p className="mt-2 text-xs text-slate-500">
+                      เลขเด่นตามคณิตศาสตร์: <span className="font-mono font-semibold text-emerald-700">{exact.filter((e) => e.p >= exact[0].p - 0.005).map((e) => e.digit).join(" ")}</span>
+                      {" "}· โอกาสน้อยสุด: <span className="font-mono">{exact.filter((e) => e.p <= exact[exact.length - 1].p + 0.005).map((e) => e.digit).join(" ")}</span>
+                      {" "}(ต่างกันแค่ไม่กี่ % — บอกไว้ตรง ๆ)
+                    </p>
+                  )}
                 </div>
               </div>
             </section>
