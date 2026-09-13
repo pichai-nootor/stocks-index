@@ -73,12 +73,12 @@ export default async function PredictPage({ searchParams }: PageProps<"/predict"
           </select>
         </div>
         <div>
-          <label htmlFor="openChange" className="label">เปิดวันนี้ เปลี่ยนแปลง (+/−)</label>
-          <input id="openChange" name="openChange" type="number" step="any" inputMode="decimal" className="input" defaultValue={openChangeRaw} placeholder="-120.83" required />
-        </div>
-        <div>
           <label htmlFor="openValue" className="label">ค่าดัชนีตอนเปิด (ไม่บังคับ)</label>
           <input id="openValue" name="openValue" type="number" step="any" inputMode="decimal" className="input" defaultValue={openValueRaw} placeholder="74781.76" />
+        </div>
+        <div>
+          <label htmlFor="openChange" className="label">เปิดวันนี้ เปลี่ยนแปลง (+/−)</label>
+          <input id="openChange" name="openChange" type="number" step="any" inputMode="decimal" className="input" defaultValue={openChangeRaw} placeholder="-120.83" required />
         </div>
         <button type="submit" className="btn-primary">คำนวณ</button>
       </form>
