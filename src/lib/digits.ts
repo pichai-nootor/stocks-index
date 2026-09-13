@@ -195,6 +195,32 @@ export function scoreDigits(history: DayDigits[], openTop2: string, openBottom2:
   }).sort((a, b) => b.p - a.p);
 }
 
+/**
+ * โหมด "ดูจากเปิดอย่างเดียว": ผู้สมัครคือเลขในเลขเปิด 4 ตำแหน่ง
+ * คะแนน = โอกาสที่อย่างน้อย 1 ตำแหน่งที่เลขนั้นอยู่ จะถูก "เอามาปิด"
+ * (อัตราต่อตำแหน่งเรียนรู้จากประวัติ; ไม่มีประวัติ → เริ่มที่ 50% ทุกตำแหน่ง)
+ */
+export function scoreFromOpen(history: DayDigits[], openTop2: string, openBottom2: string, model = fitModel(history)): DigitScore[] {
+  const openPos = positionDigits(openTop2, openBottom2);
+  const posRate = (k: Position) => rate(model.position[k].hit, model.position[k].n, 0.5, 2);
+
+  return uniqueDigits(openTop2 + openBottom2).map((digit) => {
+    const positions = POSITIONS.filter((k) => openPos[k] === digit);
+    const evidence: Evidence[] = positions.map((k) => ({
+      kind: "open" as const,
+      label: `${positionLabel[k]} (ตำแหน่งนี้มาปิด ${model.position[k].hit}/${model.position[k].n} วัน)`,
+      p: posRate(k),
+      n: model.position[k].n,
+    }));
+    // noisy-OR: โผล่ถ้าตำแหน่งใดตำแหน่งหนึ่งมาปิด
+    const byPosition = 1 - evidence.reduce((acc, e) => acc * (1 - e.p), 1);
+    // ตัวตัดสินเมื่อเสมอกัน: เลขนี้เองเวลาอยู่ในเลขเปิด เคยมาปิดบ่อยแค่ไหน
+    const pd = model.perDigit[digit].open;
+    const p = 0.85 * byPosition + 0.15 * rate(pd.hit, pd.n, byPosition, 2);
+    return { digit, p, evidence, inOpen: true, inPrevClose: false, streak: 0, recentDays: pd.hit };
+  }).sort((a, b) => b.p - a.p);
+}
+
 export type Backtest = {
   days: number; // จำนวนวันที่ทดสอบ
   /** สำหรับ k = 1,2,3: ทายเลข top-k แล้วโผล่อย่างน้อย 1 ตัว / โผล่ครบทุกตัว */
@@ -204,11 +230,11 @@ export type Backtest = {
 };
 
 /** ทดสอบย้อนหลังแบบ walk-forward: วันที่ i ใช้แค่ข้อมูลก่อนหน้า */
-export function backtest(days: DayDigits[], minHistory = 2): Backtest {
+export function backtest(days: DayDigits[], minHistory = 0): Backtest {
   const perDay: Backtest["perDay"] = [];
   for (let i = minHistory; i < days.length; i++) {
     const history = days.slice(0, i);
-    const ranked = scoreDigits(history, days[i].openTop2, days[i].openBottom2);
+    const ranked = scoreFromOpen(history, days[i].openTop2, days[i].openBottom2);
     const predicted = ranked.slice(0, 3).map((s) => s.digit);
     perDay.push({ date: days[i].date, predicted, actual: days[i].closeDigits, hits: predicted.filter((d) => days[i].closeDigits.includes(d)) });
   }

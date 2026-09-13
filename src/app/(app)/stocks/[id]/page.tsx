@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { summarize, fmtChange, fmtNum, hasClose } from "@/lib/stats";
-import { toDayDigits, scoreDigits, top2, bottom2 } from "@/lib/digits";
+import { toDayDigits, scoreFromOpen, top2, bottom2 } from "@/lib/digits";
 import { deleteRecord, deleteStock } from "@/app/actions/stocks";
 import { StatCard } from "@/components/stat-card";
 import { Change, PatternBadge } from "@/components/change";
@@ -29,13 +29,13 @@ export default async function StockDetailPage({ params }: PageProps<"/stocks/[id
   const rows = stock.records.map((r) => {
     const history = allDays.filter((d) => d.date.getTime() < r.date.getTime());
     const oTop = top2(r.openValue), oBot = bottom2(r.openChange);
-    const ranked = history.length ? scoreDigits(history, oTop, oBot) : null;
-    const pick = ranked ? ranked[0].digit : null;
-    const pair = ranked ? [ranked[0].digit, ranked[1].digit] : null;
+    const ranked = scoreFromOpen(history, oTop, oBot);
+    const pick = ranked[0].digit;
+    const pair = ranked.slice(0, 2).map((x) => x.digit);
     const closeDigits = hasClose(r) ? [...new Set((top2(r.closeValue) + bottom2(r.closeChange)).split(""))] : null;
     const hit1 = pick !== null && closeDigits ? closeDigits.includes(pick) : null;
     const hit2 = pair && closeDigits ? pair.filter((d) => closeDigits.includes(d)) : null;
-    return { r, oTop, oBot, pick, pair, p: ranked?.[0].p ?? null, closeDigits, hit1, hit2 };
+    return { r, oTop, oBot, pick, pair, p: ranked[0].p, closeDigits, hit1, hit2 };
   }).reverse();
 
   const judged = rows.filter((x) => x.hit1 !== null);
@@ -68,7 +68,7 @@ export default async function StockDetailPage({ params }: PageProps<"/stocks/[id
         <StatCard
           label="ฟันธง 1 ตัว ถูก"
           value={judged.length ? `${hit1Count} / ${judged.length} วัน` : "-"}
-          hint={judged.length ? `${Math.round((hit1Count / judged.length) * 100)}% · สุ่มเดา ≈ 40%` : "ต้องมีวันที่ปิดแล้วอย่างน้อย 1 วันก่อนหน้า"}
+          hint={judged.length ? `${Math.round((hit1Count / judged.length) * 100)}% · สุ่มเดา ≈ 40%` : "รอผลปิดวันแรก"}
           tone={judged.length ? (hit1Count / judged.length > 0.4 ? "up" : "down") : "neutral"}
         />
         <StatCard
@@ -93,7 +93,7 @@ export default async function StockDetailPage({ params }: PageProps<"/stocks/[id
         <section className="card p-0">
           <div className="border-b border-slate-200 px-5 py-3">
             <h2 className="font-medium">ประวัติ + ผลฟันธงรายวัน</h2>
-            <p className="text-xs text-slate-500">ฟันธงของแต่ละวันคำนวณจากเลขเปิดวันนั้น + ข้อมูลก่อนหน้าเท่านั้น · เหลือง = เลขที่ฟันแล้วโผล่จริง</p>
+            <p className="text-xs text-slate-500">ฟันธงจากเลขเปิดวันนั้น (ตำแหน่งสิบ/หน่วย ของบนและล่าง) · เหลือง = เลขที่ฟันแล้วโผล่จริง</p>
           </div>
           {rows.length === 0 ? (
             <p className="px-5 py-8 text-center text-sm text-slate-500">ยังไม่มีข้อมูล เริ่มบันทึกเปิดได้จากฟอร์มด้านซ้าย</p>
@@ -121,16 +121,12 @@ export default async function StockDetailPage({ params }: PageProps<"/stocks/[id
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap"><Digits value={oTop} /> <Digits value={oBot} /></td>
                       <td className="px-3 py-2 whitespace-nowrap bg-amber-50/50">
-                        {pick === null ? (
-                          <span className="text-xs text-slate-400">ไม่มีข้อมูลก่อนหน้า</span>
-                        ) : (
-                          <span className="flex items-center gap-2">
-                            <span className={`flex h-9 w-9 items-center justify-center rounded-lg font-mono text-xl font-bold ${hit1 ? "bg-amber-400 text-white" : hit1 === false ? "bg-slate-200 text-slate-500 line-through" : "bg-amber-100 text-amber-900"}`}>{pick}</span>
-                            <span className="text-xs text-slate-500">
-                              {Math.round((p ?? 0) * 100)}%<br />คู่ <span className="font-mono">{pair!.join(" ")}</span>
-                            </span>
+                        <span className="flex items-center gap-2">
+                          <span className={`flex h-9 w-9 items-center justify-center rounded-lg font-mono text-xl font-bold ${hit1 ? "bg-amber-400 text-white" : hit1 === false ? "bg-slate-200 text-slate-500 line-through" : "bg-amber-100 text-amber-900"}`}>{pick}</span>
+                          <span className="text-xs text-slate-500">
+                            {Math.round(p * 100)}%<br />คู่ <span className="font-mono">{pair.join(" ")}</span>
                           </span>
-                        )}
+                        </span>
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap tabular-nums">
                         {hasClose(r) ? (<>{fmtNum(r.closeValue)}<br /><Change value={r.closeChange} className="text-xs" /></>) : <CloseForm recordId={r.id} />}
