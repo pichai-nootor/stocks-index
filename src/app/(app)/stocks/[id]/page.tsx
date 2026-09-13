@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
-import { summarize, fmtChange, fmtNum, hasClose } from "@/lib/stats";
+import { summarize, fmtChange, fmtNum, hasClose, evaluateCalls } from "@/lib/stats";
 import { pickDigits, top2, bottom2 } from "@/lib/digits";
 import { deleteRecord, deleteStock } from "@/app/actions/stocks";
 import { StatCard } from "@/components/stat-card";
@@ -41,6 +41,8 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
     return { r, oTop, oBot, pick, pair, p: ranked[0].p, closeDigits, hit1, hit2 };
   }).reverse();
 
+  const calls = evaluateCalls(stock.records);
+  const callByDate = new Map(calls.perDay.map((d) => [d.date.getTime(), d]));
   const paged = paginate(rows, page);
   const judged = rows.filter((x) => x.hit1 !== null);
   const hit1Count = judged.filter((x) => x.hit1).length;
@@ -68,7 +70,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
       </div>
 
       {/* ผลงานการฟันธง */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="ฟันธง 1 ตัว ถูก"
           value={judged.length ? `${hit1Count} / ${judged.length} วัน` : "-"}
@@ -80,6 +82,12 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
           value={judged.length ? `${hit2Count} / ${judged.length} วัน` : "-"}
           hint={judged.length ? `${Math.round((hit2Count / judged.length) * 100)}% · สุ่มเดา ≈ 67%` : undefined}
           tone={judged.length ? (hit2Count / judged.length > 0.67 ? "up" : "down") : "neutral"}
+        />
+        <StatCard
+          label="ฟันทิศทาง (เปิดห่าง ≥0.5%)"
+          value={calls.called ? `${calls.hits} / ${calls.called} วัน` : "-"}
+          hint={calls.called ? `${Math.round((calls.hits / calls.called) * 100)}% · ไม่ฟัน ${calls.skipped} วัน` : "ยังไม่มีวันที่เข้าเกณฑ์"}
+          tone={calls.called ? (calls.hits / calls.called >= 0.7 ? "up" : "down") : "neutral"}
         />
         <StatCard
           label="รอผลปิด"
@@ -109,7 +117,8 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                     <th className="px-3 py-2">วันที่</th>
                     <th className="px-3 py-2">เปิด</th>
                     <th className="px-3 py-2">เลขเปิด</th>
-                    <th className="px-3 py-2 bg-amber-50 text-amber-800">ฟันธง</th>
+                    <th className="px-3 py-2">ทิศทาง</th>
+                    <th className="px-3 py-2 bg-amber-50 text-amber-800">ฟันเลข</th>
                     <th className="px-3 py-2">ปิด</th>
                     <th className="px-3 py-2">เลขปิด</th>
                     <th className="px-3 py-2 bg-amber-50 text-amber-800">ผล</th>
@@ -124,6 +133,10 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                         {fmtNum(r.openValue)}<br /><Change value={r.openChange} className="text-xs" />
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap"><Digits value={oTop} /> <Digits value={oBot} /></td>
+                      <td className="px-3 py-2 whitespace-nowrap text-xs">
+                        {(() => { const c = callByDate.get(r.date.getTime()); if (!c || !c.call) return <span className="text-slate-400">ไม่ฟัน</span>;
+                          return <span className={`rounded px-1.5 py-0.5 font-medium ${c.hit === true ? "bg-emerald-100 text-emerald-800" : c.hit === false ? "bg-red-100 text-red-800 line-through" : "bg-amber-100 text-amber-800"}`}>{c.call === "up" ? "▲ บวก" : "▼ ลบ"}{c.hit === true ? " ✓" : c.hit === false ? " ✗" : ""}</span>; })()}
+                      </td>
                       <td className="px-3 py-2 whitespace-nowrap bg-amber-50/50">
                         <span className="flex items-center gap-2">
                           <span className={`flex h-9 w-9 items-center justify-center rounded-lg font-mono text-xl font-bold ${hit1 ? "bg-amber-400 text-white" : hit1 === false ? "bg-slate-200 text-slate-500 line-through" : "bg-amber-100 text-amber-900"}`}>{pick}</span>

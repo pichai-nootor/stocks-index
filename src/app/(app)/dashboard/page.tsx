@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
-import { summarize, fmtNum, fmtChange, hasClose } from "@/lib/stats";
+import { summarize, fmtNum, fmtChange, hasClose, evaluateCalls } from "@/lib/stats";
 import { toDayDigits, pickDigits } from "@/lib/digits";
 import { Digits } from "@/components/digit-badges";
 import { OpenForm } from "@/components/open-form";
@@ -39,7 +39,9 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
       return { d, rec, pick, pair, hit1: d.closeDigits.includes(pick), hit2: pair.filter((x) => d.closeDigits.includes(x)) };
     });
     const last = judged[judged.length - 1];
-    return { stock: s, n: judged.length, hit1: judged.filter((j) => j.hit1).length, hit2: judged.filter((j) => j.hit2.length > 0).length, last };
+    const calls = evaluateCalls(s.records);
+    const lastCall = [...calls.perDay].reverse().find((d) => d.call && d.actual);
+    return { stock: s, n: judged.length, hit1: judged.filter((j) => j.hit1).length, hit2: judged.filter((j) => j.hit2.length > 0).length, last, calls, lastCall };
   });
   const defaultStock = [...stocks].sort((a, b) => b.records.length - a.records.length)[0];
 
@@ -71,10 +73,53 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
         </>
       )}
 
-      {/* สกอร์ */}
+      {/* ผลการฟันทิศทาง (เฉพาะวันที่มั่นใจ) */}
+      <section className="card p-0">
+        <div className="border-b border-slate-200 px-5 py-3">
+          <h2 className="font-medium">ผลการฟันทิศทาง — เฉพาะวันที่เปิดห่าง ≥ 0.5%</h2>
+          <p className="text-xs text-slate-500">วันอื่น ๆ ระบบไม่ฟัน (โอกาสถูกไม่พอ) · นับเฉพาะวันที่ฟันและมีผลปิดแล้ว</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+              <tr>
+                <th className="px-5 py-2">หุ้น</th>
+                <th className="px-5 py-2 text-right">วันที่ฟัน</th>
+                <th className="px-5 py-2 text-right">ถูก</th>
+                <th className="px-5 py-2 text-right">ไม่ฟัน</th>
+                <th className="px-5 py-2">ฟันล่าสุด</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {scoreboard.map(({ stock, calls, lastCall }) => (
+                <tr key={stock.id} className="hover:bg-slate-50">
+                  <td className="px-5 py-2.5 font-medium">{stock.symbol}</td>
+                  <td className="px-5 py-2.5 text-right">{calls.called}</td>
+                  <td className={`px-5 py-2.5 text-right font-semibold ${calls.called && calls.hits / calls.called >= 0.7 ? "text-emerald-600" : ""}`}>
+                    {calls.called ? `${calls.hits}/${calls.called} (${Math.round((calls.hits / calls.called) * 100)}%)` : "-"}
+                  </td>
+                  <td className="px-5 py-2.5 text-right text-slate-500">{calls.skipped} วัน</td>
+                  <td className="px-5 py-2.5 whitespace-nowrap">
+                    {lastCall ? (
+                      <span className="inline-flex items-center gap-2 text-xs">
+                        <span className="text-slate-500">{lastCall.date.toLocaleDateString("th-TH", { day: "numeric", month: "short" })}</span>
+                        <span className={`rounded px-1.5 py-0.5 font-medium ${lastCall.call === "up" ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"}`}>{lastCall.call === "up" ? "▲ ปิดบวก" : "▼ ปิดลบ"}</span>
+                        <span className="text-slate-500">(เปิด {lastCall.openPct > 0 ? "+" : ""}{lastCall.openPct.toFixed(2)}%)</span>
+                        {lastCall.hit ? <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-emerald-800">✓ ถูก</span> : <span className="rounded bg-red-100 px-1.5 py-0.5 text-red-800">✗ ผิด</span>}
+                      </span>
+                    ) : "-"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* สกอร์เลข */}
       <section className="card p-0">
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
-          <h2 className="font-medium">ผลงานฟันธง</h2>
+          <h2 className="font-medium">ผลงานฟันเลข (เพดาน ≈ 36%)</h2>
           <Link href="/stocks" className="text-sm text-blue-600 hover:underline">จัดการหุ้น</Link>
         </div>
         <div className="overflow-x-auto">

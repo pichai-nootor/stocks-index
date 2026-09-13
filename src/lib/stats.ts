@@ -299,3 +299,48 @@ export function forecastClose(openValue: number, openChange: number, history: Re
     pAboveOpen, own,
   };
 }
+
+/* ---------- โหมดฟันเฉพาะวันที่มั่นใจ ---------- */
+
+/** เกณฑ์ขั้นต่ำ (% ที่เปิดห่างจากปิดวันก่อน) ที่จะฟันทิศทาง */
+export const CALL_MIN_GAP_PCT = 0.5;
+
+export type DirectionCall = {
+  call: "up" | "down" | null;   // null = วันนี้ไม่ฟัน
+  forecast: DirectionForecast;
+  reason: string;
+};
+
+export function directionCall(openValue: number, openChange: number, history: RecordLike[] = []): DirectionCall {
+  const forecast = forecastDirection(openValue, openChange, history);
+  const abs = Math.abs(forecast.openPct);
+  if (forecast.direction === "flat" || abs < CALL_MIN_GAP_PCT) {
+    return { call: null, forecast, reason: `เปิดห่างแค่ ${abs.toFixed(2)}% (< ${CALL_MIN_GAP_PCT}%) — โอกาสถูก ${Math.round(forecast.pSame * 100)}% ไม่พอจะฟัน` };
+  }
+  return { call: forecast.direction, forecast, reason: `เปิดห่าง ${abs.toFixed(2)}% → ปิดทางเดียวกัน ${Math.round(forecast.pSame * 100)}%` };
+}
+
+export type CallRecord = { date: Date; call: "up" | "down" | null; actual: "up" | "down" | "flat" | null; hit: boolean | null; openPct: number };
+
+/** ประเมินผลการฟันทิศทางย้อนหลัง (แต่ละวันใช้ข้อมูลก่อนหน้าวันนั้น) */
+export function evaluateCalls(records: (RecordLike | (Omit<RecordLike, "closeValue" | "closeChange"> & MaybeClosed))[]): {
+  perDay: CallRecord[]; called: number; hits: number; skipped: number; pending: number;
+} {
+  const sorted = [...records].sort((a, b) => a.date.getTime() - b.date.getTime());
+  const perDay: CallRecord[] = [];
+  for (let i = 0; i < sorted.length; i++) {
+    const r = sorted[i];
+    const hist = sorted.slice(0, i).filter(hasClose);
+    const { call, forecast } = directionCall(r.openValue, r.openChange, hist);
+    const actual = hasClose(r) ? (r.closeChange > 0 ? "up" : r.closeChange < 0 ? "down" : "flat") : null;
+    const hit = call && actual ? call === actual : null;
+    perDay.push({ date: r.date, call, actual, hit, openPct: forecast.openPct });
+  }
+  return {
+    perDay,
+    called: perDay.filter((d) => d.call && d.actual).length,
+    hits: perDay.filter((d) => d.hit).length,
+    skipped: perDay.filter((d) => !d.call).length,
+    pending: perDay.filter((d) => d.call && !d.actual).length,
+  };
+}
