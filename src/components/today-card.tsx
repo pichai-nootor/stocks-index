@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { scoreFromOpen, top2, bottom2, prevCloseCents, exactDigitProbs, type DayDigits } from "@/lib/digits";
-import { fmtNum, fmtChange, type Summary } from "@/lib/stats";
+import { fmtNum, fmtChange, forecastDirection, type Summary, type RecordLike } from "@/lib/stats";
+import { DirectionCard } from "@/components/direction-card";
 import { Digits } from "@/components/digit-badges";
 import { CloseForm } from "@/components/close-form";
 
@@ -8,17 +9,19 @@ type Rec = { id: string; date: Date; openValue: number; openChange: number };
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 
 /** การ์ดวิเคราะห์ของวันที่กรอกเปิดไว้ (รอผลปิด) — ใช้ในหน้าแรก */
-export function TodayCard({ stock, record, history, priceStats }: {
+export function TodayCard({ stock, record, history, priceStats, priceHistory = [] }: {
   stock: { id: string; symbol: string; name: string | null };
   record: Rec;
   history: DayDigits[]; // วันที่ปิดแล้วก่อนหน้าวันนี้
   priceStats: Summary;
+  priceHistory?: RecordLike[];
 }) {
   const oTop = top2(record.openValue), oBot = bottom2(record.openChange);
   const ranked = scoreFromOpen(history, oTop, oBot);
   const D = prevCloseCents(record.openValue, record.openChange);
   const dir = record.openChange > 0 ? priceStats.whenOpenUp : record.openChange < 0 ? priceStats.whenOpenDown : priceStats.all;
-  const pUp = (dir.closeUp + 1) / (dir.count + 2);
+  const df = forecastDirection(record.openValue, record.openChange, priceHistory);
+  const pUp = df.pUp;
   const exact = exactDigitProbs(D, pUp);
   const flat = exact[0].p - exact[exact.length - 1].p < 0.01;
   const mathHot = exact.filter((e) => e.p >= exact[0].p - 0.005).map((e) => e.digit);
@@ -33,11 +36,13 @@ export function TodayCard({ stock, record, history, priceStats }: {
         <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">รอผลปิด</span>
       </div>
 
+      <div className="mt-3"><DirectionCard f={df} compact /></div>
+
       <div className="mt-3 grid gap-4 sm:grid-cols-[auto_1fr]">
         <div className="flex items-center gap-3">
           <span className="flex h-24 w-24 items-center justify-center rounded-3xl bg-amber-400 font-mono text-6xl font-bold text-white shadow">{ranked[0].digit}</span>
           <div className="text-sm">
-            <p className="text-xs uppercase tracking-wide text-amber-800">ฟันธง</p>
+            <p className="text-xs uppercase tracking-wide text-amber-800">ฟันเลข (โอกาส ~34%)</p>
             <p className="font-semibold">{pct(ranked[0].p)}</p>
             {ranked[1] && <p className="mt-1 text-slate-600">คู่ <span className="font-mono text-xl font-semibold text-amber-900">{ranked[0].digit} {ranked[1].digit}</span></p>}
             <p className="mt-1 text-xs text-slate-500">อันดับ: <span className="font-mono">{ranked.map((r) => r.digit).join(" › ")}</span></p>
@@ -59,7 +64,7 @@ export function TodayCard({ stock, record, history, priceStats }: {
           </div>
           <div>
             <dt className="text-xs text-slate-500">ทิศทาง (เปิด {record.openChange < 0 ? "−" : "+"})</dt>
-            <dd><span className={`font-semibold ${pUp >= 0.5 ? "text-emerald-600" : "text-red-600"}`}>ปิดขึ้น {pct(pUp)}</span> <span className="text-xs text-slate-500">({dir.count} วัน)</span></dd>
+            <dd><span className={`font-semibold ${pUp >= 0.5 ? "text-emerald-600" : "text-red-600"}`}>ปิดขึ้น {pct(pUp)}</span> <span className="text-xs text-slate-500">(ของคุณ {dir.count} วัน)</span></dd>
           </div>
           <div className="col-span-2 sm:col-span-2">
             <dt className="text-xs text-slate-500">คณิตศาสตร์ (D + ทิศทาง)</dt>

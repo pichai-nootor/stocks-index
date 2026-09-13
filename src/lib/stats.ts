@@ -201,3 +201,51 @@ export type MaybeClosed = { closeValue: number | null; closeChange: number | nul
 export function hasClose<T extends MaybeClosed>(r: T): r is T & { closeValue: number; closeChange: number } {
   return r.closeValue !== null && r.closeChange !== null;
 }
+
+/* ---------- ทิศทางปิด (เทียบปิดวันก่อน) ตามขนาดที่เปิดห่างจากปิดวันก่อน ---------- */
+
+/**
+ * อัตราที่ "ปิดไปทางเดียวกับที่เปิด" แยกตามขนาดช่องว่างตอนเปิด (|เปิด − ปิดวันก่อน| เป็น %)
+ * ค่าฐานจาก BSE SENSEX รายวัน 10 ปี (2016-09 → 2026-09, 2,463 วัน)
+ */
+export const DIRECTION_TIERS = [
+  { minPct: 2.0,  sameRate: 0.935, label: "สูงมาก", n: 46 },
+  { minPct: 1.0,  sameRate: 0.841, label: "สูง",     n: 107 },
+  { minPct: 0.5,  sameRate: 0.798, label: "สูง",     n: 420 },
+  { minPct: 0.25, sameRate: 0.673, label: "ปานกลาง", n: 681 },
+  { minPct: 0.1,  sameRate: 0.592, label: "ต่ำ",     n: 693 },
+  { minPct: 0,    sameRate: 0.537, label: "เท่าโยนเหรียญ", n: 516 },
+] as const;
+
+export type DirectionForecast = {
+  openPct: number;            // % ที่เปิดห่างจากปิดวันก่อน (มีเครื่องหมาย)
+  direction: "up" | "down" | "flat";
+  pSame: number;              // โอกาสปิดทางเดียวกับเปิด
+  pUp: number;                // โอกาสปิดสูงกว่าปิดวันก่อน
+  tier: (typeof DIRECTION_TIERS)[number];
+  /** สถิติของผู้ใช้เองในช่วงเดียวกัน (ถ้ามี) */
+  own: { same: number; n: number } | null;
+};
+
+export function forecastDirection(openValue: number, openChange: number, history: RecordLike[] = []): DirectionForecast {
+  const prev = openValue - openChange;
+  const openPct = prev ? (openChange / prev) * 100 : 0;
+  const abs = Math.abs(openPct);
+  const tier = DIRECTION_TIERS.find((t) => abs >= t.minPct) ?? DIRECTION_TIERS[DIRECTION_TIERS.length - 1];
+  const direction = openChange > 0 ? "up" : openChange < 0 ? "down" : "flat";
+
+  const upper = DIRECTION_TIERS[DIRECTION_TIERS.indexOf(tier) - 1]?.minPct ?? Infinity;
+  const inTier = history.filter((r) => {
+    const p = prevClose(r);
+    const a = p ? Math.abs((r.openChange / p) * 100) : 0;
+    return a >= tier.minPct && a < upper && r.openChange !== 0;
+  });
+  const own = inTier.length
+    ? { same: inTier.filter((r) => Math.sign(r.openChange) === Math.sign(r.closeChange)).length, n: inTier.length }
+    : null;
+
+  // ผสมค่าฐาน 10 ปี กับข้อมูลผู้ใช้ (ถ่วงตามจำนวน; ฐานนับเป็น 30 วัน)
+  const pSame = own ? (tier.sameRate * 30 + own.same) / (30 + own.n) : tier.sameRate;
+  const pUp = direction === "up" ? pSame : direction === "down" ? 1 - pSame : 0.5;
+  return { openPct, direction, pSame, pUp, tier, own };
+}

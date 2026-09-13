@@ -2,7 +2,8 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { toDayDigits, scoreFromOpen, backtest, fitModel, top2, bottom2, POSITIONS, positionLabel, positionDigits, prevCloseCents, exactDigitProbs } from "@/lib/digits";
-import { summarize } from "@/lib/stats";
+import { summarize, forecastDirection } from "@/lib/stats";
+import { DirectionCard } from "@/components/direction-card";
 import { TopToBottom } from "./top-to-bottom";
 import { fmtNum, fmtChange, hasClose } from "@/lib/stats";
 import { Digits } from "@/components/digit-badges";
@@ -50,8 +51,8 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
   // โครงสร้าง + ทิศทาง
   const priceStats = summarize(records);
   const dirGroup = hasOpen ? (openChange > 0 ? priceStats.whenOpenUp : openChange < 0 ? priceStats.whenOpenDown : priceStats.all) : null;
-  // โอกาสปิดสูงกว่าเมื่อวาน (smoothing เข้าหา 50% เมื่อข้อมูลน้อย)
-  const pUp = dirGroup ? (dirGroup.closeUp + 0.5 * 2) / (dirGroup.count + 2) : 0.5;
+  const df = hasOpen ? forecastDirection(openValue, openChange, records) : null;
+  const pUp = df ? df.pUp : 0.5;
   const D = hasOpen ? prevCloseCents(openValue, openChange) : null;
   const exact = D !== null ? exactDigitProbs(D, pUp) : null;
   const prevCloseValue = hasOpen ? openValue - openChange : null;
@@ -128,16 +129,11 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <h3 className="text-sm font-medium">ทิศทางวันนี้ (เปิด {openChange > 0 ? "+" : openChange < 0 ? "−" : "0"})</h3>
-                  <div className="mt-2 flex items-center gap-3">
-                    <span className={`text-3xl font-semibold ${pUp >= 0.5 ? "text-emerald-600" : "text-red-600"}`}>{pct(pUp)}</span>
-                    <span className="text-sm text-slate-600">โอกาสปิดสูงกว่าเมื่อวาน</span>
-                  </div>
-                  <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-red-200"><div className="h-full bg-emerald-500" style={{ width: pct(pUp) }} /></div>
-                  <p className="mt-1 text-xs text-slate-500">
+                  <DirectionCard f={df!} compact />
+                  <p className="mt-2 text-xs text-slate-500">
                     {dirGroup.count
-                      ? `จาก ${dirGroup.count} วันที่เปิดแบบเดียวกัน: ปิด+ ${dirGroup.closeUp} · ปิด− ${dirGroup.closeDown}`
-                      : "ยังไม่มีวันที่เปิดแบบเดียวกัน → ใช้ 50%"}
+                      ? `ของคุณ ${dirGroup.count} วันที่เปิดแบบเดียวกัน: ปิด+ ${dirGroup.closeUp} · ปิด− ${dirGroup.closeDown}`
+                      : "ยังไม่มีวันที่เปิดแบบเดียวกันในข้อมูลของคุณ"}
                   </p>
                   <TopToBottom D={D} pUp={pUp} />
                 </div>

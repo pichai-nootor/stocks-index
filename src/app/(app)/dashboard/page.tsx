@@ -26,7 +26,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
     const priceStats = summarize(closed);
     return s.records
       .filter((r) => !hasClose(r))
-      .map((r) => ({ stock: s, record: r, history: days.filter((d) => d.date.getTime() < r.date.getTime()), priceStats }));
+      .map((r) => ({ stock: s, record: r, history: days.filter((d) => d.date.getTime() < r.date.getTime()), priceStats, priceHistory: closed }));
   }).sort((a, b) => b.record.date.getTime() - a.record.date.getTime());
 
   // ผลล่าสุดที่ตัดสินแล้ว + สกอร์รวม ต่อหุ้น
