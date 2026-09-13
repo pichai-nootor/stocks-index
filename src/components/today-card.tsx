@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { pickDigits, top2, bottom2, prevCloseCents, exactDigitProbs } from "@/lib/digits";
-import { fmtNum, fmtChange, forecastDirection, type Summary, type RecordLike } from "@/lib/stats";
+import { fmtNum, fmtChange, forecastDirection, forecastClose, type Summary, type RecordLike } from "@/lib/stats";
+import { CloseForecastCard } from "@/components/close-forecast-card";
 import { DirectionCard } from "@/components/direction-card";
 import { Digits } from "@/components/digit-badges";
 import { CloseForm } from "@/components/close-form";
@@ -20,6 +21,7 @@ export function TodayCard({ stock, record, priceStats, priceHistory = [] }: {
   const D = prevCloseCents(record.openValue, record.openChange);
   const dir = record.openChange > 0 ? priceStats.whenOpenUp : record.openChange < 0 ? priceStats.whenOpenDown : priceStats.all;
   const df = forecastDirection(record.openValue, record.openChange, priceHistory);
+  const cf = forecastClose(record.openValue, record.openChange, priceHistory);
   const pUp = df.pUp;
   const exact = exactDigitProbs(D, pUp);
   const flat = exact[0].p - exact[exact.length - 1].p < 0.01;
@@ -35,7 +37,10 @@ export function TodayCard({ stock, record, priceStats, priceHistory = [] }: {
         <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">รอผลปิด</span>
       </div>
 
-      <div className="mt-3"><DirectionCard f={df} compact /></div>
+      <div className="mt-3 grid gap-3 lg:grid-cols-[3fr_2fr]">
+        <CloseForecastCard open={record.openValue} f={cf} dir={df} />
+        <DirectionCard f={df} compact />
+      </div>
 
       <div className="mt-3 grid gap-4 sm:grid-cols-[auto_1fr]">
         <div className="flex items-center gap-3">

@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
-import { predictClose, fmtNum, fmtChange, signLabel, hasClose, type Group } from "@/lib/stats";
+import { predictClose, fmtNum, fmtChange, signLabel, hasClose, forecastClose, forecastDirection, type Group } from "@/lib/stats";
+import { CloseForecastCard } from "@/components/close-forecast-card";
+import { DirectionCard } from "@/components/direction-card";
 import { StatCard } from "@/components/stat-card";
 import { PatternMatrix } from "@/components/pattern-matrix";
 
@@ -57,6 +59,8 @@ export default async function PredictPage({ searchParams }: PageProps<"/predict"
     : []).filter(hasClose);
   const ready = selected && openChangeRaw !== "" && Number.isFinite(openChange) && (openValue === null || openValue > 0);
   const p = ready ? predictClose(records, openChange, openValue) : null;
+  const cf = ready && openValue !== null ? forecastClose(openValue, openChange, records) : null;
+  const df = ready && openValue !== null ? forecastDirection(openValue, openChange, records) : null;
 
   return (
     <div className="space-y-6">
@@ -73,8 +77,8 @@ export default async function PredictPage({ searchParams }: PageProps<"/predict"
           </select>
         </div>
         <div>
-          <label htmlFor="openValue" className="label">ค่าดัชนีตอนเปิด (ไม่บังคับ)</label>
-          <input id="openValue" name="openValue" type="number" step="any" inputMode="decimal" className="input" defaultValue={openValueRaw} placeholder="74781.76" />
+          <label htmlFor="openValue" className="label">ค่าดัชนีตอนเปิด</label>
+          <input id="openValue" name="openValue" type="number" step="any" inputMode="decimal" className="input" defaultValue={openValueRaw} placeholder="74781.76" required />
         </div>
         <div>
           <label htmlFor="openChange" className="label">เปิดวันนี้ เปลี่ยนแปลง (+/−)</label>
@@ -109,6 +113,14 @@ export default async function PredictPage({ searchParams }: PageProps<"/predict"
               <Link href={`/stocks/${selected.id}`} className="text-sm text-blue-600 hover:underline">ดูประวัติ</Link>
             </div>
 
+            {cf && df && openValue !== null && (
+              <div className="grid gap-4 lg:grid-cols-[3fr_2fr]">
+                <CloseForecastCard open={openValue} f={cf} dir={df} />
+                <DirectionCard f={df} />
+              </div>
+            )}
+
+            <h3 className="pt-2 text-sm font-medium text-slate-600">จากข้อมูลของคุณเอง ({p.summary.count} วัน)</h3>
             <div className="grid gap-4 md:grid-cols-3">
               <GroupCard title={`ทุกครั้งที่เปิด ${signLabel[p.openSign]}`} g={p.sameSign} hint="ประวัติทั้งหมดที่เปิดเครื่องหมายเดียวกัน" />
               <GroupCard
