@@ -250,3 +250,35 @@ export function backtest(days: DayDigits[], minHistory = 0): Backtest {
   });
   return { days: n, topK, avgCloseSize, perDay };
 }
+
+/* ---------- โครงสร้าง: ล่าง คำนวณได้จาก บน + ทศนิยมของปิดวันก่อน ---------- */
+
+const cents = (x: number) => Math.round(Math.abs(x) * 100) % 100;
+
+/** ทศนิยม 2 หลักของ "ปิดวันก่อน" (= ค่าเปิด − เปลี่ยนแปลงตอนเปิด) รู้ได้ตั้งแต่เช้า */
+export const prevCloseCents = (openValue: number, openChange: number) => cents(openValue - openChange);
+
+/**
+ * ถ้า 2 ตัวบน = top และปิดวันก่อนมีทศนิยม D
+ *   ปิดสูงกว่าเมื่อวาน → ล่าง = (top − D) mod 100
+ *   ปิดต่ำกว่าเมื่อวาน → ล่าง = (D − top) mod 100
+ */
+export function bottomFromTop(top: number, D: number, up: boolean): string {
+  const v = up ? top - D : D - top;
+  return String(((v % 100) + 100) % 100).padStart(2, "0");
+}
+
+/**
+ * ความน่าจะเป็นที่เลข 0–9 จะปรากฏตอนปิด (บน ∪ ล่าง) โดยไล่ทุกกรณี บน = 00..99
+ * ถ่วงด้วยโอกาสปิดขึ้น pUp — นี่คือค่าที่ "คณิตศาสตร์ล้วน" ให้ได้ เมื่อ บน สุ่ม
+ */
+export function exactDigitProbs(D: number, pUp = 0.5): { digit: string; p: number }[] {
+  const P = Array<number>(10).fill(0);
+  for (let top = 0; top < 100; top++) {
+    for (const [up, w] of [[true, pUp], [false, 1 - pUp]] as const) {
+      const set = new Set((String(top).padStart(2, "0") + bottomFromTop(top, D, up)).split(""));
+      for (const d of set) P[Number(d)] += w / 100;
+    }
+  }
+  return DIGITS.map((digit) => ({ digit, p: P[Number(digit)] })).sort((a, b) => b.p - a.p);
+}

@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
-import { toDayDigits, scoreFromOpen, backtest, fitModel, top2, bottom2, POSITIONS, positionLabel, positionDigits } from "@/lib/digits";
+import { toDayDigits, scoreFromOpen, backtest, fitModel, top2, bottom2, POSITIONS, positionLabel, positionDigits, prevCloseCents, exactDigitProbs } from "@/lib/digits";
+import { summarize } from "@/lib/stats";
+import { TopToBottom } from "./top-to-bottom";
 import { fmtNum, fmtChange, hasClose } from "@/lib/stats";
 import { Digits } from "@/components/digit-badges";
 import { CloseForm } from "@/components/close-form";
@@ -42,6 +44,15 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
   const ranked = hasOpen ? scoreFromOpen(days, oTop, oBot, model) : null;
   const bt = days.length ? backtest(days) : null;
   const top1 = bt?.topK[0];
+
+  // โครงสร้าง + ทิศทาง
+  const priceStats = summarize(records);
+  const dirGroup = hasOpen ? (openChange > 0 ? priceStats.whenOpenUp : openChange < 0 ? priceStats.whenOpenDown : priceStats.all) : null;
+  // โอกาสปิดสูงกว่าเมื่อวาน (smoothing เข้าหา 50% เมื่อข้อมูลน้อย)
+  const pUp = dirGroup ? (dirGroup.closeUp + 0.5 * 2) / (dirGroup.count + 2) : 0.5;
+  const D = hasOpen ? prevCloseCents(openValue, openChange) : null;
+  const exact = D !== null ? exactDigitProbs(D, pUp) : null;
+  const prevCloseValue = hasOpen ? openValue - openChange : null;
 
   return (
     <div className="space-y-6">
@@ -99,6 +110,60 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
                     </li>
                   ))}
                 </ul>
+              </div>
+            </section>
+          )}
+
+          {ranked && D !== null && exact && dirGroup && (
+            <section className="card space-y-4">
+              <div>
+                <h2 className="font-medium">โครงสร้างของวันนี้: ทายแค่ "บน" ล่างคำนวณได้</h2>
+                <p className="text-xs text-slate-500">
+                  ปิดวันก่อน = {fmtNum(prevCloseValue!)} → ทศนิยม <span className="font-mono font-semibold">D = {String(D).padStart(2, "0")}</span>
+                  {" "}· 2 ตัวล่าง = (บน − D) ถ้าปิดขึ้น หรือ (D − บน) ถ้าปิดลง (mod 100) — ตรวจแล้วตรง {days.length}/{days.length} วันในประวัติ
+                </p>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <h3 className="text-sm font-medium">ทิศทางวันนี้ (เปิด {openChange > 0 ? "+" : openChange < 0 ? "−" : "0"})</h3>
+                  <div className="mt-2 flex items-center gap-3">
+                    <span className={`text-3xl font-semibold ${pUp >= 0.5 ? "text-emerald-600" : "text-red-600"}`}>{pct(pUp)}</span>
+                    <span className="text-sm text-slate-600">โอกาสปิดสูงกว่าเมื่อวาน</span>
+                  </div>
+                  <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-red-200"><div className="h-full bg-emerald-500" style={{ width: pct(pUp) }} /></div>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {dirGroup.count
+                      ? `จาก ${dirGroup.count} วันที่เปิดแบบเดียวกัน: ปิด+ ${dirGroup.closeUp} · ปิด− ${dirGroup.closeDown}`
+                      : "ยังไม่มีวันที่เปิดแบบเดียวกัน → ใช้ 50%"}
+                  </p>
+                  <TopToBottom D={D} pUp={pUp} />
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-medium">ความน่าจะเป็นตามคณิตศาสตร์ (D = {String(D).padStart(2, "0")}, ทิศทาง {pct(pUp)})</h3>
+                  <p className="text-xs text-slate-500">ไล่ทุกกรณี บน 00–99 → เลขไหนโผล่ใน บน∪ล่าง บ่อยสุด · สุ่มล้วน ≈ 34%</p>
+                  <div className="mt-3 grid grid-cols-5 gap-2 sm:grid-cols-10">
+                    {[...exact].sort((a, b) => a.digit.localeCompare(b.digit)).map((e) => {
+                      const best = exact[0].p, worst = exact[exact.length - 1].p;
+                      const hot = e.p >= best - 0.005;
+                      return (
+                        <div key={e.digit} className="flex flex-col items-center gap-1">
+                          <div className="flex h-16 w-full items-end rounded bg-slate-100">
+                            <div className={`w-full rounded ${hot ? "bg-emerald-500" : e.p <= worst + 0.005 ? "bg-slate-300" : "bg-blue-300"}`} style={{ height: `${Math.round(((e.p - 0.2) / 0.25) * 100)}%` }} />
+                          </div>
+                          <span className={`font-mono text-lg font-semibold ${hot ? "text-emerald-700" : ""}`}>{e.digit}</span>
+                          <span className="text-xs text-slate-600">{(e.p * 100).toFixed(1)}%</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">
+                    เลขเด่นตามคณิตศาสตร์: <span className="font-mono font-semibold text-emerald-700">{exact.filter((e) => e.p >= exact[0].p - 0.005).map((e) => e.digit).join(" ")}</span>
+                    {" "}· เลขที่โอกาสน้อยสุด: <span className="font-mono">{exact.filter((e) => e.p <= exact[exact.length - 1].p + 0.005).map((e) => e.digit).join(" ")}</span>
+                    {" "}(ต่างกันแค่ไม่กี่ % — บอกไว้ตรง ๆ)
+                  </p>
+                </div>
               </div>
             </section>
           )}
