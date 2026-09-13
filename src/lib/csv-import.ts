@@ -26,7 +26,8 @@ function parseDate(s: string): Date | null {
   if (m) return new Date(`${m[1]}-${m[2]}-${m[3]}`);
   m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (m) {
-    let [, a, b, y] = m;
+    let [, a, b] = m;
+    const y = m[3];
     if (Number(a) > 12) [a, b] = [b, a]; // DD/MM → MM/DD
     return new Date(`${y}-${a.padStart(2, "0")}-${b.padStart(2, "0")}`);
   }

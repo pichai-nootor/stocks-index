@@ -12,7 +12,7 @@ export function ImportForm({ stockId }: { stockId: string }) {
         <input type="hidden" name="stockId" value={stockId} />
         <input name="file" type="file" accept=".csv,text/csv" className="block w-full text-sm file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm" required />
         <p className="text-xs text-slate-500">
-          ต้องมีคอลัมน์ วันที่ / ล่าสุด(ปิด) / ราคาเปิด — ระบบคำนวณ "เปลี่ยนแปลง" จากปิดของแถวก่อนหน้าให้เอง · วันที่ที่มีอยู่แล้วจะถูกข้าม · แนะนำโหลดแบบ <b>รายวัน</b>
+          ต้องมีคอลัมน์ วันที่ / ล่าสุด(ปิด) / ราคาเปิด — ระบบคำนวณ “เปลี่ยนแปลง” จากปิดของแถวก่อนหน้าให้เอง · วันที่ที่มีอยู่แล้วจะถูกข้าม · แนะนำโหลดแบบ <b>รายวัน</b>
         </p>
         <button type="submit" className="btn-primary" disabled={pending}>{pending ? "กำลังนำเข้า..." : "นำเข้า"}</button>
         {state?.error && <p className="text-sm text-red-600">{state.error}</p>}

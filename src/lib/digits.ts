@@ -282,3 +282,42 @@ export function exactDigitProbs(D: number, pUp = 0.5): { digit: string; p: numbe
   }
   return DIGITS.map((digit) => ({ digit, p: P[Number(digit)] })).sort((a, b) => b.p - a.p);
 }
+
+/* ---------- ฟันเลขแบบ "คณิตศาสตร์": D + ทิศทาง (ดีสุดเท่าที่ข้อมูลรองรับ ≈ 36–37%) ---------- */
+
+import { forecastDirection, type RecordLike } from "./stats";
+
+export type DigitPick = { digit: string; p: number };
+
+/**
+ * จัดอันดับเลข 0–9 สำหรับวันนี้จากตัวเปิด:
+ *   D = ทศนิยมปิดวันก่อน (จากค่าเปิด − เปลี่ยนแปลง), ทิศทาง = ตามขนาดที่เปิดห่าง (สถิติ 10 ปี + ของผู้ใช้)
+ *   แล้วไล่ทุกกรณี บน 00–99 → เลขไหนโผล่ใน บน∪ล่าง บ่อยสุด
+ */
+export function pickDigits(openValue: number, openChange: number, priceHistory: RecordLike[] = []): DigitPick[] {
+  const D = prevCloseCents(openValue, openChange);
+  const { pUp } = forecastDirection(openValue, openChange, priceHistory);
+  return exactDigitProbs(D, pUp);
+}
+
+/** ทดสอบย้อนหลังของ pickDigits (ทิศทางใช้เฉพาะข้อมูลก่อนหน้าวันนั้น) */
+export function backtestPicks(records: RecordLike[], minHistory = 0): Backtest {
+  const sorted = [...records].sort((a, b) => a.date.getTime() - b.date.getTime());
+  const days = toDayDigits(sorted);
+  const perDay: Backtest["perDay"] = [];
+  for (let i = minHistory; i < sorted.length; i++) {
+    const predicted = pickDigits(sorted[i].openValue, sorted[i].openChange, sorted.slice(0, i)).slice(0, 3).map((x) => x.digit);
+    perDay.push({ date: days[i].date, predicted, actual: days[i].closeDigits, hits: predicted.filter((d) => days[i].closeDigits.includes(d)) });
+  }
+  const n = perDay.length;
+  const avgCloseSize = days.length ? days.reduce((s, d) => s + d.closeDigits.length, 0) / days.length : 0;
+  const choose = (a: number, b: number) => { let r = 1; for (let i = 1; i <= b; i++) r = (r * (a - b + i)) / i; return r; };
+  const topK = [1, 2, 3].map((k) => {
+    const atLeastOne = n ? perDay.filter((d) => d.predicted.slice(0, k).some((x) => d.actual.includes(x))).length / n : 0;
+    const all = n ? perDay.filter((d) => d.predicted.slice(0, k).every((x) => d.actual.includes(x))).length / n : 0;
+    const m = Math.round(avgCloseSize);
+    const randomAtLeastOne = 10 - m >= k ? 1 - choose(10 - m, k) / choose(10, k) : 1;
+    return { k, atLeastOne, all, randomAtLeastOne };
+  });
+  return { days: n, topK, avgCloseSize, perDay };
+}

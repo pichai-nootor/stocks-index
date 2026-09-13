@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
-import { toDayDigits, scoreFromOpen, backtest, fitModel, top2, bottom2, POSITIONS, positionLabel, positionDigits, prevCloseCents, exactDigitProbs } from "@/lib/digits";
+import { toDayDigits, scoreFromOpen, pickDigits, backtestPicks, fitModel, top2, bottom2, POSITIONS, positionLabel, positionDigits, prevCloseCents, exactDigitProbs } from "@/lib/digits";
 import { summarize, forecastDirection } from "@/lib/stats";
 import { DirectionCard } from "@/components/direction-card";
 import { TopToBottom } from "./top-to-bottom";
@@ -44,8 +44,9 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
   const oTop = hasOpen ? top2(openValue) : "";
   const oBot = hasOpen ? bottom2(openChange) : "";
   const openPos = hasOpen ? positionDigits(oTop, oBot) : null;
-  const ranked = hasOpen ? scoreFromOpen(days, oTop, oBot, model) : null;
-  const bt = days.length ? backtest(days) : null;
+  const ranked = hasOpen ? pickDigits(openValue, openChange, records) : null;
+  const posRanked = hasOpen ? scoreFromOpen(days, oTop, oBot, model) : null;
+  const bt = records.length ? backtestPicks(records) : null;
   const top1 = bt?.topK[0];
 
   // โครงสร้าง + ทิศทาง
@@ -62,7 +63,7 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
       <div>
         <h1 className="text-2xl font-semibold">วิเคราะห์เลขปิด — จากเลขเปิด</h1>
         <p className="mt-1 text-sm text-slate-500">
-          ใส่เลขเปิดวันนี้ → ระบบดูว่าเลขในตำแหน่ง สิบ/หน่วย ของบนและล่าง ตัวไหนน่าจะถูก "เอามาปิด" (ไม่นับหลักร้อย)
+          ใส่เลขเปิดวันนี้ → ระบบดูว่าเลขในตำแหน่ง สิบ/หน่วย ของบนและล่าง ตัวไหนน่าจะถูก “เอามาปิด” (ไม่นับหลักร้อย)
         </p>
       </div>
 
@@ -76,12 +77,12 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
           {ranked && openPos && (
             <section className="grid gap-4 md:grid-cols-[1fr_2fr]">
               <div className="card flex flex-col items-center justify-center bg-amber-50 text-center">
-                <p className="text-xs font-medium uppercase tracking-wide text-amber-800">ฟันธง</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-amber-800">ฟันเลข (D + ทิศทาง)</p>
                 <span className="mt-2 flex h-28 w-28 items-center justify-center rounded-3xl bg-amber-400 font-mono text-7xl font-bold text-white shadow">{ranked[0].digit}</span>
                 <p className="mt-3 text-sm text-amber-900">โอกาสโผล่ตอนปิด <span className="font-semibold">{pct(ranked[0].p)}</span></p>
                 {ranked[1] && <p className="mt-1 text-sm text-amber-800">คู่: <span className="font-mono text-xl font-semibold">{ranked[0].digit} {ranked[1].digit}</span></p>}
                 <p className="mt-2 text-xs text-amber-700">
-                  {top1 && bt ? `ฟันแบบนี้ย้อนหลังถูก ${pct(top1.atLeastOne)} (${bt.days} วัน)` : "ยังไม่มีวันที่ปิดแล้วให้ทดสอบ"}
+                  {top1 && bt ? `ฟันแบบนี้ย้อนหลังถูก ${pct(top1.atLeastOne)} (${bt.days} วัน) · 10 ปี ≈ 37%` : "ยังไม่มีวันที่ปิดแล้วให้ทดสอบ"}
                 </p>
               </div>
 
@@ -102,12 +103,12 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
                     </div>
                   ))}
                 </div>
-                <h4 className="mt-4 text-sm font-medium">อันดับเลข</h4>
+                <h4 className="mt-4 text-sm font-medium">อันดับเลขตามตำแหน่งเปิด (วิธีเดิม — วัดแล้ว ≈ 33%)</h4>
                 <ul className="mt-2 divide-y divide-slate-100 text-sm">
-                  {ranked.map((s, i) => (
+                  {posRanked!.map((s, i) => (
                     <li key={s.digit} className="flex items-center gap-3 py-1.5">
                       <span className="w-6 text-slate-400">{i + 1}</span>
-                      <span className={`flex h-8 w-8 items-center justify-center rounded-lg font-mono text-lg font-bold ${i === 0 ? "bg-amber-400 text-white" : "bg-slate-100"}`}>{s.digit}</span>
+                      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 font-mono text-lg font-bold">{s.digit}</span>
                       <span className="w-12 font-semibold tabular-nums">{pct(s.p)}</span>
                       <span className="text-xs text-slate-500">{s.evidence.map((e) => e.label).join(" · ")}</span>
                     </li>
@@ -120,7 +121,7 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
           {ranked && D !== null && exact && dirGroup && (
             <section className="card space-y-4">
               <div>
-                <h2 className="font-medium">โครงสร้างของวันนี้: ทายแค่ "บน" ล่างคำนวณได้</h2>
+                <h2 className="font-medium">โครงสร้างของวันนี้: ทายแค่ “บน” ล่างคำนวณได้</h2>
                 <p className="text-xs text-slate-500">
                   ปิดวันก่อน = {fmtNum(prevCloseValue!)} → ทศนิยม <span className="font-mono font-semibold">D = {String(D).padStart(2, "0")}</span>
                   {" "}· 2 ตัวล่าง = (บน − D) ถ้าปิดขึ้น หรือ (D − บน) ถ้าปิดลง (mod 100) — ตรวจแล้วตรง {days.length}/{days.length} วันในประวัติ
@@ -179,7 +180,7 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
               <div className="mt-3 divide-y divide-slate-100">
                 {pendingRecords.map((r) => {
                   const t = top2(r.openValue), b = bottom2(r.openChange);
-                  const rk = scoreFromOpen(days.filter((d) => d.date.getTime() < r.date.getTime()), t, b);
+                  const rk = pickDigits(r.openValue, r.openChange, records.filter((d) => d.date.getTime() < r.date.getTime()));
                   return (
                     <div key={r.id} className="flex flex-wrap items-center gap-4 py-3 text-sm">
                       <span className="w-20 whitespace-nowrap">{r.date.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" })}</span>
@@ -202,7 +203,7 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
             <section className="card">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <h2 className="font-medium">ความแม่นยำย้อนหลัง ({bt.days} วัน)</h2>
-                <span className="text-xs text-slate-500">ฟันแต่ละวันจากเลขเปิดวันนั้น · ปิดมีเลขเฉลี่ย {bt.avgCloseSize.toFixed(1)} ตัว</span>
+                <span className="text-xs text-slate-500">ฟันแต่ละวันจาก D + ทิศทาง (ใช้ข้อมูลก่อนหน้าวันนั้น) · ปิดมีเลขเฉลี่ย {bt.avgCloseSize.toFixed(1)} ตัว</span>
               </div>
               <table className="mt-3 w-full text-sm">
                 <thead className="text-left text-xs uppercase text-slate-500">

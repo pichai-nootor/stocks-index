@@ -2,7 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { hasClose, summarize, fmtNum, fmtChange } from "@/lib/stats";
-import { toDayDigits, scoreFromOpen, top2, bottom2 } from "@/lib/digits";
+import { pickDigits, top2, bottom2 } from "@/lib/digits";
 import { Digits } from "@/components/digit-badges";
 
 const TH_MONTHS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
@@ -22,15 +22,14 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
 
   const all = selected ? await prisma.record.findMany({ where: { stockId: selected.id }, orderBy: { date: "asc" } }) : [];
   const closed = all.filter(hasClose);
-  const days = toDayDigits(closed);
 
   // ฟันธง + ผล ของทุกวัน (ใช้ข้อมูลก่อนหน้าวันนั้น)
   const byDate = new Map<string, {
     r: (typeof all)[number]; pick: string; pair: string[]; hit1: boolean | null; hit2: string[];
   }>();
   for (const r of all) {
-    const hist = days.filter((d) => d.date.getTime() < r.date.getTime());
-    const ranked = scoreFromOpen(hist, top2(r.openValue), bottom2(r.openChange));
+    const hist = closed.filter((d) => d.date.getTime() < r.date.getTime());
+    const ranked = pickDigits(r.openValue, r.openChange, hist);
     const pick = ranked[0].digit, pair = ranked.slice(0, 2).map((x) => x.digit);
     const cd = hasClose(r) ? [...new Set((top2(r.closeValue) + bottom2(r.closeChange)).split(""))] : null;
     byDate.set(r.date.toISOString().slice(0, 10), { r, pick, pair, hit1: cd ? cd.includes(pick) : null, hit2: cd ? pair.filter((d) => cd.includes(d)) : [] });

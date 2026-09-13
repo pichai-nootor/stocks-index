@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { scoreFromOpen, top2, bottom2, prevCloseCents, exactDigitProbs, type DayDigits } from "@/lib/digits";
+import { pickDigits, top2, bottom2, prevCloseCents, exactDigitProbs } from "@/lib/digits";
 import { fmtNum, fmtChange, forecastDirection, type Summary, type RecordLike } from "@/lib/stats";
 import { DirectionCard } from "@/components/direction-card";
 import { Digits } from "@/components/digit-badges";
@@ -9,15 +9,14 @@ type Rec = { id: string; date: Date; openValue: number; openChange: number };
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 
 /** การ์ดวิเคราะห์ของวันที่กรอกเปิดไว้ (รอผลปิด) — ใช้ในหน้าแรก */
-export function TodayCard({ stock, record, history, priceStats, priceHistory = [] }: {
+export function TodayCard({ stock, record, priceStats, priceHistory = [] }: {
   stock: { id: string; symbol: string; name: string | null };
   record: Rec;
-  history: DayDigits[]; // วันที่ปิดแล้วก่อนหน้าวันนี้
   priceStats: Summary;
   priceHistory?: RecordLike[];
 }) {
   const oTop = top2(record.openValue), oBot = bottom2(record.openChange);
-  const ranked = scoreFromOpen(history, oTop, oBot);
+  const ranked = pickDigits(record.openValue, record.openChange, priceHistory);
   const D = prevCloseCents(record.openValue, record.openChange);
   const dir = record.openChange > 0 ? priceStats.whenOpenUp : record.openChange < 0 ? priceStats.whenOpenDown : priceStats.all;
   const df = forecastDirection(record.openValue, record.openChange, priceHistory);
@@ -42,7 +41,7 @@ export function TodayCard({ stock, record, history, priceStats, priceHistory = [
         <div className="flex items-center gap-3">
           <span className="flex h-24 w-24 items-center justify-center rounded-3xl bg-amber-400 font-mono text-6xl font-bold text-white shadow">{ranked[0].digit}</span>
           <div className="text-sm">
-            <p className="text-xs uppercase tracking-wide text-amber-800">ฟันเลข (โอกาส ~34%)</p>
+            <p className="text-xs uppercase tracking-wide text-amber-800">ฟันเลข (D + ทิศทาง · โอกาส ~36%)</p>
             <p className="font-semibold">{pct(ranked[0].p)}</p>
             {ranked[1] && <p className="mt-1 text-slate-600">คู่ <span className="font-mono text-xl font-semibold text-amber-900">{ranked[0].digit} {ranked[1].digit}</span></p>}
             <p className="mt-1 text-xs text-slate-500">อันดับ: <span className="font-mono">{ranked.map((r) => r.digit).join(" › ")}</span></p>

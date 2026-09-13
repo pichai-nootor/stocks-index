@@ -39,7 +39,7 @@ export function RecordForm({ stockId }: { stockId: string }) {
       <button type="submit" className="btn-primary w-full" disabled={pending}>
         {pending ? "กำลังบันทึก..." : "บันทึกเปิด + ฟันธง"}
       </button>
-      <p className="text-xs text-slate-500">ตอนเย็นมาเติม "ปิด" ในตารางประวัติ ระบบจะตรวจให้ว่าเลขที่ฟันโผล่ไหม</p>
+      <p className="text-xs text-slate-500">ตอนเย็นมาเติม “ปิด” ในตารางประวัติ ระบบจะตรวจให้ว่าเลขที่ฟันโผล่ไหม</p>
     </form>
   );
 }

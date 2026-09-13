@@ -2,7 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { summarize, fmtNum, fmtChange, hasClose } from "@/lib/stats";
-import { toDayDigits, scoreFromOpen } from "@/lib/digits";
+import { toDayDigits, pickDigits } from "@/lib/digits";
 import { Digits } from "@/components/digit-badges";
 import { OpenForm } from "@/components/open-form";
 import { TodayCard } from "@/components/today-card";
@@ -21,11 +21,10 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
   // การ์ด "วันนี้": ทุกแถวที่กรอกเปิดแล้วแต่ยังไม่มีปิด
   const pending = stocks.flatMap((s) => {
     const closed = s.records.filter(hasClose);
-    const days = toDayDigits(closed);
     const priceStats = summarize(closed);
     return s.records
       .filter((r) => !hasClose(r))
-      .map((r) => ({ stock: s, record: r, history: days.filter((d) => d.date.getTime() < r.date.getTime()), priceStats, priceHistory: closed }));
+      .map((r) => ({ stock: s, record: r, priceStats, priceHistory: closed }));
   }).sort((a, b) => b.record.date.getTime() - a.record.date.getTime());
 
   // ผลล่าสุดที่ตัดสินแล้ว + สกอร์รวม ต่อหุ้น
@@ -33,7 +32,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
     const closed = s.records.filter(hasClose);
     const days = toDayDigits(closed);
     const judged = days.map((d, i) => {
-      const ranked = scoreFromOpen(days.slice(0, i), d.openTop2, d.openBottom2);
+      const ranked = pickDigits(closed[i].openValue, closed[i].openChange, closed.slice(0, i));
       const pick = ranked[0].digit;
       const pair = ranked.slice(0, 2).map((x) => x.digit);
       const rec = closed[i]; // closed เรียงตามวันที่เหมือน days

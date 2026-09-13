@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { summarize, fmtChange, fmtNum, hasClose } from "@/lib/stats";
-import { toDayDigits, scoreFromOpen, top2, bottom2 } from "@/lib/digits";
+import { pickDigits, top2, bottom2 } from "@/lib/digits";
 import { deleteRecord, deleteStock } from "@/app/actions/stocks";
 import { StatCard } from "@/components/stat-card";
 import { Change, PatternBadge } from "@/components/change";
@@ -27,13 +27,12 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
 
   const closed = stock.records.filter(hasClose);
   const st = summarize(closed);
-  const allDays = toDayDigits(closed);
 
-  // ฟันธงของแต่ละวัน: ใช้เฉพาะวันที่ปิดแล้ว "ก่อนหน้า" วันนั้น
+  // ฟันธงของแต่ละวัน: ใช้เฉพาะวันที่ปิดแล้ว "ก่อนหน้า" วันนั้น (สำหรับทิศทาง)
   const rows = stock.records.map((r) => {
-    const history = allDays.filter((d) => d.date.getTime() < r.date.getTime());
+    const history = closed.filter((d) => d.date.getTime() < r.date.getTime());
     const oTop = top2(r.openValue), oBot = bottom2(r.openChange);
-    const ranked = scoreFromOpen(history, oTop, oBot);
+    const ranked = pickDigits(r.openValue, r.openChange, history);
     const pick = ranked[0].digit;
     const pair = ranked.slice(0, 2).map((x) => x.digit);
     const closeDigits = hasClose(r) ? [...new Set((top2(r.closeValue) + bottom2(r.closeChange)).split(""))] : null;
@@ -98,7 +97,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
         <section className="card p-0">
           <div className="border-b border-slate-200 px-5 py-3">
             <h2 className="font-medium">ประวัติ + ผลฟันธงรายวัน</h2>
-            <p className="text-xs text-slate-500">ฟันธงจากเลขเปิดวันนั้น (ตำแหน่งสิบ/หน่วย ของบนและล่าง) · เหลือง = เลขที่ฟันแล้วโผล่จริง</p>
+            <p className="text-xs text-slate-500">ฟันจาก D (ทศนิยมปิดวันก่อน) + ทิศทางตามขนาดที่เปิด · เหลือง = เลขที่ฟันแล้วโผล่จริง · เพดานวิธีนี้ ≈ 36%</p>
           </div>
           {rows.length === 0 ? (
             <p className="px-5 py-8 text-center text-sm text-slate-500">ยังไม่มีข้อมูล เริ่มบันทึกเปิดได้จากฟอร์มด้านซ้าย</p>
