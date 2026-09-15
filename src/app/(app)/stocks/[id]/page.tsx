@@ -120,7 +120,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                     <th className="px-3 py-2">เปิด</th>
                     <th className="px-3 py-2">เลขเปิด</th>
                     <th className="px-3 py-2">ทิศทาง</th>
-                    <th className="px-3 py-2 bg-amber-50 text-amber-800">ฟันเลข</th>
+                    <th className="px-3 py-2 bg-amber-50 text-amber-800">ฟัน 2 ตัว</th>
                     <th className="px-3 py-2">ปิด</th>
                     <th className="px-3 py-2">เลขปิด</th>
                     <th className="px-3 py-2 bg-amber-50 text-amber-800">ผล</th>
@@ -128,7 +128,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {paged.items.map(({ r, oTop, oBot, pick, pair, p, hit1, hit2 }) => (
+                  {paged.items.map(({ r, oTop, oBot, pair, p, hit1, hit2 }) => (
                     <tr key={r.id} className="hover:bg-slate-50">
                       <td className="px-3 py-2 whitespace-nowrap">{r.date.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" })}</td>
                       <td className="px-3 py-2 whitespace-nowrap tabular-nums">
@@ -140,11 +140,12 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                           return <span className={`rounded px-1.5 py-0.5 font-medium ${c.hit === true ? "bg-emerald-100 text-emerald-800" : c.hit === false ? "bg-red-100 text-red-800 line-through" : "bg-amber-100 text-amber-800"}`}>{c.call === "up" ? "▲ บวก" : "▼ ลบ"}{c.hit === true ? " ✓" : c.hit === false ? " ✗" : ""}</span>; })()}
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap bg-amber-50/50">
-                        <span className="flex items-center gap-2">
-                          <span className={`flex h-9 w-9 items-center justify-center rounded-lg font-mono text-xl font-bold ${hit1 ? "bg-amber-400 text-white" : hit1 === false ? "bg-slate-200 text-slate-500 line-through" : "bg-amber-100 text-amber-900"}`}>{pick}</span>
-                          <span className="text-xs text-slate-500">
-                            {Math.round(p * 100)}%<br />รอง <span className="font-mono font-bold">{pair[1]}</span>
-                          </span>
+                        <span className="flex items-center gap-1.5">
+                          {pair.map((d) => {
+                            const ok = hit2 ? hit2.includes(d) : null;
+                            return <span key={d} className={`flex h-9 w-9 items-center justify-center rounded-lg font-mono text-xl font-bold ${ok ? "bg-amber-400 text-white" : ok === false ? "bg-slate-200 text-slate-500 line-through" : "bg-amber-100 text-amber-900"}`}>{d}</span>;
+                          })}
+                          <span className="ml-1 text-xs text-slate-500">{Math.round(p * 100)}%<br />ต่อตัว</span>
                         </span>
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap tabular-nums">
@@ -156,10 +157,10 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                       <td className="px-3 py-2 whitespace-nowrap bg-amber-50/50 text-xs">
                         {hit1 === null ? (
                           <span className="text-slate-400">{hasClose(r) ? "–" : "รอผล"}</span>
-                        ) : hit1 ? (
-                          <span className="rounded bg-emerald-100 px-2 py-0.5 font-medium text-emerald-800">✓ ถูก</span>
+                        ) : hit2 && hit2.length === 2 ? (
+                          <span className="rounded bg-emerald-100 px-2 py-0.5 font-medium text-emerald-800">✓ ถูกทั้งคู่</span>
                         ) : hit2 && hit2.length ? (
-                          <span className="rounded bg-amber-100 px-2 py-0.5 font-medium text-amber-800">ตัวรองถูก {hit2.join(" ")}</span>
+                          <span className="rounded bg-emerald-100 px-2 py-0.5 font-medium text-emerald-800">✓ ถูก {hit2.join(" ")}</span>
                         ) : (
                           <span className="rounded bg-red-100 px-2 py-0.5 font-medium text-red-800">✗ ผิด</span>
                         )}

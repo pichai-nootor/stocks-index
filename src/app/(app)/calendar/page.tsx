@@ -103,16 +103,17 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
                   <span className={`text-xs ${weekend ? "text-slate-400" : "text-slate-600"}`}>{day}</span>
                   {x && (
                     x.hit1 === null ? <span className="rounded bg-amber-100 px-1 text-[10px] text-amber-800">รอปิด</span>
-                    : x.hit1 ? <span className="rounded bg-emerald-100 px-1 text-[10px] font-medium text-emerald-800">✓</span>
-                    : x.hit2.length ? <span className="rounded bg-amber-100 px-1 text-[10px] text-amber-800">คู่</span>
+                    : x.hit2.length === 2 ? <span className="rounded bg-emerald-100 px-1 text-[10px] font-medium text-emerald-800">✓✓</span>
+                    : x.hit2.length ? <span className="rounded bg-emerald-100 px-1 text-[10px] font-medium text-emerald-800">✓</span>
                     : <span className="rounded bg-red-100 px-1 text-[10px] text-red-800">✗</span>
                   )}
                 </div>
                 {x && (
                   <div className="mt-1 space-y-1">
                     <div className="flex items-center gap-1">
-                      <span className={`flex h-6 w-6 items-center justify-center rounded font-mono text-sm font-bold ${x.hit1 ? "bg-amber-400 text-white" : x.hit1 === false ? "bg-slate-200 text-slate-500 line-through" : "bg-amber-100 text-amber-900"}`}>{x.pick}</span>
-                      <span className="text-[10px] text-slate-500">รอง {x.pair[1]}</span>
+                      {x.pair.map((d) => { const ok = x.hit1 === null ? null : x.hit2.includes(d); return (
+                        <span key={d} className={`flex h-6 w-6 items-center justify-center rounded font-mono text-sm font-bold ${ok ? "bg-amber-400 text-white" : ok === false ? "bg-slate-200 text-slate-500 line-through" : "bg-amber-100 text-amber-900"}`}>{d}</span>
+                      ); })}
                     </div>
                     <div className="text-[10px] text-slate-500">
                       เปิด <span className="font-mono">{top2(x.r.openValue)}/{bottom2(x.r.openChange)}</span>
@@ -132,7 +133,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
           })}
         </div>
       </div>
-      <p className="text-xs text-slate-500">เลขใหญ่ = ฟันธงของวันนั้น (จากเลขเปิด) · ✓ = ฟันถูก · คู่ = ตัวสำรองถูก · ✗ = ผิด · เหลืองในเลขปิด = เลขที่ฟันแล้วโผล่</p>
+      <p className="text-xs text-slate-500">เลข 2 ตัว = ฟันของวันนั้น (จากเลขเปิด) · ✓ = โผล่ 1 ตัว · ✓✓ = โผล่ทั้งคู่ · ✗ = ไม่โผล่ · เหลืองในเลขปิด = เลขที่ฟันแล้วโผล่</p>
     </div>
   );
 }
