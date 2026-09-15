@@ -45,6 +45,12 @@ export function TwoPickCard({ two, tied, score }: {
           {score?.pair && <span className="text-slate-400"> · ของคุณ {score.days} วัน: ≥1 {pct(score.pair.any)} · ครบ {pct(score.pair.both)}</span>}
         </p>
       </div>
+      {two.tiedWithMain.length > 1 && (
+        <p className="mt-1 text-xs text-slate-600">
+          วันนี้เสมอกัน {two.tiedWithMain.length} ตัว: <span className="font-mono font-semibold">{two.tiedWithMain.join(" ")}</span> ทุกตัว {pct(two.digits[0].p)} เท่ากันเป๊ะ
+          — ตัวหลักเป็นแค่ตัวแทน (เลือกเลขน้อยสุด) เลือกตัวอื่นในกลุ่มนี้แทนได้ โอกาสเท่ากัน
+        </p>
+      )}
       <div className="mt-2 grid gap-3 sm:grid-cols-2">
         {two.digits.map((d, i) => (
           <div key={d.digit} className={`flex gap-3 rounded-xl border p-3 ${i === 0 ? "border-amber-300 bg-amber-50" : "border-amber-200 bg-white"}`}>

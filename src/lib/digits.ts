@@ -231,6 +231,9 @@ export type Backtest = {
   pair?: { both: number; any: number };
   /** คู่ผูก (pickPair เลือกจากโอกาสมาทั้งคู่): มาทั้งคู่ / อย่างน้อย 1 ตัว */
   tied?: { both: number; any: number };
+  /** ตัวหลักแบบยุติธรรม: วันที่เสมอกันนับสัดส่วนของกลุ่มที่โผล่ (ไม่ขึ้นกับว่าเลือกตัวไหนในกลุ่ม) */
+  fairTop1?: number;
+  tieDays?: number;
   avgCloseSize: number; // ปิดมีเลขเฉลี่ยกี่ตัว
   perDay: { date: Date; predicted: string[]; actual: string[]; hits: string[] }[];
 };
@@ -364,7 +367,15 @@ export function digitPositionProbs(D: number, pUp = 0.5): DigitDetail[] {
   }).sort(byProb);
 }
 
-export type TwoPick = { digits: [DigitDetail, DigitDetail]; pAny: number; pBoth: number };
+export type TwoPick = {
+  digits: [DigitDetail, DigitDetail];
+  pAny: number;
+  pBoth: number;
+  /** เลขที่เสมอกับตัวหลัก (โอกาสเท่ากันเป๊ะ) — วันส่วนใหญ่เสมอกัน 6–8 ตัว ตัวหลักจึงเป็นแค่ตัวแทนของกลุ่มนี้ */
+  tiedWithMain: string[];
+};
+export const tiedGroup = <T extends { p: number; digit: string }>(sorted: T[]) =>
+  sorted.filter((d) => Math.round(d.p * 1e6) === Math.round(sorted[0].p * 1e6)).map((d) => d.digit);
 
 /**
  * ฟัน 2 ตัวจากเลขเดี่ยว: ตัวแรก = โอกาสโผล่สูงสุด, ตัวที่สอง = ตัวที่ทำให้ "อย่างน้อย 1 ใน 2 โผล่" สูงสุดเมื่อคู่กับตัวแรก
@@ -382,7 +393,7 @@ export function pickTwo(openValue: number, openChange: number, priceHistory: Rec
     for (const o of O) { const a = o.set.has(first.digit), b = o.set.has(d.digit); if (a || b) any += o.w; if (a && b) both += o.w; }
     if (!best || any > best.any + 1e-9) best = { d, any, both };
   }
-  return { digits: [first, best!.d], pAny: best!.any, pBoth: best!.both };
+  return { digits: [first, best!.d], pAny: best!.any, pBoth: best!.both, tiedWithMain: tiedGroup(details) };
 }
 
 /** ระดับความแข็งของคู่วันนี้ เทียบการกระจาย 10 ปี (ส่วนใหญ่ 14–20%) */
@@ -408,10 +419,12 @@ export function backtestPicks(records: RecordLike[], minHistory = 0): Backtest {
   const sorted = [...records].sort((a, b) => a.date.getTime() - b.date.getTime());
   const days = toDayDigits(sorted);
   const perDay: Backtest["perDay"] = [];
-  let pairBoth = 0, pairAny = 0, tiedBoth = 0, tiedAny = 0;
+  let pairBoth = 0, pairAny = 0, tiedBoth = 0, tiedAny = 0, fair = 0, tieDays = 0;
   for (let i = minHistory; i < sorted.length; i++) {
     const hist = sorted.slice(0, i);
     const two = pickTwo(sorted[i].openValue, sorted[i].openChange, hist);
+    fair += two.tiedWithMain.filter((d) => days[i].closeDigits.includes(d)).length / two.tiedWithMain.length;
+    if (two.tiedWithMain.length > 1) tieDays++;
     const third = pickDigits(sorted[i].openValue, sorted[i].openChange, hist).map((x) => x.digit).find((d) => !two.digits.some((t) => t.digit === d))!;
     const predicted = [two.digits[0].digit, two.digits[1].digit, third];
     const hits = predicted.filter((d) => days[i].closeDigits.includes(d));
@@ -436,5 +449,7 @@ export function backtestPicks(records: RecordLike[], minHistory = 0): Backtest {
     days: n, topK, avgCloseSize, perDay,
     pair: n ? { both: pairBoth / n, any: pairAny / n } : undefined,
     tied: n ? { both: tiedBoth / n, any: tiedAny / n } : undefined,
+    fairTop1: n ? fair / n : undefined,
+    tieDays,
   };
 }

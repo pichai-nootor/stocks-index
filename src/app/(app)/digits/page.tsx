@@ -238,6 +238,14 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
                       <td className="py-1.5 text-right text-slate-400">{pct(r.randomAtLeastOne)}</td>
                     </tr>
                   ))}
+                  {bt.fairTop1 !== undefined && (
+                    <tr className="text-slate-600">
+                      <td className="py-1.5 pr-4">ตัวหลักแบบยุติธรรม <span className="text-xs text-slate-400">(วันเสมอกัน {bt.tieDays} วัน นับสัดส่วนกลุ่มที่โผล่ — ไม่ขึ้นกับว่าหยิบตัวไหน)</span></td>
+                      <td className="py-1.5 pr-4 text-right font-semibold">{pct(bt.fairTop1)}</td>
+                      <td className="py-1.5 pr-4 text-right">–</td>
+                      <td className="py-1.5 text-right text-slate-400">10 ปี 36%</td>
+                    </tr>
+                  )}
                   {bt.tied && (
                     <tr className="bg-amber-50/50">
                       <td className="py-1.5 pr-4">คู่ผูก (เลือกคู่ที่มาด้วยกันบ่อยสุด)</td>

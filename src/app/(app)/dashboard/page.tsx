@@ -32,15 +32,18 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
     const closed = s.records.filter(hasClose);
     const days = toDayDigits(closed);
     const judged = days.map((d, i) => {
-      const pair = pickTwo(closed[i].openValue, closed[i].openChange, closed.slice(0, i)).digits.map((x) => x.digit);
+      const two = pickTwo(closed[i].openValue, closed[i].openChange, closed.slice(0, i));
+      const pair = two.digits.map((x) => x.digit);
       const pick = pair[0];
       const rec = closed[i]; // closed เรียงตามวันที่เหมือน days
-      return { d, rec, pick, pair, hit1: d.closeDigits.includes(pick), hit2: pair.filter((x) => d.closeDigits.includes(x)) };
+      // วันที่เสมอกันหลายตัว นับสัดส่วนของกลุ่มที่โผล่ (ไม่ขึ้นกับว่าหยิบตัวไหนเป็นตัวหลัก)
+      const fair = two.tiedWithMain.filter((x) => d.closeDigits.includes(x)).length / two.tiedWithMain.length;
+      return { d, rec, pick, pair, fair, hit1: d.closeDigits.includes(pick), hit2: pair.filter((x) => d.closeDigits.includes(x)) };
     });
     const last = judged[judged.length - 1];
     const calls = evaluateCalls(s.records);
     const lastCall = [...calls.perDay].reverse().find((d) => d.call && d.actual);
-    return { stock: s, n: judged.length, hit1: judged.filter((j) => j.hit1).length, hit2: judged.filter((j) => j.hit2.length > 0).length, hitBoth: judged.filter((j) => j.hit2.length === 2).length, last, calls, lastCall };
+    return { stock: s, n: judged.length, hit1: judged.filter((j) => j.hit1).length, fair: judged.reduce((a, j) => a + j.fair, 0), hit2: judged.filter((j) => j.hit2.length > 0).length, hitBoth: judged.filter((j) => j.hit2.length === 2).length, last, calls, lastCall };
   });
   const defaultStock = [...stocks].sort((a, b) => b.records.length - a.records.length)[0];
 
@@ -118,7 +121,10 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
       {/* สกอร์เลข */}
       <section className="card p-0">
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
-          <h2 className="font-medium">ผลงานฟันเลข 2 ตัว <span className="text-xs font-normal text-slate-500">10 ปี: ตัวหลัก 36% · ≥1 ใน 2 ≈ 63% (สุ่ม 59%)</span></h2>
+          <div>
+            <h2 className="font-medium">ผลงานฟันเลข 2 ตัว <span className="text-xs font-normal text-slate-500">10 ปี: ตัวหลัก 36% · ≥1 ใน 2 ≈ 63% (สุ่ม 59%)</span></h2>
+            <p className="text-xs text-slate-500">* วันส่วนใหญ่เลขเสมอกัน 6–8 ตัว “ตัวหลักถูก” จึงแกว่งตามว่าหยิบตัวไหน — คอลัมน์ยุติธรรมนับสัดส่วนของกลุ่มที่เสมอที่โผล่จริง</p>
+          </div>
           <Link href="/stocks" className="text-sm text-blue-600 hover:underline">จัดการหุ้น</Link>
         </div>
         <div className="overflow-x-auto">
@@ -128,13 +134,14 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
                 <th className="px-5 py-2">หุ้น</th>
                 <th className="px-5 py-2 text-right">วันที่ปิดแล้ว</th>
                 <th className="px-5 py-2 text-right">ตัวหลักถูก</th>
+                <th className="px-5 py-2 text-right">ยุติธรรม*</th>
                 <th className="px-5 py-2 text-right">2 ตัว ≥1 ถูก</th>
                 <th className="px-5 py-2 text-right">2 ตัวถูกทั้งคู่</th>
                 <th className="px-5 py-2">ผลล่าสุด</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {scoreboard.map(({ stock, n, hit1, hit2, hitBoth, last }) => (
+              {scoreboard.map(({ stock, n, hit1, fair, hit2, hitBoth, last }) => (
                 <tr key={stock.id} className="hover:bg-slate-50">
                   <td className="px-5 py-2.5">
                     <Link href={`/stocks/${stock.id}`} className="font-medium text-blue-600 hover:underline">{stock.symbol}</Link>
@@ -142,6 +149,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
                   </td>
                   <td className="px-5 py-2.5 text-right">{n}</td>
                   <td className={`px-5 py-2.5 text-right font-semibold ${n && hit1 / n > 0.4 ? "text-emerald-600" : ""}`}>{n ? `${hit1}/${n} (${Math.round((hit1 / n) * 100)}%)` : "-"}</td>
+                  <td className="px-5 py-2.5 text-right text-slate-600">{n ? `${Math.round((fair / n) * 100)}%` : "-"}</td>
                   <td className={`px-5 py-2.5 text-right font-semibold ${n && hit2 / n > 0.63 ? "text-emerald-600" : ""}`}>{n ? `${hit2}/${n} (${Math.round((hit2 / n) * 100)}%)` : "-"}</td>
                   <td className="px-5 py-2.5 text-right">{n ? `${hitBoth}/${n} (${Math.round((hitBoth / n) * 100)}%)` : "-"}</td>
                   <td className="px-5 py-2.5 whitespace-nowrap">
