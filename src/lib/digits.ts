@@ -20,6 +20,8 @@ export type DigitSource = {
   closeChange: number;
 };
 
+import { forecastDirection, type RecordLike } from "./stats";
+
 export const DIGITS = "0123456789".split("");
 
 /** "76" จาก 74781.76 (หลักหน่วย + ทศนิยม 2 ตำแหน่ง แล้วตัดหลักร้อย) */
@@ -225,6 +227,8 @@ export type Backtest = {
   days: number; // จำนวนวันที่ทดสอบ
   /** สำหรับ k = 1,2,3: ทายเลข top-k แล้วโผล่อย่างน้อย 1 ตัว / โผล่ครบทุกตัว */
   topK: { k: number; atLeastOne: number; all: number; randomAtLeastOne: number }[];
+  /** ฟันคู่ (pickPair): มาทั้งคู่ / อย่างน้อย 1 ตัว */
+  pair?: { both: number; any: number };
   avgCloseSize: number; // ปิดมีเลขเฉลี่ยกี่ตัว
   perDay: { date: Date; predicted: string[]; actual: string[]; hits: string[] }[];
 };
@@ -272,20 +276,60 @@ export function bottomFromTop(top: number, D: number, up: boolean): string {
  * ความน่าจะเป็นที่เลข 0–9 จะปรากฏตอนปิด (บน ∪ ล่าง) โดยไล่ทุกกรณี บน = 00..99
  * ถ่วงด้วยโอกาสปิดขึ้น pUp — นี่คือค่าที่ "คณิตศาสตร์ล้วน" ให้ได้ เมื่อ บน สุ่ม
  */
-export function exactDigitProbs(D: number, pUp = 0.5): { digit: string; p: number }[] {
-  const P = Array<number>(10).fill(0);
-  for (let top = 0; top < 100; top++) {
+export type Outcome = { top: string; bottom: string; up: boolean; set: Set<string>; w: number };
+
+/** ทุกกรณีที่เป็นไปได้ของวันนี้: บน 00–99 × ทิศทาง (200 กรณี) พร้อมน้ำหนัก — บนสุ่ม, ทิศทางตาม pUp */
+export function enumerateOutcomes(D: number, pUp = 0.5): Outcome[] {
+  const out: Outcome[] = [];
+  for (let t = 0; t < 100; t++) {
+    const top = String(t).padStart(2, "0");
     for (const [up, w] of [[true, pUp], [false, 1 - pUp]] as const) {
-      const set = new Set((String(top).padStart(2, "0") + bottomFromTop(top, D, up)).split(""));
-      for (const d of set) P[Number(d)] += w / 100;
+      const bottom = bottomFromTop(t, D, up);
+      out.push({ top, bottom, up, set: new Set((top + bottom).split("")), w: w / 100 });
     }
   }
+  return out;
+}
+
+export function exactDigitProbs(D: number, pUp = 0.5): { digit: string; p: number }[] {
+  const P = Array<number>(10).fill(0);
+  for (const o of enumerateOutcomes(D, pUp)) for (const d of o.set) P[Number(d)] += o.w;
   return DIGITS.map((digit) => ({ digit, p: P[Number(digit)] })).sort((a, b) => b.p - a.p);
 }
 
-/* ---------- ฟันเลขแบบ "คณิตศาสตร์": D + ทิศทาง (ดีสุดเท่าที่ข้อมูลรองรับ ≈ 36–37%) ---------- */
+/* ---------- ฟันคู่: เลือก 2 ตัวที่ "มาทั้งคู่" บ่อยสุด ---------- */
 
-import { forecastDirection, type RecordLike } from "./stats";
+/**
+ * เลขคู่ไม่เป็นอิสระต่อกัน: ล่าง = บน ∓ D ทำให้บางคู่มาด้วยกันเสมอ (เช่น D=76 ปิดขึ้น: บน 76 → ล่าง 00)
+ * เลือกคู่จากการไล่ 200 กรณีตรง ๆ จึงได้ "มาทั้งคู่" ≈ 18% (10 ปี) เทียบกับ 11% ถ้าเอา 2 อันดับแรกของเลขเดี่ยวมาจับคู่ และ 10% ถ้าสุ่ม
+ * แลกกับ "อย่างน้อย 1 ตัว" ที่ลดจาก 61% เหลือ ~50%
+ */
+export type PairPick = { pair: [string, string]; pBoth: number; pAny: number };
+/** ค่าอ้างอิง 10 ปี (SENSEX 2,461 วัน) สำหรับเทียบบนหน้าจอ */
+export const PAIR_BASE = { both10y: 0.179, bothRandom: 0.098, bothMarginal: 0.111 } as const;
+
+export function pairProbs(D: number, pUp = 0.5): PairPick[] {
+  const O = enumerateOutcomes(D, pUp);
+  const out: PairPick[] = [];
+  for (let a = 0; a < 10; a++) for (let b = a + 1; b < 10; b++) {
+    const A = String(a), B = String(b);
+    let both = 0, any = 0;
+    for (const o of O) { const ha = o.set.has(A), hb = o.set.has(B); if (ha && hb) both += o.w; if (ha || hb) any += o.w; }
+    out.push({ pair: [A, B], pBoth: both, pAny: any });
+  }
+  return out.sort((x, y) => y.pBoth - x.pBoth || y.pAny - x.pAny);
+}
+
+export function pickPair(openValue: number, openChange: number, priceHistory: RecordLike[] = []): PairPick {
+  const D = prevCloseCents(openValue, openChange);
+  const { pUp } = forecastDirection(openValue, openChange, priceHistory);
+  return pairProbs(D, pUp)[0];
+}
+
+/** ระดับความแข็งของคู่วันนี้ เทียบการกระจาย 10 ปี (ส่วนใหญ่ 14–20%) */
+export const pairLevel = (pBoth: number) => (pBoth >= 0.22 ? "คู่แข็ง" : pBoth < 0.14 ? "คู่อ่อน" : "ปกติ");
+
+/* ---------- ฟันเลขแบบ "คณิตศาสตร์": D + ทิศทาง (ดีสุดเท่าที่ข้อมูลรองรับ ≈ 36–37%) ---------- */
 
 export type DigitPick = { digit: string; p: number };
 
@@ -305,9 +349,13 @@ export function backtestPicks(records: RecordLike[], minHistory = 0): Backtest {
   const sorted = [...records].sort((a, b) => a.date.getTime() - b.date.getTime());
   const days = toDayDigits(sorted);
   const perDay: Backtest["perDay"] = [];
+  let pairBoth = 0, pairAny = 0;
   for (let i = minHistory; i < sorted.length; i++) {
     const predicted = pickDigits(sorted[i].openValue, sorted[i].openChange, sorted.slice(0, i)).slice(0, 3).map((x) => x.digit);
     perDay.push({ date: days[i].date, predicted, actual: days[i].closeDigits, hits: predicted.filter((d) => days[i].closeDigits.includes(d)) });
+    const { pair } = pickPair(sorted[i].openValue, sorted[i].openChange, sorted.slice(0, i));
+    const hit = pair.filter((d) => days[i].closeDigits.includes(d)).length;
+    if (hit === 2) pairBoth++; if (hit >= 1) pairAny++;
   }
   const n = perDay.length;
   const avgCloseSize = days.length ? days.reduce((s, d) => s + d.closeDigits.length, 0) / days.length : 0;
@@ -319,5 +367,5 @@ export function backtestPicks(records: RecordLike[], minHistory = 0): Backtest {
     const randomAtLeastOne = 10 - m >= k ? 1 - choose(10 - m, k) / choose(10, k) : 1;
     return { k, atLeastOne, all, randomAtLeastOne };
   });
-  return { days: n, topK, avgCloseSize, perDay };
+  return { days: n, topK, avgCloseSize, perDay, pair: n ? { both: pairBoth / n, any: pairAny / n } : undefined };
 }

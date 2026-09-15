@@ -2,7 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { summarize, fmtNum, fmtChange, hasClose, evaluateCalls, CALL_MIN_GAP_PCT } from "@/lib/stats";
-import { toDayDigits, pickDigits } from "@/lib/digits";
+import { toDayDigits, pickDigits, pickPair, PAIR_BASE } from "@/lib/digits";
 import { Digits } from "@/components/digit-badges";
 import { OpenForm } from "@/components/open-form";
 import { TodayCard } from "@/components/today-card";
@@ -34,14 +34,14 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
     const judged = days.map((d, i) => {
       const ranked = pickDigits(closed[i].openValue, closed[i].openChange, closed.slice(0, i));
       const pick = ranked[0].digit;
-      const pair = ranked.slice(0, 2).map((x) => x.digit);
+      const { pair } = pickPair(closed[i].openValue, closed[i].openChange, closed.slice(0, i));
       const rec = closed[i]; // closed เรียงตามวันที่เหมือน days
       return { d, rec, pick, pair, hit1: d.closeDigits.includes(pick), hit2: pair.filter((x) => d.closeDigits.includes(x)) };
     });
     const last = judged[judged.length - 1];
     const calls = evaluateCalls(s.records);
     const lastCall = [...calls.perDay].reverse().find((d) => d.call && d.actual);
-    return { stock: s, n: judged.length, hit1: judged.filter((j) => j.hit1).length, hit2: judged.filter((j) => j.hit2.length > 0).length, last, calls, lastCall };
+    return { stock: s, n: judged.length, hit1: judged.filter((j) => j.hit1).length, hit2: judged.filter((j) => j.hit2.length > 0).length, hitBoth: judged.filter((j) => j.hit2.length === 2).length, last, calls, lastCall };
   });
   const defaultStock = [...stocks].sort((a, b) => b.records.length - a.records.length)[0];
 
@@ -119,7 +119,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
       {/* สกอร์เลข */}
       <section className="card p-0">
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
-          <h2 className="font-medium">ผลงานฟันเลข (เพดาน ≈ 36%)</h2>
+          <h2 className="font-medium">ผลงานฟันเลข <span className="text-xs font-normal text-slate-500">เดี่ยว เพดาน ≈ 36% · คู่มาทั้งคู่ 10 ปี ≈ 18% (สุ่ม 10%)</span></h2>
           <Link href="/stocks" className="text-sm text-blue-600 hover:underline">จัดการหุ้น</Link>
         </div>
         <div className="overflow-x-auto">
@@ -128,13 +128,14 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
               <tr>
                 <th className="px-5 py-2">หุ้น</th>
                 <th className="px-5 py-2 text-right">วันที่ปิดแล้ว</th>
-                <th className="px-5 py-2 text-right">ฟัน 1 ตัวถูก</th>
-                <th className="px-5 py-2 text-right">คู่โผล่ ≥1</th>
+                <th className="px-5 py-2 text-right">เดี่ยวถูก</th>
+                <th className="px-5 py-2 text-right">คู่มาทั้งคู่</th>
+                <th className="px-5 py-2 text-right">คู่ ≥1</th>
                 <th className="px-5 py-2">ผลล่าสุด</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {scoreboard.map(({ stock, n, hit1, hit2, last }) => (
+              {scoreboard.map(({ stock, n, hit1, hit2, hitBoth, last }) => (
                 <tr key={stock.id} className="hover:bg-slate-50">
                   <td className="px-5 py-2.5">
                     <Link href={`/stocks/${stock.id}`} className="font-medium text-blue-600 hover:underline">{stock.symbol}</Link>
@@ -142,14 +143,17 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
                   </td>
                   <td className="px-5 py-2.5 text-right">{n}</td>
                   <td className={`px-5 py-2.5 text-right font-semibold ${n && hit1 / n > 0.4 ? "text-emerald-600" : ""}`}>{n ? `${hit1}/${n} (${Math.round((hit1 / n) * 100)}%)` : "-"}</td>
-                  <td className={`px-5 py-2.5 text-right ${n && hit2 / n > 0.67 ? "text-emerald-600" : ""}`}>{n ? `${hit2}/${n} (${Math.round((hit2 / n) * 100)}%)` : "-"}</td>
+                  <td className={`px-5 py-2.5 text-right font-semibold ${n && hitBoth / n > PAIR_BASE.both10y ? "text-emerald-600" : ""}`}>{n ? `${hitBoth}/${n} (${Math.round((hitBoth / n) * 100)}%)` : "-"}</td>
+                  <td className="px-5 py-2.5 text-right">{n ? `${hit2}/${n} (${Math.round((hit2 / n) * 100)}%)` : "-"}</td>
                   <td className="px-5 py-2.5 whitespace-nowrap">
                     {last ? (
                       <span className="inline-flex items-center gap-2">
                         <span className="text-xs text-slate-500">{last.d.date.toLocaleDateString("th-TH", { day: "numeric", month: "short" })}</span>
                         <span className="text-xs">ฟัน <span className="font-mono font-bold">{last.pick}</span></span>
                         <Digits value={last.d.closeTop2} hilite={last.hit2} tone="blue" /> <Digits value={last.d.closeBottom2} hilite={last.hit2} tone="blue" />
-                        {last.hit1 ? <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-800">✓ ถูก</span> : last.hit2.length ? <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">คู่ถูก</span> : <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs text-red-800">✗</span>}
+                        <span className="text-xs">คู่ <span className="font-mono font-bold">{last.pair.join("")}</span></span>
+                        {last.hit1 ? <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-800">✓ เดี่ยวถูก</span> : <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs text-red-800">✗ เดี่ยว</span>}
+                        {last.hit2.length === 2 ? <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-800">✓ คู่ครบ</span> : last.hit2.length ? <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">คู่ 1 ตัว</span> : null}
                         <span className="text-xs text-slate-400">{fmtNum(last.rec.closeValue)} ({fmtChange(last.rec.closeChange)})</span>
                       </span>
                     ) : "-"}

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { summarize, fmtChange, fmtNum, hasClose, evaluateCalls, CALL_MIN_GAP_PCT } from "@/lib/stats";
-import { pickDigits, top2, bottom2 } from "@/lib/digits";
+import { pickDigits, pickPair, top2, bottom2 } from "@/lib/digits";
 import { deleteRecord, deleteStock } from "@/app/actions/stocks";
 import { StatCard } from "@/components/stat-card";
 import { Change, PatternBadge } from "@/components/change";
@@ -34,7 +34,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
     const oTop = top2(r.openValue), oBot = bottom2(r.openChange);
     const ranked = pickDigits(r.openValue, r.openChange, history);
     const pick = ranked[0].digit;
-    const pair = ranked.slice(0, 2).map((x) => x.digit);
+    const { pair } = pickPair(r.openValue, r.openChange, history);
     const closeDigits = hasClose(r) ? [...new Set((top2(r.closeValue) + bottom2(r.closeChange)).split(""))] : null;
     const hit1 = pick !== null && closeDigits ? closeDigits.includes(pick) : null;
     const hit2 = pair && closeDigits ? pair.filter((d) => closeDigits.includes(d)) : null;

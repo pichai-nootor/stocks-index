@@ -2,7 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { hasClose, summarize, fmtNum, fmtChange } from "@/lib/stats";
-import { pickDigits, top2, bottom2 } from "@/lib/digits";
+import { pickDigits, pickPair, top2, bottom2 } from "@/lib/digits";
 import { Digits } from "@/components/digit-badges";
 
 const TH_MONTHS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
@@ -30,7 +30,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
   for (const r of all) {
     const hist = closed.filter((d) => d.date.getTime() < r.date.getTime());
     const ranked = pickDigits(r.openValue, r.openChange, hist);
-    const pick = ranked[0].digit, pair = ranked.slice(0, 2).map((x) => x.digit);
+    const pick = ranked[0].digit, { pair } = pickPair(r.openValue, r.openChange, hist);
     const cd = hasClose(r) ? [...new Set((top2(r.closeValue) + bottom2(r.closeChange)).split(""))] : null;
     byDate.set(r.date.toISOString().slice(0, 10), { r, pick, pair, hit1: cd ? cd.includes(pick) : null, hit2: cd ? pair.filter((d) => cd.includes(d)) : [] });
   }
