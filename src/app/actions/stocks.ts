@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import type { ActionState } from "./auth";
 import { parseInvestingCsv } from "@/lib/csv-import";
+import { checkOpen, fmtNum, fmtChange } from "@/lib/stats";
 
 const stockSchema = z.object({
   symbol: z.string().trim().min(1, "กรุณาระบุชื่อหุ้น").toUpperCase(),
@@ -48,6 +49,27 @@ const recordSchema = z.object({
   note: z.string().trim().optional(),
 });
 
+/** ผลของฟอร์มกรอกเปิด: ถ้า mismatch จะมีค่าที่แนะนำให้ผู้ใช้เลือกใช้หรือยืนยันบันทึกตามเดิม */
+export type OpenState =
+  | { error?: string; mismatch?: { suggestedOpenChange: number; lastClose: number; lastCloseDate: string; impliedPrevClose: number } }
+  | undefined;
+
+/**
+ * เปิด − เปลี่ยนแปลง ต้องเท่ากับปิดล่าสุดก่อนวันนั้น ไม่งั้น D ผิดและฟันเลขผิดทั้งวัน
+ * ผู้ใช้ยืนยันบันทึกตามที่กรอกได้ (force=1) กรณีมีวันที่ยังไม่ได้บันทึกก่อนหน้า
+ */
+async function verifyOpen(stockId: string, date: Date, openValue: number, openChange: number, formData: FormData): Promise<OpenState> {
+  if (formData.get("force") === "1") return undefined;
+  const closed = await prisma.record.findMany({ where: { stockId, date: { lt: date }, closeValue: { not: null } }, select: { date: true, closeValue: true } });
+  const c = checkOpen(closed, date, openValue, openChange);
+  if (!c.mismatch || !c.lastClose || c.suggestedOpenChange === null) return undefined;
+  const lastDate = c.lastClose.date.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" });
+  return {
+    error: `เปิด − เปลี่ยนแปลง = ${fmtNum(c.impliedPrevClose)} แต่ปิดล่าสุดที่บันทึกไว้ (${lastDate}) = ${fmtNum(c.lastClose.closeValue)} → เปลี่ยนแปลงตอนเปิดควรเป็น ${fmtChange(c.suggestedOpenChange)}`,
+    mismatch: { suggestedOpenChange: c.suggestedOpenChange, lastClose: c.lastClose.closeValue, lastCloseDate: lastDate, impliedPrevClose: c.impliedPrevClose },
+  };
+}
+
 const emptyToUndef = (v: unknown) => (v === "" || v === null ? undefined : v);
 const closeSchema = z.object({
   id: z.string().min(1),
@@ -55,7 +77,7 @@ const closeSchema = z.object({
   closeChange: z.preprocess(emptyToUndef, z.coerce.number({ message: "เปลี่ยนแปลงตอนปิดต้องเป็นตัวเลข" })),
 });
 
-export async function createRecord(_prev: ActionState, formData: FormData): Promise<ActionState> {
+export async function createRecord(_prev: OpenState, formData: FormData): Promise<OpenState> {
   const { userId } = await requireUser();
   const parsed = recordSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0].message };
@@ -66,6 +88,8 @@ export async function createRecord(_prev: ActionState, formData: FormData): Prom
 
   const dup = await prisma.record.findFirst({ where: { stockId, date: new Date(date) } });
   if (dup) return { error: "วันนี้บันทึกไปแล้ว — เติมค่าปิดได้ในตารางประวัติ" };
+  const bad = await verifyOpen(stockId, new Date(date), openValue, openChange, formData);
+  if (bad) return bad;
 
   await prisma.record.create({
     data: { stockId, date: new Date(date), openValue, openChange, note: note || null },
@@ -77,7 +101,7 @@ export async function createRecord(_prev: ActionState, formData: FormData): Prom
 }
 
 /** หน้าวิเคราะห์: บันทึกเลขเปิดของวัน (ถ้ามีอยู่แล้วและยังไม่ปิด → อัปเดต) แล้วพาไปดูฟันธง */
-export async function saveOpenAndForecast(_prev: ActionState, formData: FormData): Promise<ActionState> {
+export async function saveOpenAndForecast(_prev: OpenState, formData: FormData): Promise<OpenState> {
   const { userId } = await requireUser();
   const parsed = recordSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0].message };
@@ -90,6 +114,8 @@ export async function saveOpenAndForecast(_prev: ActionState, formData: FormData
   if (existing && existing.closeValue !== null) {
     return { error: "วันนี้มีผลปิดแล้ว — แก้ไขได้จากหน้าหุ้น" };
   }
+  const bad = await verifyOpen(stockId, new Date(date), openValue, openChange, formData);
+  if (bad) return bad;
   if (existing) {
     await prisma.record.update({ where: { id: existing.id }, data: { openValue, openChange } });
   } else {

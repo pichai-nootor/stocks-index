@@ -2,7 +2,8 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { toDayDigits, scoreFromOpen, pickDigits, backtestPicks, fitModel, top2, bottom2, POSITIONS, positionLabel, positionDigits, prevCloseCents, exactDigitProbs } from "@/lib/digits";
-import { summarize, forecastDirection } from "@/lib/stats";
+import { summarize, forecastDirection, checkOpen } from "@/lib/stats";
+import { OpenWarning } from "@/components/open-warning";
 import { DirectionCard } from "@/components/direction-card";
 import { TopToBottom } from "./top-to-bottom";
 import { fmtNum, fmtChange, hasClose } from "@/lib/stats";
@@ -57,6 +58,7 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
   const D = hasOpen ? prevCloseCents(openValue, openChange) : null;
   const exact = D !== null ? exactDigitProbs(D, pUp) : null;
   const prevCloseValue = hasOpen ? openValue - openChange : null;
+  const check = hasOpen ? checkOpen(records, new Date(dateRaw), openValue, openChange) : null;
 
   return (
     <div className="space-y-6">
@@ -68,6 +70,7 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
       </div>
 
       <OpenForm stocks={stocks} stockId={stockId} date={dateRaw} openValue={openValueRaw} openChange={openChangeRaw} />
+      {check?.mismatch && <OpenWarning check={check} fixHref={`/digits?stock=${stockId}&date=${dateRaw}&openValue=${openValueRaw}&openChange=${check.suggestedOpenChange}`} />}
       {saved && <p className="rounded-md bg-emerald-50 px-4 py-2 text-sm text-emerald-800">✓ บันทึกเลขเปิดวันที่ {new Date(dateRaw).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" })} แล้ว — ตอนเย็นมาเติมผลปิดด้านล่าง</p>}
 
       {!selected ? (

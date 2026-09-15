@@ -3,11 +3,17 @@
 import { useActionState, useEffect, useRef } from "react";
 import { createRecord } from "@/app/actions/stocks";
 import { FormError } from "@/components/form-error";
+import { OpenMismatch } from "@/components/open-mismatch";
 
 /** เช้า: บันทึกเฉพาะเลขเปิด → ระบบฟันธงทันทีในตารางประวัติ */
 export function RecordForm({ stockId }: { stockId: string }) {
   const [state, action, pending] = useActionState(createRecord, undefined);
   const ref = useRef<HTMLFormElement>(null);
+  const changeRef = useRef<HTMLInputElement>(null);
+  const useSuggested = (v: number) => {
+    if (changeRef.current) changeRef.current.value = String(v);
+    ref.current?.requestSubmit();
+  };
   const today = new Date().toISOString().slice(0, 10);
 
   useEffect(() => {
@@ -28,14 +34,14 @@ export function RecordForm({ stockId }: { stockId: string }) {
         </div>
         <div>
           <label htmlFor="openChange" className="label">เปลี่ยนแปลง (+/−)</label>
-          <input id="openChange" name="openChange" type="number" step="any" inputMode="decimal" className="input" placeholder="-120.83" required />
+          <input ref={changeRef} id="openChange" name="openChange" type="number" step="any" inputMode="decimal" className="input" placeholder="-120.83" required />
         </div>
       </div>
       <div>
         <label htmlFor="note" className="label">หมายเหตุ (ไม่บังคับ)</label>
         <input id="note" name="note" className="input" />
       </div>
-      <FormError message={state?.error} />
+      {state?.mismatch ? <OpenMismatch state={state} onUse={useSuggested} /> : <FormError message={state?.error} />}
       <button type="submit" className="btn-primary w-full" disabled={pending}>
         {pending ? "กำลังบันทึก..." : "บันทึกเปิด + ฟันธง"}
       </button>

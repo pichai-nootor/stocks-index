@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { pickDigits, top2, bottom2, prevCloseCents, exactDigitProbs } from "@/lib/digits";
-import { fmtNum, fmtChange, forecastDirection, forecastClose, directionCall, evaluateCalls, type Summary, type RecordLike } from "@/lib/stats";
+import { fmtNum, fmtChange, forecastDirection, forecastClose, directionCall, evaluateCalls, checkOpen, type Summary, type RecordLike } from "@/lib/stats";
+import { OpenWarning } from "@/components/open-warning";
 import { CallCard } from "@/components/call-card";
 import { CloseForecastCard } from "@/components/close-forecast-card";
 import { DirectionCard } from "@/components/direction-card";
@@ -30,6 +31,8 @@ export function TodayCard({ stock, record, priceStats, priceHistory = [] }: {
   const flat = exact[0].p - exact[exact.length - 1].p < 0.01;
   const mathHot = exact.filter((e) => e.p >= exact[0].p - 0.005).map((e) => e.digit);
   const mathCold = exact.filter((e) => e.p <= exact[exact.length - 1].p + 0.005).map((e) => e.digit);
+  const check = checkOpen(priceHistory, record.date, record.openValue, record.openChange);
+  const dateStr = record.date.toISOString().slice(0, 10);
 
   return (
     <div className="card border-amber-200 bg-gradient-to-br from-amber-50/60 to-white">
@@ -40,6 +43,7 @@ export function TodayCard({ stock, record, priceStats, priceHistory = [] }: {
         <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">รอผลปิด</span>
       </div>
 
+      {check.mismatch && <div className="mt-3"><OpenWarning check={check} fixHref={`/digits?stock=${stock.id}&date=${dateStr}&openValue=${record.openValue}&openChange=${check.suggestedOpenChange}`} /></div>}
       <div className="mt-3"><CallCard c={call} score={{ called: ev.called, hits: ev.hits }} /></div>
       <div className="mt-3 grid gap-3 lg:grid-cols-[3fr_2fr]">
         <CloseForecastCard open={record.openValue} f={cf} dir={df} />
@@ -92,7 +96,7 @@ export function TodayCard({ stock, record, priceStats, priceHistory = [] }: {
           <span className="text-slate-600">เย็นนี้กรอกปิด:</span>
           <CloseForm recordId={record.id} />
         </div>
-        <Link href={`/digits?stock=${stock.id}&date=${record.date.toISOString().slice(0, 10)}&openValue=${record.openValue}&openChange=${record.openChange}`} className="text-sm text-blue-600 hover:underline">
+        <Link href={`/digits?stock=${stock.id}&date=${dateStr}&openValue=${record.openValue}&openChange=${record.openChange}`} className="text-sm text-blue-600 hover:underline">
           ดูวิเคราะห์เต็ม →
         </Link>
       </div>

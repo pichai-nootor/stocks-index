@@ -344,3 +344,35 @@ export function evaluateCalls(records: (RecordLike | (Omit<RecordLike, "closeVal
     pending: perDay.filter((d) => d.call && !d.actual).length,
   };
 }
+
+/* ---------- ตรวจค่าเปิดที่กรอก: เปิด − เปลี่ยนแปลง ต้องเท่ากับปิดล่าสุดที่บันทึกไว้ ---------- */
+
+export type OpenCheck = {
+  /** ปิดล่าสุดที่บันทึกไว้ก่อนวันนั้น */
+  lastClose: { date: Date; closeValue: number } | null;
+  /** ปิดวันก่อนที่คำนวณจากค่าที่กรอก (เปิด − เปลี่ยนแปลง) */
+  impliedPrevClose: number;
+  /** เปลี่ยนแปลงตอนเปิดที่ควรเป็น ถ้าเทียบกับปิดล่าสุดที่บันทึกไว้ */
+  suggestedOpenChange: number | null;
+  mismatch: boolean;
+};
+
+/**
+ * กรอกผิดแค่หลักเดียว (เช่น +87 แทน +587.87) จะทำให้ D และการฟันเลขทั้งวันผิดหมด
+ * จึงเทียบ "เปิด − เปลี่ยนแปลง" กับปิดล่าสุดก่อนวันนั้น — ไม่ตรงอาจเป็นกรอกผิด หรือมีวันที่ยังไม่ได้บันทึก
+ */
+export function checkOpen(
+  records: { date: Date; closeValue: number | null }[],
+  date: Date,
+  openValue: number,
+  openChange: number,
+): OpenCheck {
+  const last = records
+    .filter((r) => r.closeValue !== null && r.date.getTime() < date.getTime())
+    .sort((a, b) => b.date.getTime() - a.date.getTime())[0];
+  const lastClose = last ? { date: last.date, closeValue: last.closeValue! } : null;
+  const impliedPrevClose = Math.round((openValue - openChange) * 100) / 100;
+  const suggestedOpenChange = lastClose ? Math.round((openValue - lastClose.closeValue) * 100) / 100 : null;
+  const mismatch = lastClose !== null && Math.round(impliedPrevClose * 100) !== Math.round(lastClose.closeValue * 100);
+  return { lastClose, impliedPrevClose, suggestedOpenChange, mismatch };
+}
