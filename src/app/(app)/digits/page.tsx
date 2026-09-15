@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
-import { toDayDigits, scoreFromOpen, pickDigits, pickPair, pairProbs, pairLevel, PAIR_BASE, backtestPicks, fitModel, top2, bottom2, POSITIONS, positionLabel, positionDigits, prevCloseCents, exactDigitProbs } from "@/lib/digits";
+import { toDayDigits, scoreFromOpen, pickDigits, pickPair, pickTwo, pairProbs, PAIR_BASE, backtestPicks, fitModel, top2, bottom2, POSITIONS, positionLabel, positionDigits, prevCloseCents, exactDigitProbs } from "@/lib/digits";
 import { summarize, forecastDirection, checkOpen } from "@/lib/stats";
 import { OpenWarning } from "@/components/open-warning";
 import { DirectionCard } from "@/components/direction-card";
+import { TwoPickCard } from "@/components/two-pick";
 import { TopToBottom } from "./top-to-bottom";
 import { fmtNum, fmtChange, hasClose } from "@/lib/stats";
 import { Digits } from "@/components/digit-badges";
@@ -47,6 +48,7 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
   const openPos = hasOpen ? positionDigits(oTop, oBot) : null;
   const ranked = hasOpen ? pickDigits(openValue, openChange, records) : null;
   const pp = hasOpen ? pickPair(openValue, openChange, records) : null;
+  const two = hasOpen ? pickTwo(openValue, openChange, records) : null;
   const posRanked = hasOpen ? scoreFromOpen(days, oTop, oBot, model) : null;
   const bt = records.length ? backtestPicks(records) : null;
   const top1 = bt?.topK[0];
@@ -78,25 +80,14 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
         <p className="text-sm text-slate-500">ยังไม่มีหุ้น — <Link href="/stocks" className="text-blue-600 hover:underline">เพิ่มหุ้นก่อน</Link></p>
       ) : (
         <>
-          {ranked && openPos && (
-            <section className="grid gap-4 md:grid-cols-[1fr_2fr]">
-              <div className="card flex flex-col items-center justify-center bg-amber-50 text-center">
-                <p className="text-xs font-medium uppercase tracking-wide text-amber-800">ฟันเลข (D + ทิศทาง)</p>
-                <span className="mt-2 flex h-28 w-28 items-center justify-center rounded-3xl bg-amber-400 font-mono text-7xl font-bold text-white shadow">{ranked[0].digit}</span>
-                <p className="mt-3 text-sm text-amber-900">โอกาสโผล่ตอนปิด <span className="font-semibold">{pct(ranked[0].p)}</span></p>
-                <p className="mt-1 text-xs text-amber-700">
-                  {top1 && bt ? `ย้อนหลังถูก ${pct(top1.atLeastOne)} (${bt.days} วัน) · 10 ปี ≈ 36%` : "ยังไม่มีวันที่ปิดแล้วให้ทดสอบ"}
+          {ranked && openPos && two && (
+            <section className="grid gap-4 md:grid-cols-[3fr_2fr]">
+              <div className="card bg-amber-50/60">
+                <TwoPickCard two={two} tied={pp ?? undefined} score={bt ? { days: bt.days, pair: bt.pair, tied: bt.tied, single: top1?.atLeastOne } : undefined} />
+                <p className="mt-3 text-xs text-amber-700">
+                  {top1 && bt ? `เลขเดี่ยวตัวหลักย้อนหลังถูก ${pct(top1.atLeastOne)} (${bt.days} วัน) · 10 ปี ≈ 36%` : "ยังไม่มีวันที่ปิดแล้วให้ทดสอบ"}
+                  {" "}· ทุกตำแหน่งเริ่มที่ ~10% เพราะ “บน” สุ่ม — จะเอียงไปหลักสิบ/หน่วยเฉพาะวันที่ D ลงท้าย 0 หรือ 9
                 </p>
-                {pp && (
-                  <div className="mt-4 w-full border-t border-amber-200 pt-3">
-                    <p className="text-xs font-medium uppercase tracking-wide text-amber-800">ฟันคู่ <span className="ml-1 rounded bg-amber-200 px-1.5 py-0.5 normal-case text-amber-900">{pairLevel(pp.pBoth)}</span></p>
-                    <p className="mt-1 font-mono text-4xl font-bold text-amber-900">{pp.pair[0]} {pp.pair[1]}</p>
-                    <p className="mt-1 text-sm text-amber-900">มาทั้งคู่ <span className="font-semibold">{pct(pp.pBoth)}</span> · อย่างน้อย 1 ตัว {pct(pp.pAny)}</p>
-                    <p className="mt-1 text-xs text-amber-700">
-                      {bt?.pair ? `ย้อนหลังมาทั้งคู่ ${pct(bt.pair.both)} · ` : ""}10 ปี ≈ {pct(PAIR_BASE.both10y)} · สุ่ม {pct(PAIR_BASE.bothRandom)}
-                    </p>
-                  </div>
-                )}
               </div>
 
               <div className="card">
@@ -110,7 +101,7 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
                   {POSITIONS.map((k) => (
                     <div key={k} className="flex items-center gap-3 text-sm">
                       <span className="w-28 text-slate-600">{positionLabel[k]}</span>
-                      <span className={`flex h-8 w-8 items-center justify-center rounded-lg border font-mono text-lg font-semibold ${openPos[k] === ranked[0].digit ? "border-amber-400 bg-amber-100 text-amber-900" : "border-slate-200 bg-slate-100"}`}>{openPos[k]}</span>
+                      <span className={`flex h-8 w-8 items-center justify-center rounded-lg border font-mono text-lg font-semibold ${two.digits.some((d) => d.digit === openPos[k]) ? "border-amber-400 bg-amber-100 text-amber-900" : "border-slate-200 bg-slate-100"}`}>{openPos[k]}</span>
                       <div className="h-2 flex-1 rounded-full bg-slate-200"><div className="h-full rounded-full bg-blue-500" style={{ width: pct(posRate(k)) }} /></div>
                       <span className="w-24 text-right tabular-nums">{pct(posRate(k))} <span className="text-xs text-slate-400">({model.position[k].hit}/{model.position[k].n})</span></span>
                     </div>
@@ -206,7 +197,7 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
                 {pendingRecords.map((r) => {
                   const t = top2(r.openValue), b = bottom2(r.openChange);
                   const before = records.filter((d) => d.date.getTime() < r.date.getTime());
-                  const rk = pickDigits(r.openValue, r.openChange, before), pr = pickPair(r.openValue, r.openChange, before);
+                  const tw = pickTwo(r.openValue, r.openChange, before), pr = pickPair(r.openValue, r.openChange, before);
                   return (
                     <div key={r.id} className="flex flex-wrap items-center gap-4 py-3 text-sm">
                       <span className="w-20 whitespace-nowrap">{r.date.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" })}</span>
@@ -214,8 +205,9 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
                       <span><Digits value={t} /> <Digits value={b} /></span>
                       <span className="flex items-center gap-1">
                         <span className="text-xs text-slate-500">ฟัน</span>
-                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-400 font-mono text-lg font-bold text-white">{rk[0].digit}</span>
-                        <span className="ml-2 text-xs text-slate-500">คู่</span>
+                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-400 font-mono text-lg font-bold text-white">{tw.digits[0].digit}</span>
+                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-200 font-mono text-lg font-bold text-amber-900">{tw.digits[1].digit}</span>
+                        <span className="ml-2 text-xs text-slate-500">คู่ผูก</span>
                         <span className="flex h-8 items-center justify-center rounded-lg bg-amber-100 px-2 font-mono text-lg font-bold text-amber-900">{pr.pair.join(" ")}</span>
                         <span className="text-xs text-slate-500">{pct(pr.pBoth)}</span>
                       </span>
@@ -231,7 +223,7 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
             <section className="card">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <h2 className="font-medium">ความแม่นยำย้อนหลัง ({bt.days} วัน)</h2>
-                <span className="text-xs text-slate-500">ฟันแต่ละวันจาก D + ทิศทาง (ใช้ข้อมูลก่อนหน้าวันนั้น) · ปิดมีเลขเฉลี่ย {bt.avgCloseSize.toFixed(1)} ตัว</span>
+                <span className="text-xs text-slate-500">ฟันแต่ละวันจาก D + ทิศทาง (ใช้ข้อมูลก่อนหน้าวันนั้น) · ปิดมีเลขเฉลี่ย {bt.avgCloseSize.toFixed(1)} ตัว · ฟันแบบนี้บน 10 ปี: ตัวหลัก 36% · 2 ตัว ≥1 63%</span>
               </div>
               <table className="mt-3 w-full text-sm">
                 <thead className="text-left text-xs uppercase text-slate-500">
@@ -240,17 +232,17 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
                 <tbody className="divide-y divide-slate-100">
                   {bt.topK.map((r) => (
                     <tr key={r.k}>
-                      <td className="py-1.5 pr-4">{r.k} เลขอันดับแรก</td>
+                      <td className="py-1.5 pr-4">{r.k === 1 ? "ตัวหลัก" : r.k === 2 ? "ฟัน 2 ตัว (หลัก + รอง)" : "3 เลขอันดับแรก"}</td>
                       <td className={`py-1.5 pr-4 text-right font-semibold ${r.atLeastOne > r.randomAtLeastOne ? "text-emerald-600" : "text-slate-700"}`}>{pct(r.atLeastOne)}</td>
                       <td className="py-1.5 pr-4 text-right">{pct(r.all)}</td>
                       <td className="py-1.5 text-right text-slate-400">{pct(r.randomAtLeastOne)}</td>
                     </tr>
                   ))}
-                  {bt.pair && (
+                  {bt.tied && (
                     <tr className="bg-amber-50/50">
-                      <td className="py-1.5 pr-4">ฟันคู่ (เลือกคู่ที่มาด้วยกันบ่อยสุด)</td>
-                      <td className="py-1.5 pr-4 text-right">{pct(bt.pair.any)}</td>
-                      <td className={`py-1.5 pr-4 text-right font-semibold ${bt.pair.both > PAIR_BASE.bothRandom ? "text-emerald-600" : "text-slate-700"}`}>{pct(bt.pair.both)} <span className="text-xs font-normal text-slate-400">(10 ปี {pct(PAIR_BASE.both10y)})</span></td>
+                      <td className="py-1.5 pr-4">คู่ผูก (เลือกคู่ที่มาด้วยกันบ่อยสุด)</td>
+                      <td className="py-1.5 pr-4 text-right">{pct(bt.tied.any)}</td>
+                      <td className={`py-1.5 pr-4 text-right font-semibold ${bt.tied.both > PAIR_BASE.bothRandom ? "text-emerald-600" : "text-slate-700"}`}>{pct(bt.tied.both)} <span className="text-xs font-normal text-slate-400">(10 ปี {pct(PAIR_BASE.both10y)})</span></td>
                       <td className="py-1.5 text-right text-slate-400">ครบคู่ {pct(PAIR_BASE.bothRandom)}</td>
                     </tr>
                   )}

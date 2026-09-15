@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { summarize, fmtChange, fmtNum, hasClose, evaluateCalls, CALL_MIN_GAP_PCT } from "@/lib/stats";
-import { pickDigits, pickPair, top2, bottom2 } from "@/lib/digits";
+import { pickTwo, top2, bottom2 } from "@/lib/digits";
 import { deleteRecord, deleteStock } from "@/app/actions/stocks";
 import { StatCard } from "@/components/stat-card";
 import { Change, PatternBadge } from "@/components/change";
@@ -32,13 +32,12 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
   const rows = stock.records.map((r) => {
     const history = closed.filter((d) => d.date.getTime() < r.date.getTime());
     const oTop = top2(r.openValue), oBot = bottom2(r.openChange);
-    const ranked = pickDigits(r.openValue, r.openChange, history);
-    const pick = ranked[0].digit;
-    const { pair } = pickPair(r.openValue, r.openChange, history);
+    const two = pickTwo(r.openValue, r.openChange, history);
+    const pair = two.digits.map((x) => x.digit), pick = pair[0];
     const closeDigits = hasClose(r) ? [...new Set((top2(r.closeValue) + bottom2(r.closeChange)).split(""))] : null;
     const hit1 = pick !== null && closeDigits ? closeDigits.includes(pick) : null;
     const hit2 = pair && closeDigits ? pair.filter((d) => closeDigits.includes(d)) : null;
-    return { r, oTop, oBot, pick, pair, p: ranked[0].p, closeDigits, hit1, hit2 };
+    return { r, oTop, oBot, pick, pair, p: two.digits[0].p, closeDigits, hit1, hit2 };
   }).reverse();
 
   const calls = evaluateCalls(stock.records);
@@ -141,7 +140,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                         <span className="flex items-center gap-2">
                           <span className={`flex h-9 w-9 items-center justify-center rounded-lg font-mono text-xl font-bold ${hit1 ? "bg-amber-400 text-white" : hit1 === false ? "bg-slate-200 text-slate-500 line-through" : "bg-amber-100 text-amber-900"}`}>{pick}</span>
                           <span className="text-xs text-slate-500">
-                            {Math.round(p * 100)}%<br />คู่ <span className="font-mono">{pair.join(" ")}</span>
+                            {Math.round(p * 100)}%<br />รอง <span className="font-mono font-bold">{pair[1]}</span>
                           </span>
                         </span>
                       </td>
@@ -157,7 +156,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                         ) : hit1 ? (
                           <span className="rounded bg-emerald-100 px-2 py-0.5 font-medium text-emerald-800">✓ ถูก</span>
                         ) : hit2 && hit2.length ? (
-                          <span className="rounded bg-amber-100 px-2 py-0.5 font-medium text-amber-800">คู่ถูก {hit2.join(" ")}</span>
+                          <span className="rounded bg-amber-100 px-2 py-0.5 font-medium text-amber-800">ตัวรองถูก {hit2.join(" ")}</span>
                         ) : (
                           <span className="rounded bg-red-100 px-2 py-0.5 font-medium text-red-800">✗ ผิด</span>
                         )}

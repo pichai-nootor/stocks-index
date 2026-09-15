@@ -2,7 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { hasClose, summarize, fmtNum, fmtChange } from "@/lib/stats";
-import { pickDigits, pickPair, top2, bottom2 } from "@/lib/digits";
+import { pickTwo, top2, bottom2 } from "@/lib/digits";
 import { Digits } from "@/components/digit-badges";
 
 const TH_MONTHS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
@@ -29,8 +29,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
   }>();
   for (const r of all) {
     const hist = closed.filter((d) => d.date.getTime() < r.date.getTime());
-    const ranked = pickDigits(r.openValue, r.openChange, hist);
-    const pick = ranked[0].digit, { pair } = pickPair(r.openValue, r.openChange, hist);
+    const pair = pickTwo(r.openValue, r.openChange, hist).digits.map((x) => x.digit), pick = pair[0];
     const cd = hasClose(r) ? [...new Set((top2(r.closeValue) + bottom2(r.closeChange)).split(""))] : null;
     byDate.set(r.date.toISOString().slice(0, 10), { r, pick, pair, hit1: cd ? cd.includes(pick) : null, hit2: cd ? pair.filter((d) => cd.includes(d)) : [] });
   }
@@ -113,7 +112,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
                   <div className="mt-1 space-y-1">
                     <div className="flex items-center gap-1">
                       <span className={`flex h-6 w-6 items-center justify-center rounded font-mono text-sm font-bold ${x.hit1 ? "bg-amber-400 text-white" : x.hit1 === false ? "bg-slate-200 text-slate-500 line-through" : "bg-amber-100 text-amber-900"}`}>{x.pick}</span>
-                      <span className="text-[10px] text-slate-500">คู่ {x.pair.join(" ")}</span>
+                      <span className="text-[10px] text-slate-500">รอง {x.pair[1]}</span>
                     </div>
                     <div className="text-[10px] text-slate-500">
                       เปิด <span className="font-mono">{top2(x.r.openValue)}/{bottom2(x.r.openChange)}</span>

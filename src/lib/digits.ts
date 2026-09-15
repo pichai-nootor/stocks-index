@@ -227,8 +227,10 @@ export type Backtest = {
   days: number; // จำนวนวันที่ทดสอบ
   /** สำหรับ k = 1,2,3: ทายเลข top-k แล้วโผล่อย่างน้อย 1 ตัว / โผล่ครบทุกตัว */
   topK: { k: number; atLeastOne: number; all: number; randomAtLeastOne: number }[];
-  /** ฟันคู่ (pickPair): มาทั้งคู่ / อย่างน้อย 1 ตัว */
+  /** ฟัน 2 ตัวจากเลขเดี่ยว (pickTwo): มาทั้งคู่ / อย่างน้อย 1 ตัว */
   pair?: { both: number; any: number };
+  /** คู่ผูก (pickPair เลือกจากโอกาสมาทั้งคู่): มาทั้งคู่ / อย่างน้อย 1 ตัว */
+  tied?: { both: number; any: number };
   avgCloseSize: number; // ปิดมีเลขเฉลี่ยกี่ตัว
   perDay: { date: Date; predicted: string[]; actual: string[]; hits: string[] }[];
 };
@@ -292,10 +294,11 @@ export function enumerateOutcomes(D: number, pUp = 0.5): Outcome[] {
 }
 
 export function exactDigitProbs(D: number, pUp = 0.5): { digit: string; p: number }[] {
-  const P = Array<number>(10).fill(0);
-  for (const o of enumerateOutcomes(D, pUp)) for (const d of o.set) P[Number(d)] += o.w;
-  return DIGITS.map((digit) => ({ digit, p: P[Number(digit)] })).sort((a, b) => b.p - a.p);
+  return digitPositionProbs(D, pUp).map(({ digit, p }) => ({ digit, p }));
 }
+
+/** เรียงมาก→น้อย; เสมอกัน (ต่างกันแค่ floating point) → เลขน้อยก่อน เพื่อให้ทุกหน้าฟันเลขเดียวกัน */
+const byProb = <T extends { p: number; digit: string }>(a: T, b: T) => Math.round(b.p * 1e9) - Math.round(a.p * 1e9) || a.digit.localeCompare(b.digit);
 
 /* ---------- ฟันคู่: เลือก 2 ตัวที่ "มาทั้งคู่" บ่อยสุด ---------- */
 
@@ -326,6 +329,62 @@ export function pickPair(openValue: number, openChange: number, priceHistory: Re
   return pairProbs(D, pUp)[0];
 }
 
+/* ---------- ฟัน 2 ตัวจากเลขเดี่ยว + ตำแหน่งที่จะมา (หลักสิบ/หลักหน่วย ของบน/ล่าง) ---------- */
+
+export type DigitDetail = {
+  digit: string;
+  p: number;                         // โอกาสโผล่ที่ตำแหน่งใดก็ได้
+  pos: Record<Position, number>;     // โอกาสอยู่ในแต่ละตำแหน่ง
+  tens: number;                      // อยู่หลักสิบ (บนหรือล่าง)
+  units: number;                     // อยู่หลักหน่วย (บนหรือล่าง)
+  top: number;                       // อยู่ในบน
+  bottom: number;                    // อยู่ในล่าง
+  /** ถ้ามา → อยู่หลักสิบ / หลักหน่วย กี่ % (ซ้อนกันได้ถ้ามาทั้งสองหลัก) */
+  givenTens: number;
+  givenUnits: number;
+};
+
+/** โอกาสของเลข 0–9 แยกตามตำแหน่ง จากการไล่ 200 กรณี (บนสุ่ม → แต่ละตำแหน่ง ≈10% ต่างกันได้เฉพาะเมื่อ D ทำให้ตำแหน่งซ้ำกัน) */
+export function digitPositionProbs(D: number, pUp = 0.5): DigitDetail[] {
+  const O = enumerateOutcomes(D, pUp);
+  return DIGITS.map((digit) => {
+    const pos = { topTens: 0, topUnits: 0, botTens: 0, botUnits: 0 };
+    let any = 0, tens = 0, units = 0, top = 0, bottom = 0;
+    for (const o of O) {
+      const at = positionDigits(o.top, o.bottom);
+      const hit = POSITIONS.filter((k) => at[k] === digit);
+      for (const k of hit) pos[k] += o.w;
+      if (hit.length) any += o.w;
+      if (at.topTens === digit || at.botTens === digit) tens += o.w;
+      if (at.topUnits === digit || at.botUnits === digit) units += o.w;
+      if (at.topTens === digit || at.topUnits === digit) top += o.w;
+      if (at.botTens === digit || at.botUnits === digit) bottom += o.w;
+    }
+    return { digit, p: any, pos, tens, units, top, bottom, givenTens: any ? tens / any : 0, givenUnits: any ? units / any : 0 };
+  }).sort(byProb);
+}
+
+export type TwoPick = { digits: [DigitDetail, DigitDetail]; pAny: number; pBoth: number };
+
+/**
+ * ฟัน 2 ตัวจากเลขเดี่ยว: ตัวแรก = โอกาสโผล่สูงสุด, ตัวที่สอง = ตัวที่ทำให้ "อย่างน้อย 1 ใน 2 โผล่" สูงสุดเมื่อคู่กับตัวแรก
+ * (เลขเดี่ยวมักเสมอกันหลายตัว การเลือกตัวที่สองแบบนี้ใช้ตัดสินเสมอ และเก็บ ≥1 ได้ ~63% แทน 61%)
+ */
+export function pickTwo(openValue: number, openChange: number, priceHistory: RecordLike[] = []): TwoPick {
+  const D = prevCloseCents(openValue, openChange);
+  const { pUp } = forecastDirection(openValue, openChange, priceHistory);
+  const details = digitPositionProbs(D, pUp);
+  const first = details[0];
+  const O = enumerateOutcomes(D, pUp);
+  let best: { d: DigitDetail; any: number; both: number } | null = null;
+  for (const d of details.slice(1)) {
+    let any = 0, both = 0;
+    for (const o of O) { const a = o.set.has(first.digit), b = o.set.has(d.digit); if (a || b) any += o.w; if (a && b) both += o.w; }
+    if (!best || any > best.any + 1e-9) best = { d, any, both };
+  }
+  return { digits: [first, best!.d], pAny: best!.any, pBoth: best!.both };
+}
+
 /** ระดับความแข็งของคู่วันนี้ เทียบการกระจาย 10 ปี (ส่วนใหญ่ 14–20%) */
 export const pairLevel = (pBoth: number) => (pBoth >= 0.22 ? "คู่แข็ง" : pBoth < 0.14 ? "คู่อ่อน" : "ปกติ");
 
@@ -349,13 +408,19 @@ export function backtestPicks(records: RecordLike[], minHistory = 0): Backtest {
   const sorted = [...records].sort((a, b) => a.date.getTime() - b.date.getTime());
   const days = toDayDigits(sorted);
   const perDay: Backtest["perDay"] = [];
-  let pairBoth = 0, pairAny = 0;
+  let pairBoth = 0, pairAny = 0, tiedBoth = 0, tiedAny = 0;
   for (let i = minHistory; i < sorted.length; i++) {
-    const predicted = pickDigits(sorted[i].openValue, sorted[i].openChange, sorted.slice(0, i)).slice(0, 3).map((x) => x.digit);
-    perDay.push({ date: days[i].date, predicted, actual: days[i].closeDigits, hits: predicted.filter((d) => days[i].closeDigits.includes(d)) });
-    const { pair } = pickPair(sorted[i].openValue, sorted[i].openChange, sorted.slice(0, i));
+    const hist = sorted.slice(0, i);
+    const two = pickTwo(sorted[i].openValue, sorted[i].openChange, hist);
+    const third = pickDigits(sorted[i].openValue, sorted[i].openChange, hist).map((x) => x.digit).find((d) => !two.digits.some((t) => t.digit === d))!;
+    const predicted = [two.digits[0].digit, two.digits[1].digit, third];
+    const hits = predicted.filter((d) => days[i].closeDigits.includes(d));
+    perDay.push({ date: days[i].date, predicted, actual: days[i].closeDigits, hits });
+    const two2 = hits.filter((d) => d !== third).length;
+    if (two2 === 2) pairBoth++; if (two2 >= 1) pairAny++;
+    const { pair } = pickPair(sorted[i].openValue, sorted[i].openChange, hist);
     const hit = pair.filter((d) => days[i].closeDigits.includes(d)).length;
-    if (hit === 2) pairBoth++; if (hit >= 1) pairAny++;
+    if (hit === 2) tiedBoth++; if (hit >= 1) tiedAny++;
   }
   const n = perDay.length;
   const avgCloseSize = days.length ? days.reduce((s, d) => s + d.closeDigits.length, 0) / days.length : 0;
@@ -367,5 +432,9 @@ export function backtestPicks(records: RecordLike[], minHistory = 0): Backtest {
     const randomAtLeastOne = 10 - m >= k ? 1 - choose(10 - m, k) / choose(10, k) : 1;
     return { k, atLeastOne, all, randomAtLeastOne };
   });
-  return { days: n, topK, avgCloseSize, perDay, pair: n ? { both: pairBoth / n, any: pairAny / n } : undefined };
+  return {
+    days: n, topK, avgCloseSize, perDay,
+    pair: n ? { both: pairBoth / n, any: pairAny / n } : undefined,
+    tied: n ? { both: tiedBoth / n, any: tiedAny / n } : undefined,
+  };
 }

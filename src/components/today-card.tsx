@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { pickDigits, pickPair, pairLevel, PAIR_BASE, top2, bottom2, prevCloseCents } from "@/lib/digits";
+import { pickDigits, pickPair, pickTwo, top2, bottom2, prevCloseCents } from "@/lib/digits";
+import { TwoPickCard } from "@/components/two-pick";
 import { fmtNum, fmtChange, forecastDirection, forecastClose, directionCall, evaluateCalls, checkOpen, type Summary, type RecordLike } from "@/lib/stats";
 import { OpenWarning } from "@/components/open-warning";
 import { CallCard } from "@/components/call-card";
@@ -21,6 +22,7 @@ export function TodayCard({ stock, record, priceStats, priceHistory = [] }: {
   const oTop = top2(record.openValue), oBot = bottom2(record.openChange);
   const ranked = pickDigits(record.openValue, record.openChange, priceHistory);
   const pp = pickPair(record.openValue, record.openChange, priceHistory);
+  const two = pickTwo(record.openValue, record.openChange, priceHistory);
   const D = prevCloseCents(record.openValue, record.openChange);
   const dir = record.openChange > 0 ? priceStats.whenOpenUp : record.openChange < 0 ? priceStats.whenOpenDown : priceStats.all;
   const df = forecastDirection(record.openValue, record.openChange, priceHistory);
@@ -47,24 +49,9 @@ export function TodayCard({ stock, record, priceStats, priceHistory = [] }: {
         <DirectionCard f={df} compact />
       </div>
 
-      <div className="mt-3 grid gap-4 sm:grid-cols-[auto_auto_1fr]">
-        <div className="flex items-center gap-3">
-          <span className="flex h-24 w-24 items-center justify-center rounded-3xl bg-amber-400 font-mono text-6xl font-bold text-white shadow">{ranked[0].digit}</span>
-          <div className="text-sm">
-            <p className="text-xs uppercase tracking-wide text-amber-800">ฟันเลขเดี่ยว</p>
-            <p className="font-semibold">โผล่ {pct(ranked[0].p)}</p>
-            <p className="mt-1 text-xs text-slate-500">เพดาน ~36% · สุ่ม 34%</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="flex h-24 items-center justify-center gap-1 rounded-3xl bg-amber-100 px-3 font-mono text-5xl font-bold text-amber-900 shadow-sm">{pp.pair[0]}<span className="text-amber-400">·</span>{pp.pair[1]}</span>
-          <div className="text-sm">
-            <p className="text-xs uppercase tracking-wide text-amber-800">ฟันคู่ <span className={`ml-1 rounded px-1.5 py-0.5 normal-case ${pp.pBoth >= 0.22 ? "bg-emerald-100 text-emerald-800" : pp.pBoth < 0.14 ? "bg-slate-200 text-slate-600" : "bg-amber-200 text-amber-900"}`}>{pairLevel(pp.pBoth)}</span></p>
-            <p className="font-semibold">มาทั้งคู่ {pct(pp.pBoth)}</p>
-            <p className="text-xs text-slate-600">อย่างน้อย 1 ตัว {pct(pp.pAny)}</p>
-            <p className="mt-1 text-xs text-slate-500">10 ปี ≈ {pct(PAIR_BASE.both10y)} · สุ่ม {pct(PAIR_BASE.bothRandom)}</p>
-          </div>
-        </div>
+      <div className="mt-3"><TwoPickCard two={two} tied={pp} /></div>
+
+      <div className="mt-3 grid gap-4 sm:grid-cols-3">
         <div className="sm:col-span-3">
           <p className="text-xs text-slate-500">โอกาสที่แต่ละเลขจะโผล่ตอนปิด (บน ∪ ล่าง)</p>
           <div className="mt-1 grid grid-cols-10 gap-1">
@@ -87,7 +74,7 @@ export function TodayCard({ stock, record, priceStats, priceHistory = [] }: {
           </div>
           <div>
             <dt className="text-xs text-slate-500">เลขเปิด บน / ล่าง</dt>
-            <dd><Digits value={oTop} hilite={[ranked[0].digit]} /> <Digits value={oBot} hilite={[ranked[0].digit]} /></dd>
+            <dd><Digits value={oTop} hilite={two.digits.map((d) => d.digit)} /> <Digits value={oBot} hilite={two.digits.map((d) => d.digit)} /></dd>
           </div>
           <div>
             <dt className="text-xs text-slate-500">ปิดวันก่อน → D</dt>
