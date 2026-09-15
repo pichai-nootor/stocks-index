@@ -190,3 +190,59 @@ export async function importCsv(_prev: ImportState, formData: FormData): Promise
   revalidatePath("/predict");
   return { imported: fresh.length, skipped, duplicates: rows.length - fresh.length };
 }
+
+/* ---------- ดึงจาก Yahoo: เปิด / ปิด / ราคาสด ---------- */
+
+import { fetchQuote } from "@/lib/yahoo";
+
+const dateOnly = (ymd: string) => new Date(ymd);
+
+/** เช้า: ดึงค่าเปิดวันซื้อขายล่าสุดจาก Yahoo แล้วบันทึก (ไม่มีปัญหากรอกผิด) */
+export async function saveOpenFromYahoo(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const { userId } = await requireUser();
+  const stockId = String(formData.get("stockId") ?? "");
+  const stock = await prisma.stock.findFirst({ where: { id: stockId, userId } });
+  if (!stock) return { error: "ไม่พบหุ้น" };
+  const q = await fetchQuote(stock.symbol);
+  if (!q) return { error: `ดึงราคา ${stock.symbol} จาก Yahoo ไม่ได้ (ไม่รู้จักสัญลักษณ์ หรือเชื่อมต่อไม่ได้) — กรอกเองด้านล่าง` };
+  const date = dateOnly(q.tradingDate);
+  const openChange = Math.round((q.open - q.prevClose) * 100) / 100;
+  const existing = await prisma.record.findFirst({ where: { stockId, date } });
+  if (existing?.closeValue !== null && existing?.closeValue !== undefined) return { error: `วันที่ ${q.tradingDate} มีผลปิดแล้ว` };
+  if (existing) await prisma.record.update({ where: { id: existing.id }, data: { openValue: q.open, openChange } });
+  else await prisma.record.create({ data: { stockId, date, openValue: q.open, openChange } });
+  revalidatePath("/dashboard"); revalidatePath("/digits"); revalidatePath(`/stocks/${stockId}`);
+  redirect("/dashboard?saved=1");
+}
+
+/** ระหว่างวัน: อ่านราคาสดจาก Yahoo แล้วบันทึกเป็นจุดฟันสดของวัน (ครั้งเดียว — กดซ้ำ = อัปเดตจนกว่าจะมีปิด) */
+export async function saveLiveFromYahoo(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const { userId } = await requireUser();
+  const id = String(formData.get("id") ?? "");
+  const record = await prisma.record.findFirst({ where: { id, stock: { userId } }, include: { stock: true } });
+  if (!record) return { error: "ไม่พบรายการ" };
+  if (record.closeValue !== null) return { error: "วันนี้มีผลปิดแล้ว" };
+  const q = await fetchQuote(record.stock.symbol);
+  if (!q) return { error: "ดึงราคาสดไม่ได้" };
+  if (q.tradingDate !== record.date.toISOString().slice(0, 10)) return { error: `Yahoo ยังอยู่ที่วัน ${q.tradingDate} — ตลาดยังไม่เปิดสำหรับวันนี้` };
+  if (q.closed) return { error: "ตลาดปิดแล้ว — กด “เติมปิดจาก Yahoo” แทน" };
+  await prisma.record.update({ where: { id }, data: { liveValue: q.last, liveAt: q.lastAt } });
+  revalidatePath("/dashboard");
+  return undefined;
+}
+
+/** เย็น: เติมค่าปิดของวันจาก Yahoo */
+export async function fillCloseFromYahoo(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const { userId } = await requireUser();
+  const id = String(formData.get("id") ?? "");
+  const record = await prisma.record.findFirst({ where: { id, stock: { userId } }, include: { stock: true } });
+  if (!record) return { error: "ไม่พบรายการ" };
+  const q = await fetchQuote(record.stock.symbol);
+  if (!q) return { error: "ดึงราคาจาก Yahoo ไม่ได้" };
+  if (q.tradingDate !== record.date.toISOString().slice(0, 10)) return { error: `Yahoo มีข้อมูลถึงวัน ${q.tradingDate} ไม่ตรงกับรายการนี้` };
+  if (!q.closed) return { error: `ตลาดยังไม่ปิด (ล่าสุด ${q.last.toFixed(2)}) — รอหลัง 17:00 น. ไทย` };
+  const prev = record.openValue - record.openChange;
+  await prisma.record.update({ where: { id }, data: { closeValue: q.last, closeChange: Math.round((q.last - prev) * 100) / 100 } });
+  revalidatePath("/dashboard"); revalidatePath("/digits"); revalidatePath("/calendar"); revalidatePath(`/stocks/${record.stockId}`);
+  return undefined;
+}

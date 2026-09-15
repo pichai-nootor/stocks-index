@@ -39,6 +39,8 @@ model Record {
   closeValue  Float?   // ค่าดัชนีตอนปิด (กรอกทีหลังได้ — เช้ากรอกเปิด เย็นเติมปิด)
   closeChange Float?   // เปลี่ยนแปลงตอนปิด (เทียบปิดวันก่อน) มีเครื่องหมาย
   note        String?
+  liveValue   Float?   // ค่าดัชนีที่อ่านระหว่างวัน (ใช้ฟันทิศทางสด) — บันทึกครั้งเดียวต่อวัน
+  liveAt      DateTime? // เวลาที่อ่านค่านั้น
   createdAt   DateTime @default(now())
 
   @@index([stockId, date])

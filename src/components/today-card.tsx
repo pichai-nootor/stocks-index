@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { pickDigits, pickPair, pickTwo, top2, bottom2, prevCloseCents } from "@/lib/digits";
 import { TwoPickCard } from "@/components/two-pick";
+import { LiveCard } from "@/components/live-card";
 import { fmtNum, fmtChange, forecastDirection, forecastClose, directionCall, evaluateCalls, checkOpen, type Summary, type RecordLike } from "@/lib/stats";
 import { OpenWarning } from "@/components/open-warning";
 import { CallCard } from "@/components/call-card";
@@ -9,15 +10,18 @@ import { DirectionCard } from "@/components/direction-card";
 import { Digits } from "@/components/digit-badges";
 import { CloseForm } from "@/components/close-form";
 
-type Rec = { id: string; date: Date; openValue: number; openChange: number };
+type Rec = { id: string; date: Date; openValue: number; openChange: number; liveValue: number | null; liveAt: Date | null };
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 
 /** การ์ดวิเคราะห์ของวันที่กรอกเปิดไว้ (รอผลปิด) — ใช้ในหน้าแรก */
-export function TodayCard({ stock, record, priceStats, priceHistory = [] }: {
+export function TodayCard({ stock, record, priceStats, priceHistory = [], live = null, liveScore }: {
   stock: { id: string; symbol: string; name: string | null };
   record: Rec;
   priceStats: Summary;
   priceHistory?: RecordLike[];
+  /** ราคาสดจาก Yahoo (ถ้าดึงได้และเป็นวันเดียวกับรายการ) */
+  live?: { price: number; at: string; closed: boolean } | null;
+  liveScore?: { called: number; hits: number };
 }) {
   const oTop = top2(record.openValue), oBot = bottom2(record.openChange);
   const ranked = pickDigits(record.openValue, record.openChange, priceHistory);
@@ -43,7 +47,10 @@ export function TodayCard({ stock, record, priceStats, priceHistory = [] }: {
       </div>
 
       {check.mismatch && <div className="mt-3"><OpenWarning check={check} fixHref={`/digits?stock=${stock.id}&date=${dateStr}&openValue=${record.openValue}&openChange=${check.suggestedOpenChange}`} /></div>}
-      <div className="mt-3"><CallCard c={call} score={{ called: ev.called, hits: ev.hits }} /></div>
+      <div className="mt-3 grid gap-3 lg:grid-cols-2">
+        <LiveCard recordId={record.id} prevClose={record.openValue - record.openChange} live={live} saved={record.liveValue !== null && record.liveAt ? { price: record.liveValue, at: record.liveAt.toISOString() } : null} score={liveScore} />
+        <CallCard c={call} score={{ called: ev.called, hits: ev.hits }} />
+      </div>
       <div className="mt-3 grid gap-3 lg:grid-cols-[3fr_2fr]">
         <CloseForecastCard open={record.openValue} f={cf} dir={df} />
         <DirectionCard f={df} compact />

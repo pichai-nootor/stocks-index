@@ -6,6 +6,9 @@ import { toDayDigits, pickTwo } from "@/lib/digits";
 import { Digits } from "@/components/digit-badges";
 import { OpenForm } from "@/components/open-form";
 import { TodayCard } from "@/components/today-card";
+import { YahooOpenButton } from "@/components/yahoo-open-button";
+import { fetchQuote } from "@/lib/yahoo";
+import { evaluateLiveCalls } from "@/lib/intraday";
 
 export default async function DashboardPage({ searchParams }: PageProps<"/dashboard">) {
   const { userId } = await requireUser();
@@ -18,13 +21,22 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
   });
   const today = new Date().toISOString().slice(0, 10);
 
+  // ราคาสดจาก Yahoo ต่อหุ้น (ดึงครั้งเดียวต่อการโหลดหน้า; หุ้นที่ไม่รู้จักสัญลักษณ์ → null)
+  const quotes = new Map(await Promise.all(stocks.map(async (s) => [s.id, await fetchQuote(s.symbol)] as const)));
+
   // การ์ด "วันนี้": ทุกแถวที่กรอกเปิดแล้วแต่ยังไม่มีปิด
   const pending = stocks.flatMap((s) => {
     const closed = s.records.filter(hasClose);
     const priceStats = summarize(closed);
+    const q = quotes.get(s.id);
+    const liveScore = evaluateLiveCalls(s.records);
     return s.records
       .filter((r) => !hasClose(r))
-      .map((r) => ({ stock: s, record: r, priceStats, priceHistory: closed }));
+      .map((r) => ({
+        stock: s, record: r, priceStats, priceHistory: closed,
+        live: q && q.tradingDate === r.date.toISOString().slice(0, 10) ? { price: q.last, at: q.lastAt.toISOString(), closed: q.closed } : null,
+        liveScore: { called: liveScore.called, hits: liveScore.hits },
+      }));
   }).sort((a, b) => b.record.date.getTime() - a.record.date.getTime());
 
   // ผลล่าสุดที่ตัดสินแล้ว + สกอร์รวม ต่อหุ้น
@@ -43,7 +55,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
     const last = judged[judged.length - 1];
     const calls = evaluateCalls(s.records);
     const lastCall = [...calls.perDay].reverse().find((d) => d.call && d.actual);
-    return { stock: s, n: judged.length, hit1: judged.filter((j) => j.hit1).length, fair: judged.reduce((a, j) => a + j.fair, 0), hit2: judged.filter((j) => j.hit2.length > 0).length, hitBoth: judged.filter((j) => j.hit2.length === 2).length, last, calls, lastCall };
+    const liveCalls = evaluateLiveCalls(s.records);
+    return { stock: s, n: judged.length, hit1: judged.filter((j) => j.hit1).length, fair: judged.reduce((a, j) => a + j.fair, 0), hit2: judged.filter((j) => j.hit2.length > 0).length, hitBoth: judged.filter((j) => j.hit2.length === 2).length, last, calls, lastCall, liveCalls };
   });
   const defaultStock = [...stocks].sort((a, b) => b.records.length - a.records.length)[0];
 
@@ -61,6 +74,13 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
       ) : pending.length === 0 ? (
         <section className="space-y-2">
           <p className="text-sm text-slate-600">ยังไม่ได้กรอกเปิดของวันนี้ — กรอกแล้วระบบจะฟันธงให้ทันที</p>
+          <YahooOpenButton stockId={defaultStock.id} symbol={defaultStock.symbol} quote={(() => {
+            const q = quotes.get(defaultStock.id);
+            // ซ่อนถ้าวันซื้อขายล่าสุดของ Yahoo มีผลปิดในระบบแล้ว (= วันนี้ตลาดยังไม่เปิด)
+            const done = q && defaultStock.records.some((r) => r.date.toISOString().slice(0, 10) === q.tradingDate && hasClose(r));
+            return q && !done ? { tradingDate: q.tradingDate, open: q.open, prevClose: q.prevClose } : null;
+          })()} />
+          {(() => { const q = quotes.get(defaultStock.id); return q && defaultStock.records.some((r) => r.date.toISOString().slice(0, 10) === q.tradingDate && hasClose(r)) ? <p className="text-xs text-slate-500">Yahoo ยังอยู่ที่วัน {q.tradingDate} (บันทึกครบแล้ว) — ปุ่มดึงเปิดจะขึ้นหลังตลาดเปิด 10:45 น. ไทย</p> : null; })()}
           <OpenForm stocks={stocks} stockId={defaultStock.id} date={today} redirectTo="dashboard" />
         </section>
       ) : (
@@ -78,8 +98,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
       {/* ผลการฟันทิศทาง (เฉพาะวันที่มั่นใจ) */}
       <section className="card p-0">
         <div className="border-b border-slate-200 px-5 py-3">
-          <h2 className="font-medium">ผลการฟันทิศทาง — เฉพาะวันที่เปิดห่าง ≥ {CALL_MIN_GAP_PCT}%</h2>
-          <p className="text-xs text-slate-500">วันอื่น ๆ ระบบไม่ฟัน (โอกาสถูกไม่พอ) · นับเฉพาะวันที่ฟันและมีผลปิดแล้ว</p>
+          <h2 className="font-medium">ผลการฟันทิศทาง — จากเปิด (เฉพาะวันที่เปิดห่าง ≥ {CALL_MIN_GAP_PCT}%) และ ฟันสด (ราคาระหว่างวัน)</h2>
+          <p className="text-xs text-slate-500">จากเปิดฟันได้ราว 1 ใน 15 วัน · ฟันสดฟันได้เกือบทุกวันถ้าเช็กหลัง 13:45 น. ไทย และราคาห่างจากปิดเมื่อวาน ≥0.25% · นับเฉพาะวันที่ฟันและมีผลปิดแล้ว</p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -89,11 +109,12 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
                 <th className="px-5 py-2 text-right">วันที่ฟัน</th>
                 <th className="px-5 py-2 text-right">ถูก</th>
                 <th className="px-5 py-2 text-right">ไม่ฟัน</th>
+                <th className="px-5 py-2 text-right">ฟันสด ถูก</th>
                 <th className="px-5 py-2">ฟันล่าสุด</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {scoreboard.map(({ stock, calls, lastCall }) => (
+              {scoreboard.map(({ stock, calls, lastCall, liveCalls }) => (
                 <tr key={stock.id} className="hover:bg-slate-50">
                   <td className="px-5 py-2.5 font-medium">{stock.symbol}</td>
                   <td className="px-5 py-2.5 text-right">{calls.called}</td>
@@ -101,6 +122,9 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
                     {calls.called ? `${calls.hits}/${calls.called} (${Math.round((calls.hits / calls.called) * 100)}%)` : "-"}
                   </td>
                   <td className="px-5 py-2.5 text-right text-slate-500">{calls.skipped} วัน</td>
+                  <td className={`px-5 py-2.5 text-right font-semibold ${liveCalls.called && liveCalls.hits / liveCalls.called >= 0.85 ? "text-emerald-600" : ""}`}>
+                    {liveCalls.called ? `${liveCalls.hits}/${liveCalls.called} (${Math.round((liveCalls.hits / liveCalls.called) * 100)}%)` : <span className="font-normal text-slate-400">ยังไม่มี</span>}
+                  </td>
                   <td className="px-5 py-2.5 whitespace-nowrap">
                     {lastCall ? (
                       <span className="inline-flex items-center gap-2 text-xs">
