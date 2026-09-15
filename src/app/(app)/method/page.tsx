@@ -57,6 +57,26 @@ export default function MethodPage() {
       </section>
 
       <section className="card space-y-3">
+        <h2 className="font-medium">3b. ค้นสูตรจากเลขเปิดแบบหว่านแห 127 สูตร (16 ก.ย. 2569)</h2>
+        <p className="text-sm">ทุกตำแหน่งของเลขเปิดและ D, บวก/ลบ/คูณกันทุกคู่และทุกสาม (mod 10), ผลรวมหลัก, หลักหน่วย/สิบ/ร้อยของดัชนี, จำนวนจุดที่เปลี่ยน, เลขร้อน/เย็น 5–100 วัน, เลขหายนาน, เลขเด้ง, ฟันเลขเดิมตลอด — วัดบน 10 ปี แยกครึ่งแรก/ครึ่งหลังกันโชค</p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm tabular-nums">
+            <thead className="text-left text-xs uppercase text-slate-500"><tr><th className="py-1 pr-4">สูตร</th><th className="py-1 pr-4 text-right">5 ปีแรก</th><th className="py-1 pr-4 text-right">5 ปีหลัง</th><th className="py-1 text-right">10 ปี</th></tr></thead>
+            <tbody className="divide-y divide-slate-100">
+              {[["ฟัน 1 ตลอด (ดีสุด)", "37.9", "37.4", "37.7"], ["(บนสิบ+ล่างสิบ+ล่างหน่วย) mod 10", "36.6", "36.1", "36.4"], ["เลขร้อน 50 วัน", "36.3", "35.7", "36.0"], ["โมเดลโครงสร้าง D+ทิศทาง (ที่ใช้)", "33.5", "38.3", "35.9"], ["ตำแหน่งเลขเปิดตรง ๆ (ทุกตำแหน่ง)", "33–37", "33–36", "34.5–35.1"], ["ฟัน 5 ตลอด (แย่สุด)", "31.7", "31.9", "31.8"]].map(([n, a, b, c]) => (
+                <tr key={n}><td className="py-1 pr-4">{n}</td><td className="py-1 pr-4 text-right">{a}%</td><td className="py-1 pr-4 text-right">{b}%</td><td className="py-1 text-right font-semibold">{c}%</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <ul className="list-disc space-y-1 pl-5 text-sm">
+          <li>สุ่ม = 34.5% · ทดสอบ 127 สูตร ค่าสูงสุดที่เกิดจากโชคล้วนคาดไว้ ≈ 36.9% → มีแค่ “ฟัน 1 ตลอด” ที่โผล่พ้นเส้นนิดเดียว (เลข 1 อยู่ในทศนิยมปิดของ SENSEX 10.8% แทน 10%) แต่ในข้อมูลของคุณ 74 วันได้ 33.8% — ไม่พอจะเอามาใช้</li>
+          <li>สูตรที่ดีสุดใน 74 วันของคุณคือ (บนสิบ+ล่างหน่วย+Dหน่วย) mod 10 = 44.6% แต่บน 10 ปีได้ 35.9% — ตัวอย่างเล็กหลอกได้เสมอ</li>
+          <li>ลองให้โมเดลโครงสร้างเรียน “ความถี่ทศนิยมปิดของหุ้นตัวนี้” แทนสมมติสม่ำเสมอ (ปรับตามหุ้นแต่ละตัว): 36.3–36.5% เท่าเดิม</li>
+        </ul>
+      </section>
+
+      <section className="card space-y-3">
         <h2 className="font-medium">4. ส่วนที่ทายได้จริง: ทิศทางปิด</h2>
         <p className="text-sm">จากค่าเปิด (เทียบปิดวันก่อน, 10 ปี):</p>
         <p className="text-sm">{DIRECTION_TIERS.map((t) => `≥${t.minPct}% → ${pct(t.sameRate)}`).join(" · ")}</p>
