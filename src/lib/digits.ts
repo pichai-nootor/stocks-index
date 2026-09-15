@@ -223,6 +223,13 @@ export function scoreFromOpen(history: DayDigits[], openTop2: string, openBottom
   }).sort((a, b) => b.p - a.p);
 }
 
+const choose = (a: number, b: number) => { let r = 1; for (let i = 1; i <= b; i++) r = (r * (a - b + i)) / i; return r; };
+/** สุ่มเลือก k เลขไม่ซ้ำ แล้วโผล่อย่างน้อย 1 — เฉลี่ยตามจำนวนเลขปิดจริงของแต่ละวัน (m_i) แทนการปัด m เป็นจำนวนเต็ม */
+export function randomAtLeastOne(closeSizes: number[], k: number) {
+  if (!closeSizes.length) return 0;
+  return closeSizes.reduce((s, m) => s + (10 - m >= k ? 1 - choose(10 - m, k) / choose(10, k) : 1), 0) / closeSizes.length;
+}
+
 export type Backtest = {
   days: number; // จำนวนวันที่ทดสอบ
   /** สำหรับ k = 1,2,3: ทายเลข top-k แล้วโผล่อย่างน้อย 1 ตัว / โผล่ครบทุกตัว */
@@ -249,13 +256,10 @@ export function backtest(days: DayDigits[], minHistory = 0): Backtest {
   }
   const n = perDay.length;
   const avgCloseSize = days.length ? days.reduce((s, d) => s + d.closeDigits.length, 0) / days.length : 0;
-  const choose = (a: number, b: number) => { let r = 1; for (let i = 1; i <= b; i++) r = (r * (a - b + i)) / i; return r; };
   const topK = [1, 2, 3].map((k) => {
     const atLeastOne = n ? perDay.filter((d) => d.predicted.slice(0, k).some((x) => d.actual.includes(x))).length / n : 0;
     const all = n ? perDay.filter((d) => d.predicted.slice(0, k).every((x) => d.actual.includes(x))).length / n : 0;
-    const m = Math.round(avgCloseSize);
-    const randomAtLeastOne = 10 - m >= k ? 1 - choose(10 - m, k) / choose(10, k) : 1;
-    return { k, atLeastOne, all, randomAtLeastOne };
+    return { k, atLeastOne, all, randomAtLeastOne: randomAtLeastOne(perDay.map((d) => d.actual.length), k) };
   });
   return { days: n, topK, avgCloseSize, perDay };
 }
@@ -438,13 +442,10 @@ export function backtestPicks(records: RecordLike[], minHistory = 0): Backtest {
   }
   const n = perDay.length;
   const avgCloseSize = days.length ? days.reduce((s, d) => s + d.closeDigits.length, 0) / days.length : 0;
-  const choose = (a: number, b: number) => { let r = 1; for (let i = 1; i <= b; i++) r = (r * (a - b + i)) / i; return r; };
   const topK = [1, 2, 3].map((k) => {
     const atLeastOne = n ? perDay.filter((d) => d.predicted.slice(0, k).some((x) => d.actual.includes(x))).length / n : 0;
     const all = n ? perDay.filter((d) => d.predicted.slice(0, k).every((x) => d.actual.includes(x))).length / n : 0;
-    const m = Math.round(avgCloseSize);
-    const randomAtLeastOne = 10 - m >= k ? 1 - choose(10 - m, k) / choose(10, k) : 1;
-    return { k, atLeastOne, all, randomAtLeastOne };
+    return { k, atLeastOne, all, randomAtLeastOne: randomAtLeastOne(perDay.map((d) => d.actual.length), k) };
   });
   return {
     days: n, topK, avgCloseSize, perDay,

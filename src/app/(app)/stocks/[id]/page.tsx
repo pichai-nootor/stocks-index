@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { summarize, fmtChange, fmtNum, hasClose, evaluateCalls, CALL_MIN_GAP_PCT } from "@/lib/stats";
-import { pickTwo, top2, bottom2 } from "@/lib/digits";
+import { pickTwo, top2, bottom2, randomAtLeastOne } from "@/lib/digits";
 import { deleteRecord, deleteStock } from "@/app/actions/stocks";
 import { StatCard } from "@/components/stat-card";
 import { Change, PatternBadge } from "@/components/change";
@@ -68,19 +68,20 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
         </div>
       </div>
 
-      {/* ผลงานการฟันธง */}
+      {/* ผลงานการฟันธง — เทียบกับสุ่มตามจำนวนเลขปิดจริงของแต่ละวัน */}
+      {(() => { const sizes = judged.map((j) => j.closeDigits!.length); const rnd1 = randomAtLeastOne(sizes, 1), rnd2 = randomAtLeastOne(sizes, 2); return (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="ฟันธง 1 ตัว ถูก"
           value={judged.length ? `${hit1Count} / ${judged.length} วัน` : "-"}
-          hint={judged.length ? `${Math.round((hit1Count / judged.length) * 100)}% · สุ่มเดา ≈ 40%` : "รอผลปิดวันแรก"}
-          tone={judged.length ? (hit1Count / judged.length > 0.4 ? "up" : "down") : "neutral"}
+          hint={judged.length ? `${Math.round((hit1Count / judged.length) * 100)}% · สุ่มเดา ${Math.round(rnd1 * 100)}% · เพดาน 36%` : "รอผลปิดวันแรก"}
+          tone={judged.length ? (hit1Count / judged.length > rnd1 ? "up" : "down") : "neutral"}
         />
         <StatCard
           label="คู่ 2 ตัว โผล่อย่างน้อย 1"
           value={judged.length ? `${hit2Count} / ${judged.length} วัน` : "-"}
-          hint={judged.length ? `${Math.round((hit2Count / judged.length) * 100)}% · สุ่มเดา ≈ 67%` : undefined}
-          tone={judged.length ? (hit2Count / judged.length > 0.67 ? "up" : "down") : "neutral"}
+          hint={judged.length ? `${Math.round((hit2Count / judged.length) * 100)}% · สุ่มเดา ${Math.round(rnd2 * 100)}% · 10 ปี 63%` : undefined}
+          tone={judged.length ? (hit2Count / judged.length > rnd2 ? "up" : "down") : "neutral"}
         />
         <StatCard
           label={`ฟันทิศทาง (เปิดห่าง ≥${CALL_MIN_GAP_PCT}%)`}
@@ -94,6 +95,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
           hint={pending ? "เติมค่าปิดในตารางด้านล่าง" : "ครบทุกวันแล้ว"}
         />
       </div>
+      ); })()}
 
       <div className="grid gap-6 md:grid-cols-[320px_1fr]">
         <section className="card h-fit">

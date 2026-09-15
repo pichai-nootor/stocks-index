@@ -10,6 +10,7 @@ const links = [
   { href: "/predict", label: "คาดการณ์" },
   { href: "/digits", label: "วิเคราะห์เลขปิด" },
   { href: "/calendar", label: "ปฏิทิน" },
+  { href: "/method", label: "วิธีคิด" },
 ] as const;
 
 export function Nav({ username }: { username: string }) {
