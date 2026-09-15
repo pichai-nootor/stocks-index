@@ -19,7 +19,10 @@ export const MARKET_CLOSE_IST = 930; // 15:30
 
 /** นาทีตั้งแต่เที่ยงคืนตามเวลาอินเดีย (UTC+5:30) */
 export const istMinutes = (d: Date) => ((d.getUTCHours() * 60 + d.getUTCMinutes() + 330) % 1440);
-export const fmtThaiTime = (d: Date) => d.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" });
+/** "HH:MM" เวลาไทย (UTC+7) — คำนวณเองเพื่อให้ server กับ browser ได้ข้อความเดียวกัน (Intl ต่างเครื่องต่างผล → hydration mismatch) */
+export const fmtThaiTime = (d: Date) => { const m = (d.getUTCHours() * 60 + d.getUTCMinutes() + 420) % 1440; return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`; };
+/** วันที่ตามเวลาไทย YYYY-MM-DD */
+export const todayThai = (d = new Date()) => new Date(d.getTime() + 7 * 3600 * 1000).toISOString().slice(0, 10);
 
 export type LiveForecast = {
   price: number;

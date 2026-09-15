@@ -6,7 +6,7 @@ import { FormError } from "@/components/form-error";
 import { OpenMismatch } from "@/components/open-mismatch";
 
 /** เช้า: บันทึกเฉพาะเลขเปิด → ระบบฟันธงทันทีในตารางประวัติ */
-export function RecordForm({ stockId }: { stockId: string }) {
+export function RecordForm({ stockId, today }: { stockId: string; today: string }) {
   const [state, action, pending] = useActionState(createRecord, undefined);
   const ref = useRef<HTMLFormElement>(null);
   const changeRef = useRef<HTMLInputElement>(null);
@@ -14,7 +14,6 @@ export function RecordForm({ stockId }: { stockId: string }) {
     if (changeRef.current) changeRef.current.value = String(v);
     ref.current?.requestSubmit();
   };
-  const today = new Date().toISOString().slice(0, 10);
 
   useEffect(() => {
     if (state === undefined) ref.current?.reset();

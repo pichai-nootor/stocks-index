@@ -8,7 +8,7 @@ import { OpenForm } from "@/components/open-form";
 import { TodayCard } from "@/components/today-card";
 import { YahooOpenButton } from "@/components/yahoo-open-button";
 import { fetchQuote } from "@/lib/yahoo";
-import { evaluateLiveCalls } from "@/lib/intraday";
+import { evaluateLiveCalls, todayThai } from "@/lib/intraday";
 
 export default async function DashboardPage({ searchParams }: PageProps<"/dashboard">) {
   const { userId } = await requireUser();
@@ -19,7 +19,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
     include: { records: { orderBy: { date: "asc" } } },
     orderBy: { symbol: "asc" },
   });
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayThai();
 
   // ราคาสดจาก Yahoo ต่อหุ้น (ดึงครั้งเดียวต่อการโหลดหน้า; หุ้นที่ไม่รู้จักสัญลักษณ์ → null)
   const quotes = new Map(await Promise.all(stocks.map(async (s) => [s.id, await fetchQuote(s.symbol)] as const)));
@@ -78,7 +78,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
             const q = quotes.get(defaultStock.id);
             // ซ่อนถ้าวันซื้อขายล่าสุดของ Yahoo มีผลปิดในระบบแล้ว (= วันนี้ตลาดยังไม่เปิด)
             const done = q && defaultStock.records.some((r) => r.date.toISOString().slice(0, 10) === q.tradingDate && hasClose(r));
-            return q && !done ? { tradingDate: q.tradingDate, open: q.open, prevClose: q.prevClose } : null;
+            return q && !done ? { tradingDate: q.tradingDate, dateLabel: new Date(q.tradingDate).toLocaleDateString("th-TH", { day: "numeric", month: "short" }), open: q.open, prevClose: q.prevClose } : null;
           })()} />
           {(() => { const q = quotes.get(defaultStock.id); return q && defaultStock.records.some((r) => r.date.toISOString().slice(0, 10) === q.tradingDate && hasClose(r)) ? <p className="text-xs text-slate-500">Yahoo ยังอยู่ที่วัน {q.tradingDate} (บันทึกครบแล้ว) — ปุ่มดึงเปิดจะขึ้นหลังตลาดเปิด 10:45 น. ไทย</p> : null; })()}
           <OpenForm stocks={stocks} stockId={defaultStock.id} date={today} redirectTo="dashboard" />

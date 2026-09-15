@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { summarize, fmtChange, fmtNum, hasClose, evaluateCalls, CALL_MIN_GAP_PCT } from "@/lib/stats";
 import { pickTwo, top2, bottom2, randomAtLeastOne } from "@/lib/digits";
+import { todayThai } from "@/lib/intraday";
 import { deleteRecord, deleteStock } from "@/app/actions/stocks";
 import { StatCard } from "@/components/stat-card";
 import { Change, PatternBadge } from "@/components/change";
@@ -100,7 +101,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
       <div className="grid gap-6 md:grid-cols-[320px_1fr]">
         <section className="card h-fit">
           <h2 className="font-medium">บันทึกเปิดวันนี้</h2>
-          <RecordForm stockId={stock.id} />
+          <RecordForm stockId={stock.id} today={todayThai()} />
         </section>
 
         <section className="card p-0">

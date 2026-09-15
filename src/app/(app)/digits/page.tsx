@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { toDayDigits, scoreFromOpen, pickDigits, pickPair, pickTwo, pairProbs, PAIR_BASE, backtestPicks, fitModel, top2, bottom2, POSITIONS, positionLabel, positionDigits, prevCloseCents, exactDigitProbs } from "@/lib/digits";
 import { summarize, forecastDirection, checkOpen } from "@/lib/stats";
 import { OpenWarning } from "@/components/open-warning";
+import { todayThai } from "@/lib/intraday";
 import { DirectionCard } from "@/components/direction-card";
 import { TwoPickCard } from "@/components/two-pick";
 import { TopToBottom } from "./top-to-bottom";
@@ -26,7 +27,7 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
   const defaultStock = [...stocks].sort((a, b) => b._count.records - a._count.records)[0];
   const stockId = typeof sp.stock === "string" && stocks.some((s) => s.id === sp.stock) ? sp.stock : defaultStock?.id ?? "";
   const selected = stocks.find((s) => s.id === stockId);
-  const dateRaw = typeof sp.date === "string" ? sp.date : new Date().toISOString().slice(0, 10);
+  const dateRaw = typeof sp.date === "string" ? sp.date : todayThai();
   const page = Number(sp.page) || 1;
   const saved = sp.saved === "1";
   const openValueRaw = typeof sp.openValue === "string" ? sp.openValue : "";
