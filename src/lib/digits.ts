@@ -300,8 +300,8 @@ export function exactDigitProbs(D: number, pUp = 0.5): { digit: string; p: numbe
   return digitPositionProbs(D, pUp).map(({ digit, p }) => ({ digit, p }));
 }
 
-/** เรียงมาก→น้อย; เสมอกัน (ต่างกันแค่ floating point) → เลขน้อยก่อน เพื่อให้ทุกหน้าฟันเลขเดียวกัน */
-const byProb = <T extends { p: number; digit: string }>(a: T, b: T) => Math.round(b.p * 1e9) - Math.round(a.p * 1e9) || a.digit.localeCompare(b.digit);
+/** เรียงมาก→น้อย; เสมอกัน (ต่างกันแค่ floating point) → เลขมากก่อน เพื่อให้ทุกหน้าฟันเลขเดียวกัน (กฎตัดสินเสมอทุกแบบได้ ~36% เท่ากันบน 10 ปี) */
+const byProb = <T extends { p: number; digit: string }>(a: T, b: T) => Math.round(b.p * 1e9) - Math.round(a.p * 1e9) || b.digit.localeCompare(a.digit);
 
 /* ---------- ฟันคู่: เลือก 2 ตัวที่ "มาทั้งคู่" บ่อยสุด ---------- */
 
@@ -378,8 +378,9 @@ export const tiedGroup = <T extends { p: number; digit: string }>(sorted: T[]) =
   sorted.filter((d) => Math.round(d.p * 1e6) === Math.round(sorted[0].p * 1e6)).map((d) => d.digit);
 
 /**
- * ฟัน 2 ตัวจากเลขเดี่ยว: ตัวแรก = โอกาสโผล่สูงสุด, ตัวที่สอง = ตัวที่ทำให้ "อย่างน้อย 1 ใน 2 โผล่" สูงสุดเมื่อคู่กับตัวแรก
- * (เลขเดี่ยวมักเสมอกันหลายตัว การเลือกตัวที่สองแบบนี้ใช้ตัดสินเสมอ และเก็บ ≥1 ได้ ~63% แทน 61%)
+ * ฟัน 2 ตัวจากเลขเดี่ยว
+ *   ตัวหลัก = เลขที่โอกาสโผล่สูงสุด (เสมอกัน → เลขมากก่อน; วันส่วนใหญ่เสมอกัน 6–8 ตัว ทุกกฎตัดสินเสมอได้ ~36% เท่ากันบน 10 ปี)
+ *   ตัวรอง = คู่ของตัวหลักที่ทำให้ "อย่างน้อย 1 ใน 2 โผล่" สูงสุด (10 ปี 63.5% เทียบสุ่ม 59%)
  */
 export function pickTwo(openValue: number, openChange: number, priceHistory: RecordLike[] = []): TwoPick {
   const D = prevCloseCents(openValue, openChange);
@@ -391,7 +392,7 @@ export function pickTwo(openValue: number, openChange: number, priceHistory: Rec
   for (const d of details.slice(1)) {
     let any = 0, both = 0;
     for (const o of O) { const a = o.set.has(first.digit), b = o.set.has(d.digit); if (a || b) any += o.w; if (a && b) both += o.w; }
-    if (!best || any > best.any + 1e-9) best = { d, any, both };
+    if (!best || Math.round(any * 1e9) > Math.round(best.any * 1e9)) best = { d, any, both };
   }
   return { digits: [first, best!.d], pAny: best!.any, pBoth: best!.both, tiedWithMain: tiedGroup(details) };
 }

@@ -232,7 +232,7 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
                 <tbody className="divide-y divide-slate-100">
                   {bt.topK.map((r) => (
                     <tr key={r.k}>
-                      <td className="py-1.5 pr-4">{r.k === 1 ? "ตัวหลัก" : r.k === 2 ? "ฟัน 2 ตัว (หลัก + รอง)" : "3 เลขอันดับแรก"}</td>
+                      <td className="py-1.5 pr-4">{r.k === 1 ? "ตัวหลัก (ตัวที่หยิบ)" : r.k === 2 ? "ฟัน 2 ตัว (หลัก + รอง)" : "3 เลขอันดับแรก"}</td>
                       <td className={`py-1.5 pr-4 text-right font-semibold ${r.atLeastOne > r.randomAtLeastOne ? "text-emerald-600" : "text-slate-700"}`}>{pct(r.atLeastOne)}</td>
                       <td className="py-1.5 pr-4 text-right">{pct(r.all)}</td>
                       <td className="py-1.5 text-right text-slate-400">{pct(r.randomAtLeastOne)}</td>
@@ -240,7 +240,7 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
                   ))}
                   {bt.fairTop1 !== undefined && (
                     <tr className="text-slate-600">
-                      <td className="py-1.5 pr-4">ตัวหลักแบบยุติธรรม <span className="text-xs text-slate-400">(วันเสมอกัน {bt.tieDays} วัน นับสัดส่วนกลุ่มที่โผล่ — ไม่ขึ้นกับว่าหยิบตัวไหน)</span></td>
+                      <td className="py-1.5 pr-4">ตัวหลัก (วัดทั้งกลุ่มที่เสมอ) <span className="text-xs text-slate-400">— เสมอกัน {bt.tieDays} วัน นับสัดส่วนกลุ่มที่โผล่ ไม่ขึ้นกับว่าหยิบตัวไหน</span></td>
                       <td className="py-1.5 pr-4 text-right font-semibold">{pct(bt.fairTop1)}</td>
                       <td className="py-1.5 pr-4 text-right">–</td>
                       <td className="py-1.5 text-right text-slate-400">10 ปี 36%</td>

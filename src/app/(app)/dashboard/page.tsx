@@ -123,7 +123,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
           <div>
             <h2 className="font-medium">ผลงานฟันเลข 2 ตัว <span className="text-xs font-normal text-slate-500">10 ปี: ตัวหลัก 36% · ≥1 ใน 2 ≈ 63% (สุ่ม 59%)</span></h2>
-            <p className="text-xs text-slate-500">* วันส่วนใหญ่เลขเสมอกัน 6–8 ตัว “ตัวหลักถูก” จึงแกว่งตามว่าหยิบตัวไหน — คอลัมน์ยุติธรรมนับสัดส่วนของกลุ่มที่เสมอที่โผล่จริง</p>
+            <p className="text-xs text-slate-500">* วันส่วนใหญ่เลขเสมอกัน 6–8 ตัว จึงวัดด้วยสัดส่วนของกลุ่มที่เสมอที่โผล่จริง (ไม่ขึ้นกับว่าหยิบตัวไหน) — “ตัวที่หยิบถูก” คือเลขตัวเดียวที่ระบบหยิบ แกว่งตามโชค</p>
           </div>
           <Link href="/stocks" className="text-sm text-blue-600 hover:underline">จัดการหุ้น</Link>
         </div>
@@ -133,8 +133,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
               <tr>
                 <th className="px-5 py-2">หุ้น</th>
                 <th className="px-5 py-2 text-right">วันที่ปิดแล้ว</th>
-                <th className="px-5 py-2 text-right">ตัวหลักถูก</th>
-                <th className="px-5 py-2 text-right">ยุติธรรม*</th>
+                <th className="px-5 py-2 text-right">ตัวหลัก*</th>
+                <th className="px-5 py-2 text-right text-slate-400">ตัวที่หยิบถูก</th>
                 <th className="px-5 py-2 text-right">2 ตัว ≥1 ถูก</th>
                 <th className="px-5 py-2 text-right">2 ตัวถูกทั้งคู่</th>
                 <th className="px-5 py-2">ผลล่าสุด</th>
@@ -148,8 +148,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
                     {stock.name && <span className="ml-2 text-slate-500">{stock.name}</span>}
                   </td>
                   <td className="px-5 py-2.5 text-right">{n}</td>
-                  <td className={`px-5 py-2.5 text-right font-semibold ${n && hit1 / n > 0.4 ? "text-emerald-600" : ""}`}>{n ? `${hit1}/${n} (${Math.round((hit1 / n) * 100)}%)` : "-"}</td>
-                  <td className="px-5 py-2.5 text-right text-slate-600">{n ? `${Math.round((fair / n) * 100)}%` : "-"}</td>
+                  <td className={`px-5 py-2.5 text-right font-semibold ${n && fair / n > 0.36 ? "text-emerald-600" : ""}`}>{n ? `${Math.round((fair / n) * 100)}%` : "-"}</td>
+                  <td className="px-5 py-2.5 text-right text-slate-400">{n ? `${hit1}/${n} (${Math.round((hit1 / n) * 100)}%)` : "-"}</td>
                   <td className={`px-5 py-2.5 text-right font-semibold ${n && hit2 / n > 0.63 ? "text-emerald-600" : ""}`}>{n ? `${hit2}/${n} (${Math.round((hit2 / n) * 100)}%)` : "-"}</td>
                   <td className="px-5 py-2.5 text-right">{n ? `${hitBoth}/${n} (${Math.round((hitBoth / n) * 100)}%)` : "-"}</td>
                   <td className="px-5 py-2.5 whitespace-nowrap">

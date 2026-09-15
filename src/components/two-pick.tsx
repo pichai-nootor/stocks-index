@@ -48,7 +48,7 @@ export function TwoPickCard({ two, tied, score }: {
       {two.tiedWithMain.length > 1 && (
         <p className="mt-1 text-xs text-slate-600">
           วันนี้เสมอกัน {two.tiedWithMain.length} ตัว: <span className="font-mono font-semibold">{two.tiedWithMain.join(" ")}</span> ทุกตัว {pct(two.digits[0].p)} เท่ากันเป๊ะ
-          — ตัวหลักเป็นแค่ตัวแทน (เลือกเลขน้อยสุด) เลือกตัวอื่นในกลุ่มนี้แทนได้ โอกาสเท่ากัน
+          — ตัวหลักเลือกเลขมากสุดในกลุ่ม ตัวอื่นในกลุ่มโอกาสเท่ากัน
         </p>
       )}
       <div className="mt-2 grid gap-3 sm:grid-cols-2">
