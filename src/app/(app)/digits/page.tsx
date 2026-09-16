@@ -5,6 +5,7 @@ import { toDayDigits, scoreFromOpen, pickDigits, pickPair, pickTwo, pairProbs, P
 import { summarize, forecastDirection, checkOpen } from "@/lib/stats";
 import { OpenWarning } from "@/components/open-warning";
 import { todayThai } from "@/lib/intraday";
+import { SHOW_DIRECTION } from "@/lib/config";
 import { DirectionCard } from "@/components/direction-card";
 import { TwoPickCard } from "@/components/two-pick";
 import { TopToBottom } from "./top-to-bottom";
@@ -135,7 +136,7 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <DirectionCard f={df!} compact />
+                  {SHOW_DIRECTION && <DirectionCard f={df!} compact />}
                   <p className="mt-2 text-xs text-slate-500">
                     {dirGroup.count
                       ? `ของคุณ ${dirGroup.count} วันที่เปิดแบบเดียวกัน: ปิด+ ${dirGroup.closeUp} · ปิด− ${dirGroup.closeDown}`

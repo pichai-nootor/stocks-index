@@ -2,6 +2,7 @@ import Link from "next/link";
 import { pickPair, pickTwo, top2, bottom2, prevCloseCents } from "@/lib/digits";
 import { TwoPickCard } from "@/components/two-pick";
 import { LiveCard } from "@/components/live-card";
+import { SHOW_DIRECTION } from "@/lib/config";
 import { fmtNum, fmtChange, forecastDirection, forecastClose, directionCall, evaluateCalls, checkOpen, type Summary, type RecordLike } from "@/lib/stats";
 import { OpenWarning } from "@/components/open-warning";
 import { CallCard } from "@/components/call-card";
@@ -46,6 +47,7 @@ export function TodayCard({ stock, record, priceStats, priceHistory = [], live =
       </div>
 
       {check.mismatch && <div className="mt-3"><OpenWarning check={check} fixHref={`/digits?stock=${stock.id}&date=${dateStr}&openValue=${record.openValue}&openChange=${check.suggestedOpenChange}`} /></div>}
+      {SHOW_DIRECTION && (<>
       <div className={`mt-3 grid gap-3 ${call.call ? "lg:grid-cols-2" : ""}`}>
         <LiveCard recordId={record.id} prevClose={record.openValue - record.openChange} live={live} saved={record.liveValue !== null && record.liveAt ? { price: record.liveValue, at: record.liveAt.toISOString() } : null} score={liveScore} />
         {/* ฟันจากเปิดอย่างเดียว (เปิดห่าง ≥1%) — โชว์เฉพาะวันที่เข้าเกณฑ์ เป็นเสียงยืนยันเพิ่ม */}
@@ -56,6 +58,7 @@ export function TodayCard({ stock, record, priceStats, priceHistory = [], live =
         <DirectionCard f={df} compact />
       </div>
 
+      </>)}
       <div className="mt-3"><TwoPickCard two={two} tied={pp} /></div>
 
       <div className="mt-3 grid gap-4 sm:grid-cols-3">
@@ -72,10 +75,12 @@ export function TodayCard({ stock, record, priceStats, priceHistory = [], live =
             <dt className="text-xs text-slate-500">ปิดวันก่อน → D</dt>
             <dd className="tabular-nums">{fmtNum(record.openValue - record.openChange)} → <span className="font-mono font-semibold">{String(D).padStart(2, "0")}</span></dd>
           </div>
+          {SHOW_DIRECTION && (
           <div>
             <dt className="text-xs text-slate-500">ทิศทาง (เปิด {record.openChange < 0 ? "−" : "+"})</dt>
             <dd><span className={`font-semibold ${pUp >= 0.5 ? "text-emerald-600" : "text-red-600"}`}>ปิดขึ้น {pct(pUp)}</span> <span className="text-xs text-slate-500">(ของคุณ {dir.count} วัน)</span></dd>
           </div>
+          )}
         </dl>
       </div>
 

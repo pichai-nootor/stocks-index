@@ -9,6 +9,7 @@ import { TodayCard } from "@/components/today-card";
 import { YahooOpenButton } from "@/components/yahoo-open-button";
 import { fetchQuote } from "@/lib/yahoo";
 import { evaluateLiveCalls, todayThai } from "@/lib/intraday";
+import { SHOW_DIRECTION } from "@/lib/config";
 
 export default async function DashboardPage({ searchParams }: PageProps<"/dashboard">) {
   const { userId } = await requireUser();
@@ -97,7 +98,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
       )}
 
       {/* ผลการฟันทิศทาง (เฉพาะวันที่มั่นใจ) */}
-      <section className="card p-0">
+      {SHOW_DIRECTION && <section className="card p-0">
         <div className="border-b border-slate-200 px-5 py-3">
           <h2 className="font-medium">ผลการฟันทิศทาง — จากเปิด (เฉพาะวันที่เปิดห่าง ≥ {CALL_MIN_GAP_PCT}%) และ ฟันสด (ราคาระหว่างวัน)</h2>
           <p className="text-xs text-slate-500">จากเปิดฟันได้ราว 1 ใน 15 วัน · ฟันสดฟันได้เกือบทุกวันถ้าเช็กหลัง 13:45 น. ไทย และราคาห่างจากปิดเมื่อวาน ≥0.25% · นับเฉพาะวันที่ฟันและมีผลปิดแล้ว</p>
@@ -141,7 +142,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
             </tbody>
           </table>
         </div>
-      </section>
+      </section>}
 
       {/* สกอร์เลข */}
       <section className="card p-0">

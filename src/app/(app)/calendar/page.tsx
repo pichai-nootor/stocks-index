@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { hasClose, summarize, fmtNum, fmtChange } from "@/lib/stats";
 import { pickTwo, top2, bottom2 } from "@/lib/digits";
+import { SHOW_DIRECTION } from "@/lib/config";
 import { Digits } from "@/components/digit-badges";
 
 const TH_MONTHS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
@@ -84,7 +85,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
         <div className="card"><p className="text-xs text-slate-500">วันที่มีข้อมูล</p><p className="text-2xl font-semibold">{monthRecs.length}</p></div>
         <div className="card"><p className="text-xs text-slate-500">★ ตัวเด่นถูก</p><p className={`text-2xl font-semibold ${monthRecs.length && hit1 / monthRecs.length > 0.4 ? "text-emerald-600" : ""}`}>{monthRecs.length ? `${hit1}/${monthRecs.length}` : "-"}</p><p className="text-xs text-slate-500">{monthRecs.length ? `${Math.round((hit1 / monthRecs.length) * 100)}% · สุ่ม ≈ 34%` : ""}</p></div>
         <div className="card"><p className="text-xs text-slate-500">คู่โผล่ ≥1</p><p className="text-2xl font-semibold">{monthRecs.length ? `${hit2}/${monthRecs.length}` : "-"}</p><p className="text-xs text-slate-500">{monthRecs.length ? `${Math.round((hit2 / monthRecs.length) * 100)}% · สุ่ม ≈ 59%` : ""}</p></div>
-        <div className="card"><p className="text-xs text-slate-500">ทิศทาง</p><p className="text-sm"><span className="text-emerald-600">ปิด+ {st.all.closeUp}</span> · <span className="text-red-600">ปิด− {st.all.closeDown}</span></p><p className="text-xs text-slate-500">เปิด+→ปิด+ {st.whenOpenUp.count ? `${st.patterns.upUp}/${st.whenOpenUp.count}` : "-"} · เปิด−→ปิด− {st.whenOpenDown.count ? `${st.patterns.downDown}/${st.whenOpenDown.count}` : "-"}</p></div>
+        {SHOW_DIRECTION && <div className="card"><p className="text-xs text-slate-500">ทิศทาง</p><p className="text-sm"><span className="text-emerald-600">ปิด+ {st.all.closeUp}</span> · <span className="text-red-600">ปิด− {st.all.closeDown}</span></p><p className="text-xs text-slate-500">เปิด+→ปิด+ {st.whenOpenUp.count ? `${st.patterns.upUp}/${st.whenOpenUp.count}` : "-"} · เปิด−→ปิด− {st.whenOpenDown.count ? `${st.patterns.downDown}/${st.whenOpenDown.count}` : "-"}</p></div>}
       </div>
 
       {/* ปฏิทิน */}

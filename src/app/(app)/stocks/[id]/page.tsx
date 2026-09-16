@@ -8,6 +8,7 @@ import { todayThai, liveDirection, fmtThaiTime, evaluateLiveCalls } from "@/lib/
 import { fetchQuote } from "@/lib/yahoo";
 import { LiveSaveButton } from "@/components/live-save-button";
 import { LiveManualForm } from "@/components/live-manual-form";
+import { SHOW_DIRECTION } from "@/lib/config";
 import { deleteRecord, deleteStock } from "@/app/actions/stocks";
 import { StatCard } from "@/components/stat-card";
 import { Change, PatternBadge } from "@/components/change";
@@ -47,7 +48,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
   }).reverse();
 
   // ราคาสดจาก Yahoo สำหรับวันที่ยังไม่ปิด (ถ้ามี) — ให้ฟันสดได้จากหน้านี้เลย
-  const quote = stock.records.some((r) => !hasClose(r)) ? await fetchQuote(stock.symbol) : null;
+  const quote = SHOW_DIRECTION && stock.records.some((r) => !hasClose(r)) ? await fetchQuote(stock.symbol) : null;
   const liveNow = quote && !quote.closed ? { date: quote.tradingDate, source: quote.source, f: liveDirection(quote.prevClose, quote.last, quote.lastAt) } : null;
 
   const liveCalls = evaluateLiveCalls(stock.records);
@@ -81,7 +82,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
 
       {/* ผลงานการฟันธง — เทียบกับสุ่มตามจำนวนเลขปิดจริงของแต่ละวัน */}
       {(() => { const sizes = judged.map((j) => j.closeDigits!.length); const rnd1 = randomAtLeastOne(sizes, 1), rnd2 = randomAtLeastOne(sizes, 2); return (
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className={`grid gap-4 sm:grid-cols-2 ${SHOW_DIRECTION ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
         <StatCard
           label="★ ตัวเด่น ถูก"
           value={judged.length ? `${hit1Count} / ${judged.length} วัน` : "-"}
@@ -94,14 +95,14 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
           hint={judged.length ? `${Math.round((hit2Count / judged.length) * 100)}% · สุ่มเดา ${Math.round(rnd2 * 100)}% · 10 ปี 63%` : undefined}
           tone={judged.length ? (hit2Count / judged.length > rnd2 ? "up" : "down") : "neutral"}
         />
-        <StatCard
+        {SHOW_DIRECTION && <StatCard
           label="ฟันสด (ทิศทาง) ถูก"
           value={liveCalls.called ? `${liveCalls.hits} / ${liveCalls.called} วัน` : "-"}
           hint={liveCalls.called
             ? `${Math.round((liveCalls.hits / liveCalls.called) * 100)}%${liveCalls.skipped ? ` · ไม่เข้าเกณฑ์ ${liveCalls.skipped} วัน` : ""} · จากเปิด ≥${CALL_MIN_GAP_PCT}%: ${calls.hits}/${calls.called}`
             : `ยังไม่มีวันที่ฟันสดแล้วปิด · จากเปิด ≥${CALL_MIN_GAP_PCT}%: ${calls.called ? `${calls.hits}/${calls.called}` : "-"}`}
           tone={liveCalls.called ? (liveCalls.hits / liveCalls.called >= 0.85 ? "up" : "down") : "neutral"}
-        />
+        />}
         <StatCard
           label="รอผลปิด"
           value={String(pending)}
@@ -120,7 +121,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
         <section className="card min-w-0 p-0">
           <div className="border-b border-slate-200 px-5 py-3">
             <h2 className="font-medium">ประวัติ + ผลฟันธงรายวัน</h2>
-            <p className="text-xs text-slate-500">ฟันจาก D (ทศนิยมปิดวันก่อน) + ทิศทางตามขนาดที่เปิด · เหลือง = เลขที่ฟันแล้วโผล่จริง · เพดานวิธีนี้ ≈ 36%</p>
+            <p className="text-xs text-slate-500">ฟันจาก D (ทศนิยมปิดวันก่อน) ไล่ทุกกรณี บน 00–99 · เหลือง = เลขที่ฟันแล้วโผล่จริง · เพดานวิธีนี้ ≈ 36%</p>
           </div>
           {rows.length === 0 ? (
             <p className="px-5 py-8 text-center text-sm text-slate-500">ยังไม่มีข้อมูล เริ่มบันทึกเปิดได้จากฟอร์มด้านซ้าย</p>
@@ -132,7 +133,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                     <th className="px-3 py-2">วันที่</th>
                     <th className="px-3 py-2">เปิด</th>
                     <th className="px-3 py-2">เลขเปิด</th>
-                    <th className="px-3 py-2">ทิศทาง</th>
+                    {SHOW_DIRECTION && <th className="px-3 py-2">ทิศทาง</th>}
                     <th className="px-3 py-2 bg-amber-50 text-amber-800">ฟัน 2 ตัว (★ เด่น)</th>
                     <th className="px-3 py-2">ปิด</th>
                     <th className="px-3 py-2">เลขปิด</th>
@@ -148,7 +149,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                         {fmtNum(r.openValue)}<br /><Change value={r.openChange} className="text-xs" />
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap"><Digits value={oTop} /> <Digits value={oBot} /></td>
-                      <td className="px-3 py-2 whitespace-nowrap text-xs">
+                      {SHOW_DIRECTION && <td className="px-3 py-2 whitespace-nowrap text-xs">
                         {/* ฟันสด (ถ้าบันทึกราคาระหว่างวันไว้) แสดงก่อน; วันที่ยังไม่ปิดและยังไม่ฟันสด → ชี้ไปหน้าแรก */}
                         {r.liveValue !== null && r.liveAt !== null && (() => {
                           const f = liveDirection(r.openValue - r.openChange, r.liveValue, r.liveAt);
@@ -172,7 +173,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                             ? <Link href="/dashboard" className="text-blue-600 hover:underline">ฟันสดที่หน้าแรก →</Link>
                             : hasClose(r) && r.liveValue === null ? <span className="text-slate-300">–</span> : null;
                           return <span className={`rounded px-1.5 py-0.5 font-medium ${c.hit === true ? "bg-emerald-100 text-emerald-800" : c.hit === false ? "bg-red-100 text-red-800 line-through" : "bg-amber-100 text-amber-800"}`}>จากเปิด {c.call === "up" ? "▲ บวก" : "▼ ลบ"}{c.hit === true ? " ✓" : c.hit === false ? " ✗" : ""}</span>; })()}
-                      </td>
+                      </td>}
                       <td className="px-3 py-2 whitespace-nowrap bg-amber-50/50">
                         <span className="flex items-center gap-1.5">
                           {pair.map((d) => {
