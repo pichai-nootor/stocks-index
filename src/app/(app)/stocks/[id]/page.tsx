@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { summarize, fmtChange, fmtNum, hasClose, evaluateCalls, CALL_MIN_GAP_PCT } from "@/lib/stats";
 import { pickTwo, top2, bottom2, randomAtLeastOne } from "@/lib/digits";
-import { todayThai, liveDirection, fmtThaiTime } from "@/lib/intraday";
+import { todayThai, liveDirection, fmtThaiTime, evaluateLiveCalls } from "@/lib/intraday";
 import { fetchQuote } from "@/lib/yahoo";
 import { LiveSaveButton } from "@/components/live-save-button";
 import { LiveManualForm } from "@/components/live-manual-form";
@@ -50,6 +50,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
   const quote = stock.records.some((r) => !hasClose(r)) ? await fetchQuote(stock.symbol) : null;
   const liveNow = quote && !quote.closed ? { date: quote.tradingDate, f: liveDirection(quote.prevClose, quote.last, quote.lastAt) } : null;
 
+  const liveCalls = evaluateLiveCalls(stock.records);
   const calls = evaluateCalls(stock.records);
   const callByDate = new Map(calls.perDay.map((d) => [d.date.getTime(), d]));
   const paged = paginate(rows, page);
@@ -94,10 +95,12 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
           tone={judged.length ? (hit2Count / judged.length > rnd2 ? "up" : "down") : "neutral"}
         />
         <StatCard
-          label={`ฟันทิศทาง (เปิดห่าง ≥${CALL_MIN_GAP_PCT}%)`}
-          value={calls.called ? `${calls.hits} / ${calls.called} วัน` : "-"}
-          hint={calls.called ? `${Math.round((calls.hits / calls.called) * 100)}% · ไม่ฟัน ${calls.skipped} วัน` : "ยังไม่มีวันที่เข้าเกณฑ์"}
-          tone={calls.called ? (calls.hits / calls.called >= 0.7 ? "up" : "down") : "neutral"}
+          label="ฟันสด (ทิศทาง) ถูก"
+          value={liveCalls.called ? `${liveCalls.hits} / ${liveCalls.called} วัน` : "-"}
+          hint={liveCalls.called
+            ? `${Math.round((liveCalls.hits / liveCalls.called) * 100)}%${liveCalls.skipped ? ` · ไม่เข้าเกณฑ์ ${liveCalls.skipped} วัน` : ""} · จากเปิด ≥${CALL_MIN_GAP_PCT}%: ${calls.hits}/${calls.called}`
+            : `ยังไม่มีวันที่ฟันสดแล้วปิด · จากเปิด ≥${CALL_MIN_GAP_PCT}%: ${calls.called ? `${calls.hits}/${calls.called}` : "-"}`}
+          tone={liveCalls.called ? (liveCalls.hits / liveCalls.called >= 0.85 ? "up" : "down") : "neutral"}
         />
         <StatCard
           label="รอผลปิด"
