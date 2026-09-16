@@ -160,11 +160,12 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                             <div><LiveSaveButton recordId={r.id} label={r.liveValue === null ? "บันทึกฟันสดตอนนี้" : "อัปเดตฟันสด"} /></div>
                           </div>
                         )}
+                        {/* ฟันจากเปิด (เปิดห่าง ≥1%) แสดงเฉพาะวันที่ฟันจริง — วันอื่นไม่ต้องบอกว่า "ไม่ฟัน" */}
                         {(() => { const c = callByDate.get(r.date.getTime());
                           if (!c || !c.call) return !hasClose(r) && r.liveValue === null && !liveNow
                             ? <Link href="/dashboard" className="text-blue-600 hover:underline">ฟันสดที่หน้าแรก →</Link>
-                            : <span className="text-slate-400">จากเปิด: ไม่ฟัน</span>;
-                          return <span className={`rounded px-1.5 py-0.5 font-medium ${c.hit === true ? "bg-emerald-100 text-emerald-800" : c.hit === false ? "bg-red-100 text-red-800 line-through" : "bg-amber-100 text-amber-800"}`}>{c.call === "up" ? "▲ บวก" : "▼ ลบ"}{c.hit === true ? " ✓" : c.hit === false ? " ✗" : ""}</span>; })()}
+                            : hasClose(r) && r.liveValue === null ? <span className="text-slate-300">–</span> : null;
+                          return <span className={`rounded px-1.5 py-0.5 font-medium ${c.hit === true ? "bg-emerald-100 text-emerald-800" : c.hit === false ? "bg-red-100 text-red-800 line-through" : "bg-amber-100 text-amber-800"}`}>จากเปิด {c.call === "up" ? "▲ บวก" : "▼ ลบ"}{c.hit === true ? " ✓" : c.hit === false ? " ✗" : ""}</span>; })()}
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap bg-amber-50/50">
                         <span className="flex items-center gap-1.5">

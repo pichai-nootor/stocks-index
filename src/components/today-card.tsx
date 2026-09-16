@@ -46,9 +46,10 @@ export function TodayCard({ stock, record, priceStats, priceHistory = [], live =
       </div>
 
       {check.mismatch && <div className="mt-3"><OpenWarning check={check} fixHref={`/digits?stock=${stock.id}&date=${dateStr}&openValue=${record.openValue}&openChange=${check.suggestedOpenChange}`} /></div>}
-      <div className="mt-3 grid gap-3 lg:grid-cols-2">
+      <div className={`mt-3 grid gap-3 ${call.call ? "lg:grid-cols-2" : ""}`}>
         <LiveCard recordId={record.id} prevClose={record.openValue - record.openChange} live={live} saved={record.liveValue !== null && record.liveAt ? { price: record.liveValue, at: record.liveAt.toISOString() } : null} score={liveScore} />
-        <CallCard c={call} score={{ called: ev.called, hits: ev.hits }} />
+        {/* ฟันจากเปิดอย่างเดียว (เปิดห่าง ≥1%) — โชว์เฉพาะวันที่เข้าเกณฑ์ เป็นเสียงยืนยันเพิ่ม */}
+        {call.call && <CallCard c={call} score={{ called: ev.called, hits: ev.hits }} />}
       </div>
       <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <CloseForecastCard open={record.openValue} f={cf} dir={df} />
