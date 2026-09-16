@@ -25,14 +25,14 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
 
   // ฟันธง + ผล ของทุกวัน (ใช้ข้อมูลก่อนหน้าวันนั้น)
   const byDate = new Map<string, {
-    r: (typeof all)[number]; pick: string; pair: string[]; third: string; hit1: boolean | null; hit2: string[]; hit3: boolean;
+    r: (typeof all)[number]; pick: string; pair: string[]; third: string; star: string; hit1: boolean | null; hit2: string[]; hit3: boolean;
   }>();
   for (const r of all) {
     const hist = closed.filter((d) => d.date.getTime() < r.date.getTime());
     const two = pickTwo(r.openValue, r.openChange, hist);
-    const pair = two.digits.map((x) => x.digit), pick = pair[0], third = two.third.digit;
+    const pair = two.digits.map((x) => x.digit), pick = two.standout.digit, third = two.third.digit, star = pick;
     const cd = hasClose(r) ? [...new Set((top2(r.closeValue) + bottom2(r.closeChange)).split(""))] : null;
-    byDate.set(r.date.toISOString().slice(0, 10), { r, pick, pair, third, hit1: cd ? cd.includes(pick) : null, hit2: cd ? pair.filter((d) => cd.includes(d)) : [], hit3: cd ? cd.includes(third) : false });
+    byDate.set(r.date.toISOString().slice(0, 10), { r, pick, pair, third, star, hit1: cd ? cd.includes(pick) : null, hit2: cd ? pair.filter((d) => cd.includes(d)) : [], hit3: cd ? cd.includes(third) : false });
   }
 
   // ตารางเดือน (เริ่มวันจันทร์)
@@ -83,7 +83,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
       {/* สรุปเดือน */}
       <div className="grid gap-4 sm:grid-cols-4">
         <div className="card"><p className="text-xs text-slate-500">วันที่มีข้อมูล</p><p className="text-2xl font-semibold">{monthRecs.length}</p></div>
-        <div className="card"><p className="text-xs text-slate-500">ฟัน 1 ตัวถูก</p><p className={`text-2xl font-semibold ${monthRecs.length && hit1 / monthRecs.length > 0.4 ? "text-emerald-600" : ""}`}>{monthRecs.length ? `${hit1}/${monthRecs.length}` : "-"}</p><p className="text-xs text-slate-500">{monthRecs.length ? `${Math.round((hit1 / monthRecs.length) * 100)}% · สุ่ม ≈ 34%` : ""}</p></div>
+        <div className="card"><p className="text-xs text-slate-500">★ ตัวเด่นถูก</p><p className={`text-2xl font-semibold ${monthRecs.length && hit1 / monthRecs.length > 0.4 ? "text-emerald-600" : ""}`}>{monthRecs.length ? `${hit1}/${monthRecs.length}` : "-"}</p><p className="text-xs text-slate-500">{monthRecs.length ? `${Math.round((hit1 / monthRecs.length) * 100)}% · สุ่ม ≈ 34%` : ""}</p></div>
         <div className="card"><p className="text-xs text-slate-500">คู่โผล่ ≥1</p><p className="text-2xl font-semibold">{monthRecs.length ? `${hit2}/${monthRecs.length}` : "-"}</p><p className="text-xs text-slate-500">{monthRecs.length ? `${Math.round((hit2 / monthRecs.length) * 100)}% · สุ่ม ≈ 59% · รวมสำรอง ${hit3}/${monthRecs.length}` : ""}</p></div>
         <div className="card"><p className="text-xs text-slate-500">ทิศทาง</p><p className="text-sm"><span className="text-emerald-600">ปิด+ {st.all.closeUp}</span> · <span className="text-red-600">ปิด− {st.all.closeDown}</span></p><p className="text-xs text-slate-500">เปิด+→ปิด+ {st.whenOpenUp.count ? `${st.patterns.upUp}/${st.whenOpenUp.count}` : "-"} · เปิด−→ปิด− {st.whenOpenDown.count ? `${st.patterns.downDown}/${st.whenOpenDown.count}` : "-"}</p></div>
       </div>
@@ -115,7 +115,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
                   <div className="mt-1 space-y-1">
                     <div className="flex items-center gap-1">
                       {x.pair.map((d) => { const ok = x.hit1 === null ? null : x.hit2.includes(d); return (
-                        <span key={d} className={`flex h-6 w-6 items-center justify-center rounded font-mono text-sm font-bold ${ok ? "bg-amber-400 text-white" : ok === false ? "bg-slate-200 text-slate-500 line-through" : "bg-amber-100 text-amber-900"}`}>{d}</span>
+                        <span key={d} className={`flex h-6 w-6 items-center justify-center rounded font-mono text-sm font-bold ${ok ? "bg-amber-400 text-white" : ok === false ? "bg-slate-200 text-slate-500 line-through" : "bg-amber-100 text-amber-900"} ${d === x.star ? "ring-2 ring-red-400" : ""}`}>{d}</span>
                       ); })}
                       <span className={`flex h-5 w-5 items-center justify-center rounded border font-mono text-[11px] font-bold ${x.hit1 === null ? "border-amber-200 text-amber-800" : x.hit3 ? "border-amber-400 bg-amber-200 text-amber-900" : "border-slate-200 text-slate-400 line-through"}`} title="ตัวสำรอง">{x.third}</span>
                     </div>
@@ -137,7 +137,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
           })}
         </div>
       </div>
-      <p className="text-xs text-slate-500">เลข 2 ตัว = ฟันของวันนั้น (จากเลขเปิด) ตัวเล็ก = สำรอง · ✓ = โผล่ 1 ตัว · ✓✓ = โผล่ทั้งคู่ · สำรอง = โผล่แค่ตัวสำรอง · ✗ = ไม่โผล่ · เหลืองในเลขปิด = เลขที่ฟันแล้วโผล่</p>
+      <p className="text-xs text-slate-500">เลข 2 ตัว = ฟันของวันนั้น (กรอบแดง = ★ ตัวเด่น) ตัวเล็ก = สำรอง · ✓ = โผล่ 1 ตัว · ✓✓ = โผล่ทั้งคู่ · สำรอง = โผล่แค่ตัวสำรอง · ✗ = ไม่โผล่ · เหลืองในเลขปิด = เลขที่ฟันแล้วโผล่</p>
     </div>
   );
 }

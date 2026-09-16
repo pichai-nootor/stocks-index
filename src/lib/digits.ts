@@ -371,8 +371,22 @@ export function digitPositionProbs(D: number, pUp = 0.5): DigitDetail[] {
   }).sort(byProb);
 }
 
+/** อัตราที่เลข 0–9 โผล่ในเลขปิด (บน∪ล่าง) ของ SENSEX 10 ปี 2,462 วัน — ใช้เป็นฐานเลือก "ตัวเด่น" ระหว่าง 2 ตัวที่ฟัน */
+export const DIGIT_BASE_RATE: Record<string, number> = { "0": 0.342, "1": 0.377, "2": 0.329, "3": 0.341, "4": 0.355, "5": 0.318, "6": 0.350, "7": 0.349, "8": 0.341, "9": 0.344 };
+const DIGIT_BASE_N = 300; // น้ำหนักของฐาน (นับเป็นวัน) — ข้อมูลของหุ้นเองค่อย ๆ ทับเมื่อมีมากขึ้น
+
+/** อัตราโผล่ของเลข ผสมฐาน 10 ปีกับประวัติของหุ้นตัวนี้ */
+export function digitRate(digit: string, history: RecordLike[]) {
+  let hit = 0;
+  for (const r of history) if (uniqueDigits(top2(r.closeValue) + bottom2(r.closeChange)).includes(digit)) hit++;
+  return (DIGIT_BASE_RATE[digit] * DIGIT_BASE_N + hit) / (DIGIT_BASE_N + history.length);
+}
+
 export type TwoPick = {
   digits: [DigitDetail, DigitDetail];
+  /** ตัวเด่น: 1 ใน 2 ตัวที่ฟัน — โอกาสวันนี้สูงกว่า, เสมอกัน → เลขที่โผล่บ่อยกว่าในประวัติ (ฐาน 10 ปี + ของหุ้นนี้) */
+  standout: DigitDetail;
+  standoutRate: number;
   pAny: number;
   pBoth: number;
   /** ตัวสำรอง (ตัวที่ 3): เลขที่ทำให้ "อย่างน้อย 1 ใน 3 โผล่" สูงสุดเมื่อรวมกับ 2 ตัวแรก */
@@ -419,7 +433,9 @@ export function pickTwo(openValue: number, openChange: number, priceHistory: Rec
   };
   const third = extend([first.digit, second.digit]);
   const fourth = extend([first.digit, second.digit, third.d.digit]);
-  return { digits: [first, second], pAny: best!.any, pBoth: best!.both, third: third.d, pAny3: third.any, fourth: fourth.d, pAny4: fourth.any, tiedWithMain: tiedGroup(details) };
+  const rate = (d: DigitDetail) => digitRate(d.digit, priceHistory);
+  const standout = Math.round(first.p * 1e6) !== Math.round(second.p * 1e6) ? first : rate(second) > rate(first) ? second : first;
+  return { digits: [first, second], standout, standoutRate: rate(standout), pAny: best!.any, pBoth: best!.both, third: third.d, pAny3: third.any, fourth: fourth.d, pAny4: fourth.any, tiedWithMain: tiedGroup(details) };
 }
 
 /** ระดับความแข็งของคู่วันนี้ เทียบการกระจาย 10 ปี (ส่วนใหญ่ 14–20%) */

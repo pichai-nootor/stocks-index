@@ -38,16 +38,17 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
     const closeDigits = hasClose(r) ? [...new Set((top2(r.closeValue) + bottom2(r.closeChange)).split(""))] : null;
     const hit1 = pick !== null && closeDigits ? closeDigits.includes(pick) : null;
     const hit2 = pair && closeDigits ? pair.filter((d) => closeDigits.includes(d)) : null;
-    const third = two.third.digit;
+    const third = two.third.digit, star = two.standout.digit;
     const hit3 = closeDigits ? closeDigits.includes(third) : null;
-    return { r, oTop, oBot, pick, pair, third, closeDigits, hit1, hit2, hit3 };
+    const hitStar = closeDigits ? closeDigits.includes(star) : null;
+    return { r, oTop, oBot, pick, pair, third, star, closeDigits, hit1, hit2, hit3, hitStar };
   }).reverse();
 
   const calls = evaluateCalls(stock.records);
   const callByDate = new Map(calls.perDay.map((d) => [d.date.getTime(), d]));
   const paged = paginate(rows, page);
   const judged = rows.filter((x) => x.hit1 !== null);
-  const hit1Count = judged.filter((x) => x.hit1).length;
+  const hit1Count = judged.filter((x) => x.hitStar).length;
   const hit2Count = judged.filter((x) => x.hit2 && x.hit2.length > 0).length;
   const hit3Count = judged.filter((x) => (x.hit2 && x.hit2.length > 0) || x.hit3).length;
   const pending = stock.records.filter((r) => !hasClose(r)).length;
@@ -76,7 +77,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
       {(() => { const sizes = judged.map((j) => j.closeDigits!.length); const rnd1 = randomAtLeastOne(sizes, 1), rnd2 = randomAtLeastOne(sizes, 2), rnd3 = randomAtLeastOne(sizes, 3); return (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard
-          label="ฟันธง 1 ตัว ถูก"
+          label="★ ตัวเด่น ถูก"
           value={judged.length ? `${hit1Count} / ${judged.length} วัน` : "-"}
           hint={judged.length ? `${Math.round((hit1Count / judged.length) * 100)}% · สุ่มเดา ${Math.round(rnd1 * 100)}% · เพดาน 36%` : "รอผลปิดวันแรก"}
           tone={judged.length ? (hit1Count / judged.length > rnd1 ? "up" : "down") : "neutral"}
@@ -130,7 +131,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                     <th className="px-3 py-2">เปิด</th>
                     <th className="px-3 py-2">เลขเปิด</th>
                     <th className="px-3 py-2">ทิศทาง</th>
-                    <th className="px-3 py-2 bg-amber-50 text-amber-800">ฟัน 2 ตัว + สำรอง</th>
+                    <th className="px-3 py-2 bg-amber-50 text-amber-800">ฟัน 2 ตัว (★ เด่น) + สำรอง</th>
                     <th className="px-3 py-2">ปิด</th>
                     <th className="px-3 py-2">เลขปิด</th>
                     <th className="px-3 py-2 bg-amber-50 text-amber-800">ผล</th>
@@ -138,7 +139,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {paged.items.map(({ r, oTop, oBot, pair, third, hit1, hit2, hit3 }) => (
+                  {paged.items.map(({ r, oTop, oBot, pair, third, star, hit1, hit2, hit3 }) => (
                     <tr key={r.id} className="hover:bg-slate-50">
                       <td className="px-3 py-2 whitespace-nowrap">{r.date.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" })}</td>
                       <td className="px-3 py-2 whitespace-nowrap tabular-nums">
@@ -153,7 +154,11 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                         <span className="flex items-center gap-1.5">
                           {pair.map((d) => {
                             const ok = hit2 ? hit2.includes(d) : null;
-                            return <span key={d} className={`flex h-9 w-9 items-center justify-center rounded-lg font-mono text-xl font-bold ${ok ? "bg-amber-400 text-white" : ok === false ? "bg-slate-200 text-slate-500 line-through" : "bg-amber-100 text-amber-900"}`}>{d}</span>;
+                            return (
+                              <span key={d} className={`relative flex h-9 w-9 items-center justify-center rounded-lg font-mono text-xl font-bold ${ok ? "bg-amber-400 text-white" : ok === false ? "bg-slate-200 text-slate-500 line-through" : "bg-amber-100 text-amber-900"} ${d === star ? "ring-2 ring-red-400" : ""}`}>
+                                {d}{d === star && <span className="absolute -right-1.5 -top-1.5 rounded-full bg-red-500 px-1 text-[9px] leading-4 text-white">★</span>}
+                              </span>
+                            );
                           })}
                           <span className="mx-0.5 text-amber-300">+</span>
                           <span className={`ml-1 flex h-7 w-7 items-center justify-center rounded-md border font-mono text-sm font-bold ${hit3 ? "border-amber-400 bg-amber-200 text-amber-900" : hit3 === false ? "border-slate-200 text-slate-400 line-through" : "border-amber-200 text-amber-800"}`} title="ตัวสำรอง">{third}</span>

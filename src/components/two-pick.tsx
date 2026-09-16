@@ -55,18 +55,27 @@ export function TwoPickCard({ two, tied, score }: {
         </p>
       )}
       <div className="mt-3 flex flex-wrap items-end gap-3">
-        {two.digits.map((d, i) => (
-          <div key={d.digit} className="flex flex-col items-center">
-            <span className={`flex h-20 w-20 items-center justify-center rounded-2xl font-mono text-6xl font-bold shadow ${i === 0 ? "bg-amber-400 text-white" : "bg-amber-200 text-amber-900"}`}>{d.digit}</span>
-            <span className="mt-1 text-xs text-slate-500">{i === 0 ? "ตัวหลัก" : "ตัวรอง"}</span>
-          </div>
-        ))}
+        {two.digits.map((d) => {
+          const star = d.digit === two.standout.digit;
+          return (
+            <div key={d.digit} className="flex flex-col items-center">
+              <span className={`relative flex h-20 w-20 items-center justify-center rounded-2xl font-mono text-6xl font-bold shadow ${star ? "bg-amber-400 text-white ring-4 ring-amber-300" : "bg-amber-200 text-amber-900"}`}>
+                {d.digit}
+                {star && <span className="absolute -right-2 -top-2 rounded-full bg-red-500 px-1.5 text-xs font-semibold text-white">★</span>}
+              </span>
+              <span className={`mt-1 text-xs ${star ? "font-semibold text-red-600" : "text-slate-500"}`}>{star ? "ตัวเด่น" : "ตัวคู่"}</span>
+            </div>
+          );
+        })}
         <span className="mx-1 self-center text-2xl text-amber-300">+</span>
         <div className="flex flex-col items-center">
           <span className="flex h-14 w-14 items-center justify-center rounded-xl border-2 border-dashed border-amber-300 bg-white font-mono text-4xl font-bold text-amber-800">{two.third.digit}</span>
           <span className="mt-1 text-xs text-slate-500">สำรอง</span>
         </div>
-        <p className="ml-2 self-center text-xs text-slate-500">10 ปี: 2 ตัว 63% · รวมสำรอง 82% (สุ่ม 59% / 71%)</p>
+        <p className="ml-2 self-center text-xs text-slate-500">
+          10 ปี: 2 ตัว 63% · รวมสำรอง 82% (สุ่ม 59% / 71%)<br />
+          ★ ตัวเด่น = ตัวที่โผล่บ่อยกว่าในประวัติ (ฐาน 10 ปี + หุ้นนี้: {pct(two.standoutRate, 1)})
+        </p>
       </div>
       {two.digits.some(leans) && (
         <div className="mt-3 grid gap-3 sm:grid-cols-2">

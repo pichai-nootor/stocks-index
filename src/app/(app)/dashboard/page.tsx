@@ -46,7 +46,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
     const judged = days.map((d, i) => {
       const two = pickTwo(closed[i].openValue, closed[i].openChange, closed.slice(0, i));
       const pair = two.digits.map((x) => x.digit);
-      const pick = pair[0];
+      const pick = two.standout.digit;
       const rec = closed[i]; // closed เรียงตามวันที่เหมือน days
       // วันที่เสมอกันหลายตัว นับสัดส่วนของกลุ่มที่โผล่ (ไม่ขึ้นกับว่าหยิบตัวไหนเป็นตัวหลัก)
       const fair = two.tiedWithMain.filter((x) => d.closeDigits.includes(x)).length / two.tiedWithMain.length;
@@ -159,7 +159,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
                 <th className="px-5 py-2">หุ้น</th>
                 <th className="px-5 py-2 text-right">วันที่ปิดแล้ว</th>
                 <th className="px-5 py-2 text-right">ตัวหลัก*</th>
-                <th className="px-5 py-2 text-right text-slate-400">ตัวที่หยิบถูก</th>
+                <th className="px-5 py-2 text-right">★ ตัวเด่นถูก</th>
                 <th className="px-5 py-2 text-right">2 ตัว ≥1 ถูก</th>
                 <th className="px-5 py-2 text-right">2 ตัวถูกทั้งคู่</th>
                 <th className="px-5 py-2 text-right">3 ตัว (รวมสำรอง) ≥1</th>
@@ -175,7 +175,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
                   </td>
                   <td className="px-5 py-2.5 text-right">{n}</td>
                   <td className={`px-5 py-2.5 text-right font-semibold ${n && fair / n > 0.36 ? "text-emerald-600" : ""}`}>{n ? `${Math.round((fair / n) * 100)}%` : "-"}</td>
-                  <td className="px-5 py-2.5 text-right text-slate-400">{n ? `${hit1}/${n} (${Math.round((hit1 / n) * 100)}%)` : "-"}</td>
+                  <td className={`px-5 py-2.5 text-right font-semibold ${n && hit1 / n > 0.36 ? "text-emerald-600" : ""}`}>{n ? `${hit1}/${n} (${Math.round((hit1 / n) * 100)}%)` : "-"}</td>
                   <td className={`px-5 py-2.5 text-right font-semibold ${n && hit2 / n > 0.63 ? "text-emerald-600" : ""}`}>{n ? `${hit2}/${n} (${Math.round((hit2 / n) * 100)}%)` : "-"}</td>
                   <td className="px-5 py-2.5 text-right">{n ? `${hitBoth}/${n} (${Math.round((hitBoth / n) * 100)}%)` : "-"}</td>
                   <td className={`px-5 py-2.5 text-right font-semibold ${n && hit3 / n > 0.71 ? "text-emerald-600" : ""}`}>{n ? `${hit3}/${n} (${Math.round((hit3 / n) * 100)}%)` : "-"}</td>
@@ -183,10 +183,10 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
                     {last ? (
                       <span className="inline-flex items-center gap-2">
                         <span className="text-xs text-slate-500">{last.d.date.toLocaleDateString("th-TH", { day: "numeric", month: "short" })}</span>
-                        <span className="text-xs">ฟัน <span className="font-mono font-bold">{last.pick}</span></span>
+                        <span className="text-xs">★ <span className="font-mono font-bold">{last.pick}</span></span>
                         <Digits value={last.d.closeTop2} hilite={last.hit2} tone="blue" /> <Digits value={last.d.closeBottom2} hilite={last.hit2} tone="blue" />
-                        <span className="text-xs">รอง <span className="font-mono font-bold">{last.pair[1]}</span></span>
-                        {last.hit2.length === 2 ? <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-800">✓ ถูกทั้งคู่</span> : last.hit1 ? <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-800">✓ ตัวหลักถูก</span> : last.hit2.length ? <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">ตัวรองถูก</span> : <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs text-red-800">✗</span>}
+                        <span className="text-xs">คู่ <span className="font-mono font-bold">{last.pair.join(" ")}</span></span>
+                        {last.hit2.length === 2 ? <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-800">✓ ถูกทั้งคู่</span> : last.hit1 ? <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-800">✓ ★ เด่นถูก</span> : last.hit2.length ? <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-800">✓ ถูก {last.hit2.join(" ")}</span> : <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs text-red-800">✗</span>}
                         <span className="text-xs text-slate-400">{fmtNum(last.rec.closeValue)} ({fmtChange(last.rec.closeChange)})</span>
                       </span>
                     ) : "-"}
