@@ -5,6 +5,8 @@ import { requireUser } from "@/lib/auth";
 import { summarize, fmtChange, fmtNum, hasClose, evaluateCalls, CALL_MIN_GAP_PCT } from "@/lib/stats";
 import { pickTwo, top2, bottom2, randomAtLeastOne } from "@/lib/digits";
 import { todayThai, liveDirection, fmtThaiTime } from "@/lib/intraday";
+import { fetchQuote } from "@/lib/yahoo";
+import { LiveSaveButton } from "@/components/live-save-button";
 import { deleteRecord, deleteStock } from "@/app/actions/stocks";
 import { StatCard } from "@/components/stat-card";
 import { Change, PatternBadge } from "@/components/change";
@@ -42,6 +44,10 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
     const hitStar = closeDigits ? closeDigits.includes(star) : null;
     return { r, oTop, oBot, pick, pair, star, closeDigits, hit1, hit2, hitStar };
   }).reverse();
+
+  // ราคาสดจาก Yahoo สำหรับวันที่ยังไม่ปิด (ถ้ามี) — ให้ฟันสดได้จากหน้านี้เลย
+  const quote = stock.records.some((r) => !hasClose(r)) ? await fetchQuote(stock.symbol) : null;
+  const liveNow = quote && !quote.closed ? { date: quote.tradingDate, f: liveDirection(quote.prevClose, quote.last, quote.lastAt) } : null;
 
   const calls = evaluateCalls(stock.records);
   const callByDate = new Map(calls.perDay.map((d) => [d.date.getTime(), d]));
@@ -146,8 +152,16 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                           const hit = f.call && actual ? f.call === actual : null;
                           return <div className="mb-1"><span className={`rounded px-1.5 py-0.5 font-medium ${!f.call ? "bg-slate-100 text-slate-500" : hit === true ? "bg-emerald-100 text-emerald-800" : hit === false ? "bg-red-100 text-red-800 line-through" : f.call === "up" ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"}`}>สด {fmtThaiTime(r.liveAt)} {f.call === "up" ? "▲ บวก" : f.call === "down" ? "▼ ลบ" : "ไม่ฟัน"} {f.call ? `${Math.round(f.pSame * 100)}%` : ""}{hit === true ? " ✓" : hit === false ? " ✗" : ""}</span></div>;
                         })()}
+                        {!hasClose(r) && liveNow && liveNow.date === r.date.toISOString().slice(0, 10) && (
+                          <div className="mb-1 space-y-1">
+                            <span className={`rounded px-1.5 py-0.5 font-medium ${liveNow.f.call === "up" ? "bg-emerald-100 text-emerald-800" : liveNow.f.call === "down" ? "bg-red-100 text-red-800" : "bg-slate-100 text-slate-600"}`}>
+                              ตอนนี้ {fmtThaiTime(liveNow.f.at)} {liveNow.f.call === "up" ? "▲ บวก" : liveNow.f.call === "down" ? "▼ ลบ" : "ยังไม่ฟัน"} {Math.round(liveNow.f.pSame * 100)}%
+                            </span>
+                            <div><LiveSaveButton recordId={r.id} label={r.liveValue === null ? "บันทึกฟันสดตอนนี้" : "อัปเดตฟันสด"} /></div>
+                          </div>
+                        )}
                         {(() => { const c = callByDate.get(r.date.getTime());
-                          if (!c || !c.call) return !hasClose(r) && r.liveValue === null
+                          if (!c || !c.call) return !hasClose(r) && r.liveValue === null && !liveNow
                             ? <Link href="/dashboard" className="text-blue-600 hover:underline">ฟันสดที่หน้าแรก →</Link>
                             : <span className="text-slate-400">จากเปิด: ไม่ฟัน</span>;
                           return <span className={`rounded px-1.5 py-0.5 font-medium ${c.hit === true ? "bg-emerald-100 text-emerald-800" : c.hit === false ? "bg-red-100 text-red-800 line-through" : "bg-amber-100 text-amber-800"}`}>{c.call === "up" ? "▲ บวก" : "▼ ลบ"}{c.hit === true ? " ✓" : c.hit === false ? " ✗" : ""}</span>; })()}

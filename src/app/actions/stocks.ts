@@ -227,7 +227,7 @@ export async function saveLiveFromYahoo(_prev: ActionState, formData: FormData):
   if (q.tradingDate !== record.date.toISOString().slice(0, 10)) return { error: `Yahoo ยังอยู่ที่วัน ${q.tradingDate} — ตลาดยังไม่เปิดสำหรับวันนี้` };
   if (q.closed) return { error: "ตลาดปิดแล้ว — กด “เติมปิดจาก Yahoo” แทน" };
   await prisma.record.update({ where: { id }, data: { liveValue: q.last, liveAt: q.lastAt } });
-  revalidatePath("/dashboard");
+  revalidatePath("/dashboard"); revalidatePath(`/stocks/${record.stockId}`);
   return undefined;
 }
 
