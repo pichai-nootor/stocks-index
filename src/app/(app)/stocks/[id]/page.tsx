@@ -11,7 +11,8 @@ import { LiveManualForm } from "@/components/live-manual-form";
 import { SHOW_DIRECTION } from "@/lib/config";
 import { deleteRecord, deleteStock } from "@/app/actions/stocks";
 import { StatCard } from "@/components/stat-card";
-import { Change, PatternBadge } from "@/components/change";
+import { Change } from "@/components/change";
+import { RecordEdit } from "@/components/record-edit";
 import { PatternMatrix } from "@/components/pattern-matrix";
 import { Digits } from "@/components/digit-badges";
 import { RecordForm } from "./record-form";
@@ -205,7 +206,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                       </td>
                       <td className="px-3 py-2 text-right">
                         <span className="flex flex-col items-end gap-1">
-                          {hasClose(r) && <PatternBadge open={r.openChange} close={r.closeChange} />}
+                          <RecordEdit record={{ id: r.id, openValue: r.openValue, openChange: r.openChange, closeValue: r.closeValue, closeChange: r.closeChange }} />
                           <form action={deleteRecord}>
                             <input type="hidden" name="id" value={r.id} />
                             <button type="submit" className="text-xs text-red-600 hover:underline">ลบ</button>

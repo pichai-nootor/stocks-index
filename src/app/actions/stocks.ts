@@ -271,3 +271,25 @@ export async function saveLiveManual(_prev: ActionState, formData: FormData): Pr
   revalidatePath("/dashboard"); revalidatePath(`/stocks/${record.stockId}`);
   return undefined;
 }
+
+const editSchema = z.object({
+  id: z.string().min(1),
+  openValue: z.coerce.number({ message: "ค่าเปิดต้องเป็นตัวเลข" }).positive("ค่าเปิดต้องมากกว่า 0"),
+  openChange: z.coerce.number({ message: "เปลี่ยนแปลงตอนเปิดต้องเป็นตัวเลข" }),
+  closeValue: z.preprocess(emptyToUndef, z.coerce.number({ message: "ค่าปิดต้องเป็นตัวเลข" }).positive("ค่าปิดต้องมากกว่า 0").optional()),
+  closeChange: z.preprocess(emptyToUndef, z.coerce.number({ message: "เปลี่ยนแปลงตอนปิดต้องเป็นตัวเลข" }).optional()),
+});
+
+/** แก้ไขตัวเลขของวันที่บันทึกไว้แล้ว (เปิด และ/หรือ ปิด) — เว้นช่องปิดว่างทั้งคู่ = ยังไม่มีปิด */
+export async function updateRecord(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const { userId } = await requireUser();
+  const parsed = editSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
+  const { id, openValue, openChange, closeValue, closeChange } = parsed.data;
+  if ((closeValue === undefined) !== (closeChange === undefined)) return { error: "ค่าปิดกับเปลี่ยนแปลงตอนปิด ต้องกรอกทั้งคู่หรือเว้นว่างทั้งคู่" };
+  const record = await prisma.record.findFirst({ where: { id, stock: { userId } }, select: { stockId: true } });
+  if (!record) return { error: "ไม่พบรายการ" };
+  await prisma.record.update({ where: { id }, data: { openValue, openChange, closeValue: closeValue ?? null, closeChange: closeChange ?? null } });
+  revalidatePath(`/stocks/${record.stockId}`); revalidatePath("/dashboard"); revalidatePath("/digits"); revalidatePath("/calendar");
+  return undefined;
+}
