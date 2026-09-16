@@ -12,7 +12,7 @@ export default async function StocksPage() {
   });
 
   return (
-    <div className="grid gap-6 md:grid-cols-[320px_1fr]">
+    <div className="grid gap-6 md:grid-cols-[320px_minmax(0,1fr)]">
       <section className="card h-fit">
         <h2 className="font-medium">เพิ่มหุ้น</h2>
         <StockForm />

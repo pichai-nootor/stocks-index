@@ -98,13 +98,14 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
       </div>
       ); })()}
 
-      <div className="grid gap-6 md:grid-cols-[320px_1fr]">
+      {/* min-w-0 บนคอลัมน์ตาราง: ไม่งั้น grid จะยืดตามความกว้างตารางจนล้นหน้า แทนที่จะเลื่อนในกรอบ */}
+      <div className="grid gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
         <section className="card h-fit">
           <h2 className="font-medium">บันทึกเปิดวันนี้</h2>
           <RecordForm stockId={stock.id} today={todayThai()} />
         </section>
 
-        <section className="card p-0">
+        <section className="card min-w-0 p-0">
           <div className="border-b border-slate-200 px-5 py-3">
             <h2 className="font-medium">ประวัติ + ผลฟันธงรายวัน</h2>
             <p className="text-xs text-slate-500">ฟันจาก D (ทศนิยมปิดวันก่อน) + ทิศทางตามขนาดที่เปิด · เหลือง = เลขที่ฟันแล้วโผล่จริง · เพดานวิธีนี้ ≈ 36%</p>

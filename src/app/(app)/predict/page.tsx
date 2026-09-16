@@ -114,7 +114,7 @@ export default async function PredictPage({ searchParams }: PageProps<"/predict"
             </div>
 
             {cf && df && openValue !== null && (
-              <div className="grid gap-4 lg:grid-cols-[3fr_2fr]">
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
                 <CloseForecastCard open={openValue} f={cf} dir={df} />
                 <DirectionCard f={df} />
               </div>

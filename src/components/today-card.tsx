@@ -51,7 +51,7 @@ export function TodayCard({ stock, record, priceStats, priceHistory = [], live =
         <LiveCard recordId={record.id} prevClose={record.openValue - record.openChange} live={live} saved={record.liveValue !== null && record.liveAt ? { price: record.liveValue, at: record.liveAt.toISOString() } : null} score={liveScore} />
         <CallCard c={call} score={{ called: ev.called, hits: ev.hits }} />
       </div>
-      <div className="mt-3 grid gap-3 lg:grid-cols-[3fr_2fr]">
+      <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <CloseForecastCard open={record.openValue} f={cf} dir={df} />
         <DirectionCard f={df} compact />
       </div>

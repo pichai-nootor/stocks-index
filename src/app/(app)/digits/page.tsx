@@ -82,7 +82,7 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
       ) : (
         <>
           {ranked && openPos && two && (
-            <section className="grid gap-4 md:grid-cols-[3fr_2fr]">
+            <section className="grid gap-4 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
               <div className="card bg-amber-50/60">
                 <TwoPickCard two={two} tied={pp ?? undefined} score={bt ? { days: bt.days, pair: bt.pair, tied: bt.tied, single: top1?.atLeastOne } : undefined} />
                 <p className="mt-3 text-xs text-amber-700">
