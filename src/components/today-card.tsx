@@ -20,7 +20,7 @@ export function TodayCard({ stock, record, priceStats, priceHistory = [], live =
   priceStats: Summary;
   priceHistory?: RecordLike[];
   /** ราคาสดจาก Yahoo (ถ้าดึงได้และเป็นวันเดียวกับรายการ) */
-  live?: { price: number; at: string; closed: boolean } | null;
+  live?: { price: number; at: string; closed: boolean; source?: "bse" | "yahoo" } | null;
   liveScore?: { called: number; hits: number };
 }) {
   const oTop = top2(record.openValue), oBot = bottom2(record.openChange);

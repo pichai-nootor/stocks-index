@@ -34,7 +34,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
       .filter((r) => !hasClose(r))
       .map((r) => ({
         stock: s, record: r, priceStats, priceHistory: closed,
-        live: q && q.tradingDate === r.date.toISOString().slice(0, 10) ? { price: q.last, at: q.lastAt.toISOString(), closed: q.closed } : null,
+        live: q && q.tradingDate === r.date.toISOString().slice(0, 10) ? { price: q.last, at: q.lastAt.toISOString(), closed: q.closed, source: q.source } : null,
         liveScore: { called: liveScore.called, hits: liveScore.hits },
       }));
   }).sort((a, b) => b.record.date.getTime() - a.record.date.getTime());

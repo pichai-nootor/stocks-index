@@ -224,8 +224,8 @@ export async function saveLiveFromYahoo(_prev: ActionState, formData: FormData):
   if (record.closeValue !== null) return { error: "วันนี้มีผลปิดแล้ว" };
   const q = await fetchQuote(record.stock.symbol);
   if (!q) return { error: "ดึงราคาสดไม่ได้" };
-  if (q.tradingDate !== record.date.toISOString().slice(0, 10)) return { error: `Yahoo ยังอยู่ที่วัน ${q.tradingDate} — ตลาดยังไม่เปิดสำหรับวันนี้` };
-  if (q.closed) return { error: "ตลาดปิดแล้ว — กด “เติมปิดจาก Yahoo” แทน" };
+  if (q.tradingDate !== record.date.toISOString().slice(0, 10)) return { error: `แหล่งราคายังอยู่ที่วัน ${q.tradingDate} — ตลาดยังไม่เปิดสำหรับวันนี้` };
+  if (q.closed) return { error: "ตลาดปิดแล้ว — กด “เติมราคาปิดอัตโนมัติ” แทน" };
   await prisma.record.update({ where: { id }, data: { liveValue: q.last, liveAt: q.lastAt } });
   revalidatePath("/dashboard"); revalidatePath(`/stocks/${record.stockId}`);
   return undefined;

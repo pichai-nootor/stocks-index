@@ -9,7 +9,8 @@ import { fmtNum, fmtChange } from "@/lib/stats";
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 
-type Live = { price: number; at: string; closed: boolean } | null;
+type Live = { price: number; at: string; closed: boolean; source?: "bse" | "yahoo" } | null;
+const sourceLabel = (l: NonNullable<Live>) => (l.source === "bse" ? "BSE เรียลไทม์ (ดีเลย์ ~1 นาที)" : "Yahoo (ดีเลย์ ~15 นาที)");
 
 /**
  * ฟันทิศทาง "สด": ราคาตอนนี้จาก Yahoo (ส่งมาจาก server) + จุดที่บันทึกไว้
@@ -33,7 +34,7 @@ export function LiveCard({ recordId, prevClose, live, saved, score }: {
     <div className={`card ${tone(show?.call ?? null)}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <p className="text-xs font-medium uppercase tracking-wide text-slate-600">ฟันทิศทางสด (ราคาระหว่างวัน) <span className="ml-1 rounded bg-red-100 px-1.5 py-0.5 normal-case text-red-700">ต้องฟันก่อน {CALL_DEADLINE_THAI} น.</span></p>
-        {live && <p className="text-xs text-slate-500">Yahoo {fmtNum(live.price)} <span className={live.price >= prevClose ? "text-emerald-600" : "text-red-600"}>{fmtChange(live.price - prevClose)}</span> · เวลาราคา {fmtThaiTime(new Date(live.at))} น. ไทย{live.closed ? " · ปิดแล้ว" : " (Yahoo ดีเลย์ ~15 นาที)"}</p>}
+        {live && <p className="text-xs text-slate-500">{fmtNum(live.price)} <span className={live.price >= prevClose ? "text-emerald-600" : "text-red-600"}>{fmtChange(live.price - prevClose)}</span> · เวลาราคา {fmtThaiTime(new Date(live.at))} น. ไทย · {live.closed ? "ปิดแล้ว" : sourceLabel(live)}</p>}
       </div>
 
       {show ? (
@@ -53,20 +54,20 @@ export function LiveCard({ recordId, prevClose, live, saved, score }: {
         {live && !live.closed && (
           <form action={liveAction}>
             <input type="hidden" name="id" value={recordId} />
-            <button className="btn-primary" disabled={livePending}>{livePending ? "..." : kept ? "อัปเดตจุดฟันสดเป็นตอนนี้" : "บันทึกฟันสดตอนนี้"}</button>
+            <button className="btn-primary" disabled={livePending}>{livePending ? "..." : kept ? "อัปเดตจุดฟันสดเป็นราคานี้" : "บันทึกฟันสดด้วยราคานี้"}</button>
           </form>
         )}
         {live?.closed && (
           <form action={closeAction}>
             <input type="hidden" name="id" value={recordId} />
-            <button className="btn-primary" disabled={closePending}>{closePending ? "..." : "เติมปิดจาก Yahoo"}</button>
+            <button className="btn-primary" disabled={closePending}>{closePending ? "..." : "เติมราคาปิดอัตโนมัติ"}</button>
           </form>
         )}
         {score && score.called > 0 && <span className="text-xs text-slate-600">ผลฟันสดที่ผ่านมา: ถูก {score.hits}/{score.called} ({pct(score.hits / score.called)})</span>}
       </div>
       {!live?.closed && (
         <div className="mt-2 text-xs text-slate-600">
-          <p className="mb-1">หรือกรอกราคาที่เห็นจากหน้าจอจริงตอนนี้ (ไม่ดีเลย์) — ระบบใช้เวลาปัจจุบันเป็นเวลาที่อ่าน</p>
+          <p className="mb-1">หรือกรอกราคาที่เห็นจากหน้าจอจริงตอนนี้ — ระบบใช้เวลาปัจจุบันเป็นเวลาที่อ่าน</p>
           <LiveManualForm recordId={recordId} compact />
         </div>
       )}
