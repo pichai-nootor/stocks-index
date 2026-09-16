@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { summarize, fmtChange, fmtNum, hasClose, evaluateCalls, CALL_MIN_GAP_PCT } from "@/lib/stats";
 import { pickTwo, top2, bottom2, randomAtLeastOne } from "@/lib/digits";
-import { todayThai } from "@/lib/intraday";
+import { todayThai, liveDirection, fmtThaiTime } from "@/lib/intraday";
 import { deleteRecord, deleteStock } from "@/app/actions/stocks";
 import { StatCard } from "@/components/stat-card";
 import { Change, PatternBadge } from "@/components/change";
@@ -139,7 +139,17 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap"><Digits value={oTop} /> <Digits value={oBot} /></td>
                       <td className="px-3 py-2 whitespace-nowrap text-xs">
-                        {(() => { const c = callByDate.get(r.date.getTime()); if (!c || !c.call) return <span className="text-slate-400">ไม่ฟัน</span>;
+                        {/* ฟันสด (ถ้าบันทึกราคาระหว่างวันไว้) แสดงก่อน; วันที่ยังไม่ปิดและยังไม่ฟันสด → ชี้ไปหน้าแรก */}
+                        {r.liveValue !== null && r.liveAt !== null && (() => {
+                          const f = liveDirection(r.openValue - r.openChange, r.liveValue, r.liveAt);
+                          const actual = hasClose(r) ? (r.closeChange > 0 ? "up" : r.closeChange < 0 ? "down" : "flat") : null;
+                          const hit = f.call && actual ? f.call === actual : null;
+                          return <div className="mb-1"><span className={`rounded px-1.5 py-0.5 font-medium ${!f.call ? "bg-slate-100 text-slate-500" : hit === true ? "bg-emerald-100 text-emerald-800" : hit === false ? "bg-red-100 text-red-800 line-through" : f.call === "up" ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"}`}>สด {fmtThaiTime(r.liveAt)} {f.call === "up" ? "▲ บวก" : f.call === "down" ? "▼ ลบ" : "ไม่ฟัน"} {f.call ? `${Math.round(f.pSame * 100)}%` : ""}{hit === true ? " ✓" : hit === false ? " ✗" : ""}</span></div>;
+                        })()}
+                        {(() => { const c = callByDate.get(r.date.getTime());
+                          if (!c || !c.call) return !hasClose(r) && r.liveValue === null
+                            ? <Link href="/dashboard" className="text-blue-600 hover:underline">ฟันสดที่หน้าแรก →</Link>
+                            : <span className="text-slate-400">จากเปิด: ไม่ฟัน</span>;
                           return <span className={`rounded px-1.5 py-0.5 font-medium ${c.hit === true ? "bg-emerald-100 text-emerald-800" : c.hit === false ? "bg-red-100 text-red-800 line-through" : "bg-amber-100 text-amber-800"}`}>{c.call === "up" ? "▲ บวก" : "▼ ลบ"}{c.hit === true ? " ✓" : c.hit === false ? " ✗" : ""}</span>; })()}
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap bg-amber-50/50">
