@@ -43,7 +43,7 @@ export function LiveCard({ recordId, prevClose, live, saved, score }: {
           <div className="text-sm">
             <p className="text-xl font-semibold">{show.call === "up" ? "ปิดบวก" : show.call === "down" ? "ปิดลบ" : "ยังไม่ฟัน"} {show.call && <span className="text-base text-slate-600">{pct(show.pSame)}</span>}</p>
             <p className="text-slate-700">{show.reason}</p>
-            {kept && <p className="text-xs text-slate-500">บันทึกไว้ตอน {fmtThaiTime(new Date(saved!.at))} น. ที่ {fmtNum(saved!.price)} — นี่คือค่าที่จะถูกตรวจตอนปิด</p>}
+            {kept && <p className="text-xs text-slate-500">บันทึกไว้: ราคา <span className="font-semibold tabular-nums text-slate-700">{fmtNum(saved!.price)}</span> ({kept.pct > 0 ? "+" : ""}{kept.pct.toFixed(2)}%) เวลา {fmtThaiTime(new Date(saved!.at))} น. — นี่คือค่าที่จะถูกตรวจตอนปิด</p>}
           </div>
         </div>
       ) : (
