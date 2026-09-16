@@ -140,7 +140,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {paged.items.map(({ r, oTop, oBot, pair, third, fourth, p, hit1, hit2, hit3, hit4 }) => (
+                  {paged.items.map(({ r, oTop, oBot, pair, third, fourth, hit1, hit2, hit3, hit4 }) => (
                     <tr key={r.id} className="hover:bg-slate-50">
                       <td className="px-3 py-2 whitespace-nowrap">{r.date.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" })}</td>
                       <td className="px-3 py-2 whitespace-nowrap tabular-nums">
@@ -157,7 +157,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                             const ok = hit2 ? hit2.includes(d) : null;
                             return <span key={d} className={`flex h-9 w-9 items-center justify-center rounded-lg font-mono text-xl font-bold ${ok ? "bg-amber-400 text-white" : ok === false ? "bg-slate-200 text-slate-500 line-through" : "bg-amber-100 text-amber-900"}`}>{d}</span>;
                           })}
-                          <span className="ml-1 text-xs text-slate-500">{Math.round(p * 100)}%<br />ต่อตัว</span>
+                          <span className="mx-0.5 text-amber-300">+</span>
                           {[[third, hit3], [fourth, hit4]].map(([d, ok]) => (
                             <span key={String(d)} className={`ml-1 flex h-7 w-7 items-center justify-center rounded-md border font-mono text-sm font-bold ${ok ? "border-amber-400 bg-amber-200 text-amber-900" : ok === false ? "border-slate-200 text-slate-400 line-through" : "border-amber-200 text-amber-800"}`} title="ตัวสำรอง">{d}</span>
                           ))}

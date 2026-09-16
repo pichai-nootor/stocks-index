@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { pickDigits, pickPair, pickTwo, top2, bottom2, prevCloseCents } from "@/lib/digits";
+import { pickPair, pickTwo, top2, bottom2, prevCloseCents } from "@/lib/digits";
 import { TwoPickCard } from "@/components/two-pick";
 import { LiveCard } from "@/components/live-card";
 import { fmtNum, fmtChange, forecastDirection, forecastClose, directionCall, evaluateCalls, checkOpen, type Summary, type RecordLike } from "@/lib/stats";
@@ -24,7 +24,6 @@ export function TodayCard({ stock, record, priceStats, priceHistory = [], live =
   liveScore?: { called: number; hits: number };
 }) {
   const oTop = top2(record.openValue), oBot = bottom2(record.openChange);
-  const ranked = pickDigits(record.openValue, record.openChange, priceHistory);
   const pp = pickPair(record.openValue, record.openChange, priceHistory);
   const two = pickTwo(record.openValue, record.openChange, priceHistory);
   const D = prevCloseCents(record.openValue, record.openChange);
@@ -59,21 +58,6 @@ export function TodayCard({ stock, record, priceStats, priceHistory = [], live =
       <div className="mt-3"><TwoPickCard two={two} tied={pp} /></div>
 
       <div className="mt-3 grid gap-4 sm:grid-cols-3">
-        <div className="sm:col-span-3">
-          <p className="text-xs text-slate-500">โอกาสที่แต่ละเลขจะโผล่ตอนปิด (บน ∪ ล่าง)</p>
-          <div className="mt-1 grid grid-cols-10 gap-1">
-            {[...ranked].sort((a, b) => a.digit.localeCompare(b.digit)).map((r) => {
-              const top = r.p >= ranked[0].p - 0.005, low = r.p <= ranked[ranked.length - 1].p + 0.005 && !top;
-              return (
-                <div key={r.digit} className={`rounded-md py-1 text-center ${top ? "bg-amber-100" : low ? "bg-slate-100 text-slate-400" : "bg-white"}`}>
-                  <div className={`font-mono text-lg font-bold ${top ? "text-amber-900" : ""}`}>{r.digit}</div>
-                  <div className="text-[11px] tabular-nums">{(r.p * 100).toFixed(1)}%</div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
         <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:col-span-3 sm:grid-cols-4">
           <div>
             <dt className="text-xs text-slate-500">เปิด</dt>

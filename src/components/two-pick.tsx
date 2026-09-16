@@ -30,6 +30,9 @@ function PositionTable({ d }: { d: DigitDetail }) {
 }
 
 /** ฟัน 2 ตัวจากเลขเดี่ยว พร้อม % ต่อตำแหน่ง — ใช้ทั้งการ์ดวันนี้และหน้าวิเคราะห์ */
+/** ตำแหน่งเอียงจริง (D ลงท้าย 0/9) — วันอื่นทุกตำแหน่ง 10% เท่ากัน ไม่มีอะไรให้ดู */
+const leans = (d: DigitDetail) => Math.abs(d.tens - d.units) > 0.02;
+
 export function TwoPickCard({ two, tied, score }: {
   two: TwoPick;
   tied?: PairPick;
@@ -39,10 +42,10 @@ export function TwoPickCard({ two, tied, score }: {
   return (
     <div>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="text-xs font-medium uppercase tracking-wide text-amber-800">ฟันเลข 2 ตัว (จากเลขเดี่ยว)</p>
-        <p className="text-xs text-slate-600">
-          อย่างน้อย 1 ใน 2 โผล่ <span className="font-semibold">{pct(two.pAny)}</span> · มาทั้งคู่ {pct(two.pBoth)}
-          {score?.pair && <span className="text-slate-400"> · ของคุณ {score.days} วัน: ≥1 {pct(score.pair.any)} · ครบ {pct(score.pair.both)}</span>}
+        <p className="text-xs font-medium uppercase tracking-wide text-amber-800">ฟันเลข 2 ตัว + สำรอง 2 ตัว</p>
+        <p className="text-sm text-slate-700">
+          โผล่อย่างน้อย 1 ตัว: 2 ตัว <span className="font-semibold">{pct(two.pAny)}</span> · 3 ตัว <span className="font-semibold">{pct(two.pAny3)}</span> · 4 ตัว <span className="font-semibold">{pct(two.pAny4)}</span>
+          {score?.pair && <span className="text-xs text-slate-400"> · ของคุณ {score.days} วัน: 2 ตัว {pct(score.pair.any)}</span>}
         </p>
       </div>
       {two.tiedWithMain.length > 1 && (
@@ -51,27 +54,32 @@ export function TwoPickCard({ two, tied, score }: {
           — ตัวหลักเลือกเลขมากสุดในกลุ่ม ตัวอื่นในกลุ่มโอกาสเท่ากัน
         </p>
       )}
-      <div className="mt-2 grid gap-3 sm:grid-cols-2">
+      <div className="mt-3 flex flex-wrap items-end gap-3">
         {two.digits.map((d, i) => (
-          <div key={d.digit} className={`flex gap-3 rounded-xl border p-3 ${i === 0 ? "border-amber-300 bg-amber-50" : "border-amber-200 bg-white"}`}>
-            <div className="flex flex-col items-center">
-              <span className={`flex h-16 w-16 items-center justify-center rounded-2xl font-mono text-5xl font-bold shadow ${i === 0 ? "bg-amber-400 text-white" : "bg-amber-200 text-amber-900"}`}>{d.digit}</span>
-              <span className="mt-1 text-xs text-slate-500">{i === 0 ? "ตัวหลัก" : "ตัวรอง"}</span>
-              <span className="text-sm font-semibold">โผล่ {pct(d.p)}</span>
-            </div>
-            <div className="flex-1"><PositionTable d={d} /></div>
+          <div key={d.digit} className="flex flex-col items-center">
+            <span className={`flex h-20 w-20 items-center justify-center rounded-2xl font-mono text-6xl font-bold shadow ${i === 0 ? "bg-amber-400 text-white" : "bg-amber-200 text-amber-900"}`}>{d.digit}</span>
+            <span className="mt-1 text-xs text-slate-500">{i === 0 ? "ตัวหลัก" : "ตัวรอง"}</span>
           </div>
         ))}
+        <span className="mx-1 self-center text-2xl text-amber-300">+</span>
+        {[two.third, two.fourth].map((d, i) => (
+          <div key={d.digit} className="flex flex-col items-center">
+            <span className="flex h-14 w-14 items-center justify-center rounded-xl border-2 border-dashed border-amber-300 bg-white font-mono text-4xl font-bold text-amber-800">{d.digit}</span>
+            <span className="mt-1 text-xs text-slate-500">สำรอง {i + 1}</span>
+          </div>
+        ))}
+        <p className="ml-2 self-center text-xs text-slate-500">10 ปี: 2 ตัว 63% · 3 ตัว 82% · 4 ตัว 94% (สุ่ม 59 / 71 / 87%)</p>
       </div>
-      <div className="mt-2 flex flex-wrap items-center gap-3 rounded-xl border border-dashed border-amber-200 px-3 py-2 text-sm">
-        <span className="text-xs uppercase tracking-wide text-amber-800">ตัวสำรอง</span>
-        <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-amber-300 bg-white font-mono text-2xl font-bold text-amber-900">{two.third.digit}</span>
-        <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-amber-200 bg-white font-mono text-2xl font-bold text-amber-700">{two.fourth.digit}</span>
-        <span className="text-slate-700">
-          ฟัน 3 ตัว (หลัก+รอง+{two.third.digit}) โผล่ ≥1 <span className="font-semibold">{pct(two.pAny3)}</span> <span className="text-slate-400">(10 ปี 82% · สุ่ม 71%)</span>
-          {" "}· ฟัน 4 ตัว (+{two.fourth.digit}) <span className="font-semibold">{pct(two.pAny4)}</span> <span className="text-slate-400">(10 ปี 94% · สุ่ม 87%)</span>
-        </span>
-      </div>
+      {two.digits.some(leans) && (
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          {two.digits.map((d) => (
+            <div key={d.digit} className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3">
+              <p className="mb-1 text-xs font-medium text-emerald-800">วันนี้เลข {d.digit} เอียงไปหลัก{d.tens > d.units ? "สิบ" : "หน่วย"} (D ลงท้าย 0/9)</p>
+              <PositionTable d={d} />
+            </div>
+          ))}
+        </div>
+      )}
       {tied && (
         <p className="mt-2 text-xs text-slate-600">
           คู่ผูกกัน (เลือกจากโอกาสมาทั้งคู่): <span className="font-mono text-base font-bold text-amber-900">{tied.pair.join(" ")}</span> มาทั้งคู่ <span className="font-semibold">{pct(tied.pBoth)}</span>
