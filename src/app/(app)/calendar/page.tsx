@@ -25,14 +25,14 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
 
   // ฟันธง + ผล ของทุกวัน (ใช้ข้อมูลก่อนหน้าวันนั้น)
   const byDate = new Map<string, {
-    r: (typeof all)[number]; pick: string; pair: string[]; third: string; hit1: boolean | null; hit2: string[]; hit3: boolean;
+    r: (typeof all)[number]; pick: string; pair: string[]; third: string; fourth: string; hit1: boolean | null; hit2: string[]; hit3: boolean; hit4: boolean;
   }>();
   for (const r of all) {
     const hist = closed.filter((d) => d.date.getTime() < r.date.getTime());
     const two = pickTwo(r.openValue, r.openChange, hist);
-    const pair = two.digits.map((x) => x.digit), pick = pair[0], third = two.third.digit;
+    const pair = two.digits.map((x) => x.digit), pick = pair[0], third = two.third.digit, fourth = two.fourth.digit;
     const cd = hasClose(r) ? [...new Set((top2(r.closeValue) + bottom2(r.closeChange)).split(""))] : null;
-    byDate.set(r.date.toISOString().slice(0, 10), { r, pick, pair, third, hit1: cd ? cd.includes(pick) : null, hit2: cd ? pair.filter((d) => cd.includes(d)) : [], hit3: cd ? cd.includes(third) : false });
+    byDate.set(r.date.toISOString().slice(0, 10), { r, pick, pair, third, fourth, hit1: cd ? cd.includes(pick) : null, hit2: cd ? pair.filter((d) => cd.includes(d)) : [], hit3: cd ? cd.includes(third) : false, hit4: cd ? cd.includes(fourth) : false });
   }
 
   // ตารางเดือน (เริ่มวันจันทร์)
@@ -107,7 +107,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
                     x.hit1 === null ? <span className="rounded bg-amber-100 px-1 text-[10px] text-amber-800">รอปิด</span>
                     : x.hit2.length === 2 ? <span className="rounded bg-emerald-100 px-1 text-[10px] font-medium text-emerald-800">✓✓</span>
                     : x.hit2.length ? <span className="rounded bg-emerald-100 px-1 text-[10px] font-medium text-emerald-800">✓</span>
-                    : x.hit3 ? <span className="rounded bg-amber-100 px-1 text-[10px] text-amber-800">สำรอง</span>
+                    : x.hit3 || x.hit4 ? <span className="rounded bg-amber-100 px-1 text-[10px] text-amber-800">สำรอง</span>
                     : <span className="rounded bg-red-100 px-1 text-[10px] text-red-800">✗</span>
                   )}
                 </div>
@@ -117,7 +117,9 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
                       {x.pair.map((d) => { const ok = x.hit1 === null ? null : x.hit2.includes(d); return (
                         <span key={d} className={`flex h-6 w-6 items-center justify-center rounded font-mono text-sm font-bold ${ok ? "bg-amber-400 text-white" : ok === false ? "bg-slate-200 text-slate-500 line-through" : "bg-amber-100 text-amber-900"}`}>{d}</span>
                       ); })}
-                      <span className={`flex h-5 w-5 items-center justify-center rounded border font-mono text-[11px] font-bold ${x.hit1 === null ? "border-amber-200 text-amber-800" : x.hit3 ? "border-amber-400 bg-amber-200 text-amber-900" : "border-slate-200 text-slate-400 line-through"}`} title="ตัวสำรอง">{x.third}</span>
+                      {[[x.third, x.hit3], [x.fourth, x.hit4]].map(([d, ok]) => (
+                        <span key={String(d)} className={`flex h-5 w-5 items-center justify-center rounded border font-mono text-[11px] font-bold ${x.hit1 === null ? "border-amber-200 text-amber-800" : ok ? "border-amber-400 bg-amber-200 text-amber-900" : "border-slate-200 text-slate-400 line-through"}`} title="ตัวสำรอง">{d}</span>
+                      ))}
                     </div>
                     <div className="text-[10px] text-slate-500">
                       เปิด <span className="font-mono">{top2(x.r.openValue)}/{bottom2(x.r.openChange)}</span>

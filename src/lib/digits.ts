@@ -378,6 +378,9 @@ export type TwoPick = {
   /** ตัวสำรอง (ตัวที่ 3): เลขที่ทำให้ "อย่างน้อย 1 ใน 3 โผล่" สูงสุดเมื่อรวมกับ 2 ตัวแรก */
   third: DigitDetail;
   pAny3: number;
+  /** ตัวสำรองที่ 2 (ตัวที่ 4): ทำให้ "อย่างน้อย 1 ใน 4 โผล่" สูงสุด */
+  fourth: DigitDetail;
+  pAny4: number;
   /** เลขที่เสมอกับตัวหลัก (โอกาสเท่ากันเป๊ะ) — วันส่วนใหญ่เสมอกัน 6–8 ตัว ตัวหลักจึงเป็นแค่ตัวแทนของกลุ่มนี้ */
   tiedWithMain: string[];
 };
@@ -403,14 +406,20 @@ export function pickTwo(openValue: number, openChange: number, priceHistory: Rec
     if (!best || Math.round(any * 1e9) > Math.round(best.any * 1e9)) best = { d, any, both };
   }
   const second = best!.d;
-  let third: { d: DigitDetail; any: number } | null = null;
-  for (const d of details) {
-    if (d.digit === first.digit || d.digit === second.digit) continue;
-    let any = 0;
-    for (const o of O) if (o.set.has(first.digit) || o.set.has(second.digit) || o.set.has(d.digit)) any += o.w;
-    if (!third || Math.round(any * 1e9) > Math.round(third.any * 1e9)) third = { d, any };
-  }
-  return { digits: [first, second], pAny: best!.any, pBoth: best!.both, third: third!.d, pAny3: third!.any, tiedWithMain: tiedGroup(details) };
+  // เพิ่มทีละตัว (greedy): เลือกตัวที่ทำให้ "อย่างน้อย 1 ตัวโผล่" ของทั้งชุดสูงสุด
+  const extend = (chosen: string[]) => {
+    let pick: { d: DigitDetail; any: number } | null = null;
+    for (const d of details) {
+      if (chosen.includes(d.digit)) continue;
+      let any = 0;
+      for (const o of O) if (chosen.some((c) => o.set.has(c)) || o.set.has(d.digit)) any += o.w;
+      if (!pick || Math.round(any * 1e9) > Math.round(pick.any * 1e9)) pick = { d, any };
+    }
+    return pick!;
+  };
+  const third = extend([first.digit, second.digit]);
+  const fourth = extend([first.digit, second.digit, third.d.digit]);
+  return { digits: [first, second], pAny: best!.any, pBoth: best!.both, third: third.d, pAny3: third.any, fourth: fourth.d, pAny4: fourth.any, tiedWithMain: tiedGroup(details) };
 }
 
 /** ระดับความแข็งของคู่วันนี้ เทียบการกระจาย 10 ปี (ส่วนใหญ่ 14–20%) */
