@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { summarize, fmtChange, fmtNum, hasClose, evaluateCalls, CALL_MIN_GAP_PCT } from "@/lib/stats";
-import { pickTwo, top2, bottom2, randomAtLeastOne } from "@/lib/digits";
+import { pickTwo, top2, bottom2, randomAtLeastOne, dayStrength } from "@/lib/digits";
 import { todayThai, liveDirection, fmtThaiTime, evaluateLiveCalls } from "@/lib/intraday";
 import { fetchQuote } from "@/lib/yahoo";
 import { LiveSaveButton } from "@/components/live-save-button";
@@ -45,7 +45,8 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
     const hit2 = pair && closeDigits ? pair.filter((d) => closeDigits.includes(d)) : null;
     const star = two.standout.digit;
     const hitStar = closeDigits ? closeDigits.includes(star) : null;
-    return { r, oTop, oBot, pick, pair, star, closeDigits, hit1, hit2, hitStar };
+    const weak = dayStrength(two.digits[0].p).level === "อ่อน";
+    return { r, oTop, oBot, pick, pair, star, weak, closeDigits, hit1, hit2, hitStar };
   }).reverse();
 
   // ราคาสดจาก Yahoo สำหรับวันที่ยังไม่ปิด (ถ้ามี) — ให้ฟันสดได้จากหน้านี้เลย
@@ -58,6 +59,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
   const paged = paginate(rows, page);
   const judged = rows.filter((x) => x.hit1 !== null);
   const hit1Count = judged.filter((x) => x.hitStar).length;
+  const strong = judged.filter((x) => !x.weak), strongHit = strong.filter((x) => x.hitStar).length;
   const hit2Count = judged.filter((x) => x.hit2 && x.hit2.length > 0).length;
   const pending = stock.records.filter((r) => !hasClose(r)).length;
 
@@ -87,7 +89,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
         <StatCard
           label="★ ตัวเด่น ถูก"
           value={judged.length ? `${hit1Count} / ${judged.length} วัน` : "-"}
-          hint={judged.length ? `${Math.round((hit1Count / judged.length) * 100)}% · สุ่มเดา ${Math.round(rnd1 * 100)}% · เพดาน 36%` : "รอผลปิดวันแรก"}
+          hint={judged.length ? `${Math.round((hit1Count / judged.length) * 100)}% · สุ่ม ${Math.round(rnd1 * 100)}% · ถ้าข้ามวันอ่อน ${strongHit}/${strong.length} (${strong.length ? Math.round((strongHit / strong.length) * 100) : 0}%)` : "รอผลปิดวันแรก"}
           tone={judged.length ? (hit1Count / judged.length > rnd1 ? "up" : "down") : "neutral"}
         />
         <StatCard
@@ -143,7 +145,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {paged.items.map(({ r, oTop, oBot, pair, star, hit1, hit2 }) => (
+                  {paged.items.map(({ r, oTop, oBot, pair, star, weak, hit1, hit2 }) => (
                     <tr key={r.id} className="hover:bg-slate-50">
                       <td className="px-3 py-2 whitespace-nowrap">{r.date.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" })}</td>
                       <td className="px-3 py-2 whitespace-nowrap tabular-nums">
@@ -175,7 +177,8 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                             : hasClose(r) && r.liveValue === null ? <span className="text-slate-300">–</span> : null;
                           return <span className={`rounded px-1.5 py-0.5 font-medium ${c.hit === true ? "bg-emerald-100 text-emerald-800" : c.hit === false ? "bg-red-100 text-red-800 line-through" : "bg-amber-100 text-amber-800"}`}>จากเปิด {c.call === "up" ? "▲ บวก" : "▼ ลบ"}{c.hit === true ? " ✓" : c.hit === false ? " ✗" : ""}</span>; })()}
                       </td>}
-                      <td className="px-3 py-2 whitespace-nowrap bg-amber-50/50">
+                      <td className={`px-3 py-2 whitespace-nowrap ${weak ? "bg-red-50/60" : "bg-amber-50/50"}`}>
+                        {weak && <span className="mb-1 block text-[10px] font-medium text-red-600">วันอ่อน — ไม่แนะนำแทงเดี่ยว</span>}
                         <span className="flex items-center gap-1.5">
                           {pair.map((d) => {
                             const ok = hit2 ? hit2.includes(d) : null;

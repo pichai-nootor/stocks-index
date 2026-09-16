@@ -438,6 +438,18 @@ export function pickTwo(openValue: number, openChange: number, priceHistory: Rec
   return { digits: [first, second], standout, standoutRate: rate(standout), pAny: best!.any, pBoth: best!.both, third: third.d, pAny3: third.any, fourth: fourth.d, pAny4: fourth.any, tiedWithMain: tiedGroup(details) };
 }
 
+/**
+ * ความแข็งของวัน สำหรับคนแทงเลขเดี่ยว: ดูจากโอกาสของเลขเด่นวันนั้น (ขึ้นกับ D ล้วน ๆ)
+ *   10 ปี: วันที่เลขเด่น ≥36% (52% ของวัน) ถูกจริง 38.5% · 34–36% ถูก 34.9% · <34% (17% ของวัน, D มี 0 เช่น 00 50 90 20) ถูกแค่ 29.5%
+ *   → ข้ามวันอ่อน ทำให้อัตราถูกในวันที่แทงขยับจาก 36% เป็น ~38%
+ */
+export type DayStrength = { level: "แข็ง" | "ปกติ" | "อ่อน"; p: number; hint: string };
+export function dayStrength(topP: number): DayStrength {
+  if (topP >= 0.36) return { level: "แข็ง", p: topP, hint: "วันแบบนี้ 10 ปีถูก 38.5% — แทงได้" };
+  if (topP >= 0.34) return { level: "ปกติ", p: topP, hint: "วันแบบนี้ 10 ปีถูก 35% — เท่าค่าเฉลี่ย" };
+  return { level: "อ่อน", p: topP, hint: "วันแบบนี้ 10 ปีถูกแค่ 29.5% (D มีเลข 0 ทำให้เลขปิดซ้ำกันเอง) — ไม่แนะนำแทงเลขเดี่ยว" };
+}
+
 /** ระดับความแข็งของคู่วันนี้ เทียบการกระจาย 10 ปี (ส่วนใหญ่ 14–20%) */
 export const pairLevel = (pBoth: number) => (pBoth >= 0.22 ? "คู่แข็ง" : pBoth < 0.14 ? "คู่อ่อน" : "ปกติ");
 

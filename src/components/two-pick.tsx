@@ -1,4 +1,4 @@
-import { pairLevel, PAIR_BASE, type DigitDetail, type PairPick, type TwoPick } from "@/lib/digits";
+import { pairLevel, PAIR_BASE, dayStrength, type DigitDetail, type PairPick, type TwoPick } from "@/lib/digits";
 
 const pct = (x: number, d = 0) => `${(x * 100).toFixed(d)}%`;
 
@@ -39,8 +39,13 @@ export function TwoPickCard({ two, tied, score }: {
   /** ผลย้อนหลังของผู้ใช้ (ถ้ามี) */
   score?: { days: number; pair?: { both: number; any: number }; tied?: { both: number; any: number }; single?: number };
 }) {
+  const ds = dayStrength(two.digits[0].p);
+  const dsCls = ds.level === "แข็ง" ? "bg-emerald-100 text-emerald-800" : ds.level === "อ่อน" ? "bg-red-100 text-red-800" : "bg-slate-100 text-slate-600";
   return (
     <div>
+      <div className={`mb-2 rounded-md px-3 py-1.5 text-sm ${dsCls}`}>
+        วันนี้: <span className="font-semibold">วัน{ds.level}</span> สำหรับเลขเดี่ยว (เลขเด่นมีโอกาส {pct(ds.p, 1)}) — {ds.hint}
+      </div>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <p className="text-xs font-medium uppercase tracking-wide text-amber-800">ฟันเลข 2 ตัว</p>
         <p className="text-sm text-slate-700">
