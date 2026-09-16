@@ -97,6 +97,20 @@ export default function MethodPage() {
       </section>
 
       <section className="card space-y-3">
+        <h2 className="font-medium">3c. ค้นอัตโนมัติ 1,648 สูตร (ผสม 1–3 ตำแหน่ง × บวก/ลบ/คูณ/หยิบตรง) — 16 ก.ย. 2569</h2>
+        <p className="text-sm">ใช้เครื่องมือหน้า “ทดลองสูตร” วิ่งทุกชุดผสมของ 16 ตำแหน่งตัวเปิด (ทศนิยมบน/ล่าง, D, หลักของดัชนี, หลักของจุดที่เปลี่ยน, ปิดเมื่อวาน) บน 10 ปี แล้วจัดอันดับตาม “ชนะสุ่มกี่จุด”</p>
+        <table className="w-full text-sm tabular-nums">
+          <thead className="text-left text-xs uppercase text-slate-500"><tr><th className="py-1 pr-3">สูตร (ดีสุด 5 อันดับ)</th><th className="py-1 pr-3 text-right">10 ปี</th><th className="py-1 pr-3 text-right">5 ปีแรก / หลัง</th><th className="py-1 text-right">ของคุณ 75 วัน</th></tr></thead>
+          <tbody className="divide-y divide-slate-100">
+            {[["บนหน่วย + หลักร้อยของจุดเปลี่ยน (mod 10)", "37.2%", "39.4 / 35.0", "36.0%"], ["หลักร้อยดัชนี + หลักร้อยจุดเปลี่ยน + ปิดเมื่อวานบนสิบ", "37.0%", "36.8 / 37.1", "31.1%"], ["Dสิบ + หลักร้อยดัชนี + หลักร้อยจุดเปลี่ยน", "37.0%", "36.8 / 37.1", "32.0%"], ["ล่างหน่วย + Dหน่วย + หลักร้อยจุดเปลี่ยน", "36.8%", "37.8 / 35.9", "42.7%"], ["ล่างหน่วย + หลักสิบจุดเปลี่ยน + ปิดเมื่อวานล่างสิบ", "36.8%", "37.1 / 36.6", "40.5%"]].map(([a, b, c, d]) => (
+              <tr key={a}><td className="py-1 pr-3">{a}</td><td className="py-1 pr-3 text-right">{b}</td><td className="py-1 pr-3 text-right">{c}</td><td className="py-1 text-right">{d}</td></tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="text-sm">สุ่ม 34.5% · ลอง 1,648 สูตร ค่าสูงสุดที่โชคล้วนให้ได้ ≈ 37.9% → ทุกสูตรอยู่ใต้เส้นนั้น และอันดับต้น ๆ ในข้อมูลของคุณเองได้ 31–43% (แกว่งตามโชค) — <b>ไม่มีสูตรจากตัวเปิดที่ชนะการไล่กรณีจาก D</b></p>
+      </section>
+
+      <section className="card space-y-3">
         <h2 className="font-medium">4. ส่วนที่ทายได้จริง: ทิศทางปิด</h2>
         <p className="text-sm">จากค่าเปิด (เทียบปิดวันก่อน, 10 ปี):</p>
         <p className="text-sm">{DIRECTION_TIERS.map((t) => `≥${t.minPct}%: เปิดบวก ${pct(t.up)} / เปิดลบ ${pct(t.down)}`).join(" · ")}</p>
