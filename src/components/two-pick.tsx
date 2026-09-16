@@ -42,9 +42,9 @@ export function TwoPickCard({ two, tied, score }: {
   return (
     <div>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="text-xs font-medium uppercase tracking-wide text-amber-800">ฟันเลข 2 ตัว + สำรอง 1 ตัว</p>
+        <p className="text-xs font-medium uppercase tracking-wide text-amber-800">ฟันเลข 2 ตัว</p>
         <p className="text-sm text-slate-700">
-          โผล่อย่างน้อย 1 ตัว: 2 ตัว <span className="font-semibold">{pct(two.pAny)}</span> · รวมสำรอง <span className="font-semibold">{pct(two.pAny3)}</span>
+          โผล่อย่างน้อย 1 ตัว <span className="font-semibold">{pct(two.pAny)}</span>
           {score?.pair && <span className="text-xs text-slate-400"> · ของคุณ {score.days} วัน: 2 ตัว {pct(score.pair.any)}</span>}
         </p>
       </div>
@@ -67,13 +67,8 @@ export function TwoPickCard({ two, tied, score }: {
             </div>
           );
         })}
-        <span className="mx-1 self-center text-2xl text-amber-300">+</span>
-        <div className="flex flex-col items-center">
-          <span className="flex h-14 w-14 items-center justify-center rounded-xl border-2 border-dashed border-amber-300 bg-white font-mono text-4xl font-bold text-amber-800">{two.third.digit}</span>
-          <span className="mt-1 text-xs text-slate-500">สำรอง</span>
-        </div>
         <p className="ml-2 self-center text-xs text-slate-500">
-          10 ปี: 2 ตัว 63% · รวมสำรอง 82% (สุ่ม 59% / 71%)<br />
+          10 ปี: 2 ตัว ≥1 = 63% (สุ่ม 59%)<br />
           ★ ตัวเด่น = ตัวที่โผล่บ่อยกว่าในประวัติ (ฐาน 10 ปี + หุ้นนี้: {pct(two.standoutRate, 1)})
         </p>
       </div>
