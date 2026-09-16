@@ -30,7 +30,7 @@ export function CallCard({ c, score }: { c: DirectionCall; score?: { called: num
         <div>
           <p className={`text-3xl font-semibold ${up ? "text-emerald-700" : "text-red-700"}`}>{up ? "ปิดบวก" : "ปิดลบ"} <span className="text-xl">{pct(f.pSame)}</span></p>
           <p className="mt-1 text-sm text-slate-700">{c.reason} <span className="rounded bg-white/70 px-1.5 py-0.5 text-xs">มั่นใจ {f.tier.label}</span></p>
-          <p className="mt-1 text-xs text-slate-600">สถิติ 10 ปี {pct(f.tier.sameRate)} ({f.tier.n} วัน){f.own ? ` · ของคุณ ${f.own.same}/${f.own.n}` : ""}</p>
+          <p className="mt-1 text-xs text-slate-600">สถิติ 10 ปี เปิด{up ? "บวก" : "ลบ"} {pct(up ? f.tier.up : f.tier.down)} ({up ? f.tier.nUp : f.tier.nDown} วัน){f.own ? ` · ของคุณ ${f.own.same}/${f.own.n}` : ""}</p>
         </div>
       </div>
       {score && score.called > 0 && <p className="mt-3 text-xs text-slate-600">ผลงานวันที่ฟัน: ถูก {score.hits}/{score.called} ({pct(score.hits / score.called)})</p>}

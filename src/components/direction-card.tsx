@@ -20,14 +20,14 @@ export function DirectionCard({ f, compact = false }: { f: DirectionForecast; co
             {" "}<span className={`rounded px-1.5 py-0.5 text-xs font-medium ${tierColor}`}>ความมั่นใจ {f.tier.label}</span>
           </p>
           <p className="mt-1 text-xs text-slate-500">
-            สถิติ 10 ปี ช่วงนี้ {pct(f.tier.sameRate)} ({f.tier.n} วัน)
+            สถิติ 10 ปี เปิด{up ? "บวก" : "ลบ"}ช่วงนี้ {pct(up ? f.tier.up : f.tier.down)} ({up ? f.tier.nUp : f.tier.nDown} วัน)
             {f.own && <> · ของคุณ {f.own.same}/{f.own.n}</>}
           </p>
         </div>
       </div>
       {!compact && (
         <p className="mt-3 text-xs text-slate-500">
-          ยิ่งเปิดห่างจากปิดเมื่อวานมาก ยิ่งปิดไปทางเดียวกัน: &lt;0.1% ≈ 54% · 0.25–0.5% ≈ 67% · 0.5–1% ≈ 80% · &gt;1% ≈ 84–94%
+          ยิ่งเปิดห่างจากปิดเมื่อวานมาก ยิ่งปิดไปทางเดียวกัน — และเปิดลบเชื่อถือได้กว่าเปิดบวก: &lt;0.1% บวก 50% / ลบ 59% · 0.1–0.25% บวก 56% / ลบ 67% · 0.25–0.5% ≈ 67–69% · 0.5–1% ≈ 79–81% · ≥1% บวก 78% / ลบ 95%
         </p>
       )}
     </div>

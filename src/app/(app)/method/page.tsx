@@ -79,7 +79,8 @@ export default function MethodPage() {
       <section className="card space-y-3">
         <h2 className="font-medium">4. ส่วนที่ทายได้จริง: ทิศทางปิด</h2>
         <p className="text-sm">จากค่าเปิด (เทียบปิดวันก่อน, 10 ปี):</p>
-        <p className="text-sm">{DIRECTION_TIERS.map((t) => `≥${t.minPct}% → ${pct(t.sameRate)}`).join(" · ")}</p>
+        <p className="text-sm">{DIRECTION_TIERS.map((t) => `≥${t.minPct}%: เปิดบวก ${pct(t.up)} / เปิดลบ ${pct(t.down)}`).join(" · ")}</p>
+        <p className="text-sm text-slate-600">เปิดลบเชื่อถือได้กว่าเปิดบวกทุกช่วง — SENSEX มีแนวโน้มไหลลงระหว่างวัน เปิดบวกเล็กน้อยจึงโดนขายจนปิดลบบ่อยกว่าทางกลับ</p>
         <p className="text-sm">จากราคาระหว่างวัน (2 ปี) — ยิ่งสาย + ยิ่งห่าง ยิ่งแม่น:</p>
         <div className="overflow-x-auto">
           <table className="w-full text-sm tabular-nums">

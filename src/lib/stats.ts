@@ -209,12 +209,13 @@ export function hasClose<T extends MaybeClosed>(r: T): r is T & { closeValue: nu
  * ค่าฐานจาก BSE SENSEX รายวัน 10 ปี (2016-09 → 2026-09, 2,463 วัน)
  */
 export const DIRECTION_TIERS = [
-  { minPct: 2.0,  sameRate: 0.935, label: "สูงมาก", n: 46 },
-  { minPct: 1.0,  sameRate: 0.841, label: "สูง",     n: 107 },
-  { minPct: 0.5,  sameRate: 0.798, label: "สูง",     n: 420 },
-  { minPct: 0.25, sameRate: 0.673, label: "ปานกลาง", n: 681 },
-  { minPct: 0.1,  sameRate: 0.592, label: "ต่ำ",     n: 693 },
-  { minPct: 0,    sameRate: 0.537, label: "เท่าโยนเหรียญ", n: 516 },
+  // sameRate = รวมทั้งสองทาง · up/down = แยกตามที่เปิดบวก/ลบ (เปิดลบเชื่อถือได้กว่าเปิดบวกทุกช่วง — SENSEX มักไหลลงระหว่างวัน)
+  { minPct: 2.0,  sameRate: 0.935, up: 0.944, nUp: 18,  down: 0.929, nDown: 28,  label: "สูงมาก", n: 46 },
+  { minPct: 1.0,  sameRate: 0.841, up: 0.776, nUp: 67,  down: 0.950, nDown: 40,  label: "สูง",     n: 107 },
+  { minPct: 0.5,  sameRate: 0.796, up: 0.790, nUp: 295, down: 0.810, nDown: 126, label: "สูง",     n: 421 },
+  { minPct: 0.25, sameRate: 0.673, up: 0.667, nUp: 531, down: 0.693, nDown: 150, label: "ปานกลาง", n: 681 },
+  { minPct: 0.1,  sameRate: 0.592, up: 0.563, nUp: 510, down: 0.672, nDown: 183, label: "ต่ำ",     n: 693 },
+  { minPct: 0,    sameRate: 0.538, up: 0.498, nUp: 297, down: 0.593, nDown: 216, label: "เท่าโยนเหรียญ", n: 513 },
 ] as const;
 
 export type DirectionForecast = {
@@ -238,14 +239,15 @@ export function forecastDirection(openValue: number, openChange: number, history
   const inTier = history.filter((r) => {
     const p = prevClose(r);
     const a = p ? Math.abs((r.openChange / p) * 100) : 0;
-    return a >= tier.minPct && a < upper && r.openChange !== 0;
+    return a >= tier.minPct && a < upper && r.openChange !== 0 && Math.sign(r.openChange) === Math.sign(openChange);
   });
   const own = inTier.length
     ? { same: inTier.filter((r) => Math.sign(r.openChange) === Math.sign(r.closeChange)).length, n: inTier.length }
     : null;
 
-  // ผสมค่าฐาน 10 ปี กับข้อมูลผู้ใช้ (ถ่วงตามจำนวน; ฐานนับเป็น 30 วัน)
-  const pSame = own ? (tier.sameRate * 30 + own.same) / (30 + own.n) : tier.sameRate;
+  // ฐาน 10 ปีแยกตามที่เปิดบวก/ลบ แล้วผสมกับข้อมูลผู้ใช้ (ถ่วงตามจำนวน; ฐานนับเป็น 30 วัน)
+  const base = direction === "up" ? tier.up : direction === "down" ? tier.down : tier.sameRate;
+  const pSame = own ? (base * 30 + own.same) / (30 + own.n) : base;
   const pUp = direction === "up" ? pSame : direction === "down" ? 1 - pSame : 0.5;
   return { openPct, direction, pSame, pUp, tier, own };
 }
