@@ -63,6 +63,11 @@ export function TwoPickCard({ two, tied, score }: {
           </div>
         ))}
       </div>
+      <div className="mt-2 flex flex-wrap items-center gap-3 rounded-xl border border-dashed border-amber-200 px-3 py-2 text-sm">
+        <span className="text-xs uppercase tracking-wide text-amber-800">ตัวสำรอง</span>
+        <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-amber-300 bg-white font-mono text-2xl font-bold text-amber-900">{two.third.digit}</span>
+        <span className="text-slate-700">โผล่ {pct(two.third.p)} · ถ้าฟัน 3 ตัว (หลัก+รอง+สำรอง) โผล่อย่างน้อย 1 <span className="font-semibold">{pct(two.pAny3)}</span> <span className="text-slate-400">(10 ปี 82% · สุ่ม 71%)</span></span>
+      </div>
       {tied && (
         <p className="mt-2 text-xs text-slate-600">
           คู่ผูกกัน (เลือกจากโอกาสมาทั้งคู่): <span className="font-mono text-base font-bold text-amber-900">{tied.pair.join(" ")}</span> มาทั้งคู่ <span className="font-semibold">{pct(tied.pBoth)}</span>

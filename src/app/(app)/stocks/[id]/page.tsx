@@ -38,7 +38,9 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
     const closeDigits = hasClose(r) ? [...new Set((top2(r.closeValue) + bottom2(r.closeChange)).split(""))] : null;
     const hit1 = pick !== null && closeDigits ? closeDigits.includes(pick) : null;
     const hit2 = pair && closeDigits ? pair.filter((d) => closeDigits.includes(d)) : null;
-    return { r, oTop, oBot, pick, pair, p: two.digits[0].p, closeDigits, hit1, hit2 };
+    const third = two.third.digit;
+    const hit3 = closeDigits ? closeDigits.includes(third) : null;
+    return { r, oTop, oBot, pick, pair, third, p: two.digits[0].p, closeDigits, hit1, hit2, hit3 };
   }).reverse();
 
   const calls = evaluateCalls(stock.records);
@@ -47,6 +49,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
   const judged = rows.filter((x) => x.hit1 !== null);
   const hit1Count = judged.filter((x) => x.hit1).length;
   const hit2Count = judged.filter((x) => x.hit2 && x.hit2.length > 0).length;
+  const hit3Count = judged.filter((x) => (x.hit2 && x.hit2.length > 0) || x.hit3).length;
   const pending = stock.records.filter((r) => !hasClose(r)).length;
 
   return (
@@ -70,8 +73,8 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
       </div>
 
       {/* ผลงานการฟันธง — เทียบกับสุ่มตามจำนวนเลขปิดจริงของแต่ละวัน */}
-      {(() => { const sizes = judged.map((j) => j.closeDigits!.length); const rnd1 = randomAtLeastOne(sizes, 1), rnd2 = randomAtLeastOne(sizes, 2); return (
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {(() => { const sizes = judged.map((j) => j.closeDigits!.length); const rnd1 = randomAtLeastOne(sizes, 1), rnd2 = randomAtLeastOne(sizes, 2), rnd3 = randomAtLeastOne(sizes, 3); return (
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard
           label="ฟันธง 1 ตัว ถูก"
           value={judged.length ? `${hit1Count} / ${judged.length} วัน` : "-"}
@@ -83,6 +86,12 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
           value={judged.length ? `${hit2Count} / ${judged.length} วัน` : "-"}
           hint={judged.length ? `${Math.round((hit2Count / judged.length) * 100)}% · สุ่มเดา ${Math.round(rnd2 * 100)}% · 10 ปี 63%` : undefined}
           tone={judged.length ? (hit2Count / judged.length > rnd2 ? "up" : "down") : "neutral"}
+        />
+        <StatCard
+          label="รวมตัวสำรอง (3 ตัว) โผล่ ≥1"
+          value={judged.length ? `${hit3Count} / ${judged.length} วัน` : "-"}
+          hint={judged.length ? `${Math.round((hit3Count / judged.length) * 100)}% · สุ่มเดา ${Math.round(rnd3 * 100)}% · 10 ปี 82%` : undefined}
+          tone={judged.length ? (hit3Count / judged.length > rnd3 ? "up" : "down") : "neutral"}
         />
         <StatCard
           label={`ฟันทิศทาง (เปิดห่าง ≥${CALL_MIN_GAP_PCT}%)`}
@@ -121,7 +130,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                     <th className="px-3 py-2">เปิด</th>
                     <th className="px-3 py-2">เลขเปิด</th>
                     <th className="px-3 py-2">ทิศทาง</th>
-                    <th className="px-3 py-2 bg-amber-50 text-amber-800">ฟัน 2 ตัว</th>
+                    <th className="px-3 py-2 bg-amber-50 text-amber-800">ฟัน 2 ตัว + สำรอง</th>
                     <th className="px-3 py-2">ปิด</th>
                     <th className="px-3 py-2">เลขปิด</th>
                     <th className="px-3 py-2 bg-amber-50 text-amber-800">ผล</th>
@@ -129,7 +138,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {paged.items.map(({ r, oTop, oBot, pair, p, hit1, hit2 }) => (
+                  {paged.items.map(({ r, oTop, oBot, pair, third, p, hit1, hit2, hit3 }) => (
                     <tr key={r.id} className="hover:bg-slate-50">
                       <td className="px-3 py-2 whitespace-nowrap">{r.date.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" })}</td>
                       <td className="px-3 py-2 whitespace-nowrap tabular-nums">
@@ -147,6 +156,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                             return <span key={d} className={`flex h-9 w-9 items-center justify-center rounded-lg font-mono text-xl font-bold ${ok ? "bg-amber-400 text-white" : ok === false ? "bg-slate-200 text-slate-500 line-through" : "bg-amber-100 text-amber-900"}`}>{d}</span>;
                           })}
                           <span className="ml-1 text-xs text-slate-500">{Math.round(p * 100)}%<br />ต่อตัว</span>
+                          <span className={`ml-1 flex h-7 w-7 items-center justify-center rounded-md border font-mono text-sm font-bold ${hit3 ? "border-amber-400 bg-amber-200 text-amber-900" : hit3 === false ? "border-slate-200 text-slate-400 line-through" : "border-amber-200 text-amber-800"}`} title="ตัวสำรอง">{third}</span>
                         </span>
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap tabular-nums">
@@ -161,7 +171,9 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                         ) : hit2 && hit2.length === 2 ? (
                           <span className="rounded bg-emerald-100 px-2 py-0.5 font-medium text-emerald-800">✓ ถูกทั้งคู่</span>
                         ) : hit2 && hit2.length ? (
-                          <span className="rounded bg-emerald-100 px-2 py-0.5 font-medium text-emerald-800">✓ ถูก {hit2.join(" ")}</span>
+                          <span className="rounded bg-emerald-100 px-2 py-0.5 font-medium text-emerald-800">✓ ถูก {hit2.join(" ")}{hit3 ? ` +สำรอง ${third}` : ""}</span>
+                        ) : hit3 ? (
+                          <span className="rounded bg-amber-100 px-2 py-0.5 font-medium text-amber-800">สำรองถูก {third}</span>
                         ) : (
                           <span className="rounded bg-red-100 px-2 py-0.5 font-medium text-red-800">✗ ผิด</span>
                         )}

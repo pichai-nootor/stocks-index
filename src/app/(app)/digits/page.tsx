@@ -224,7 +224,7 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
             <section className="card">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <h2 className="font-medium">ความแม่นยำย้อนหลัง ({bt.days} วัน)</h2>
-                <span className="text-xs text-slate-500">ฟันแต่ละวันจาก D + ทิศทาง (ใช้ข้อมูลก่อนหน้าวันนั้น) · ปิดมีเลขเฉลี่ย {bt.avgCloseSize.toFixed(1)} ตัว · ฟันแบบนี้บน 10 ปี: ตัวหลัก 36% · 2 ตัว ≥1 63%</span>
+                <span className="text-xs text-slate-500">ฟันแต่ละวันจาก D + ทิศทาง (ใช้ข้อมูลก่อนหน้าวันนั้น) · ปิดมีเลขเฉลี่ย {bt.avgCloseSize.toFixed(1)} ตัว · ฟันแบบนี้บน 10 ปี: ตัวหลัก 36% · 2 ตัว ≥1 63% · 3 ตัว ≥1 82%</span>
               </div>
               <table className="mt-3 w-full text-sm">
                 <thead className="text-left text-xs uppercase text-slate-500">
@@ -233,7 +233,7 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
                 <tbody className="divide-y divide-slate-100">
                   {bt.topK.map((r) => (
                     <tr key={r.k}>
-                      <td className="py-1.5 pr-4">{r.k === 1 ? "ตัวหลัก (ตัวที่หยิบ)" : r.k === 2 ? "ฟัน 2 ตัว (หลัก + รอง)" : "3 เลขอันดับแรก"}</td>
+                      <td className="py-1.5 pr-4">{r.k === 1 ? "ตัวหลัก (ตัวที่หยิบ)" : r.k === 2 ? "ฟัน 2 ตัว (หลัก + รอง)" : "3 ตัว (หลัก + รอง + สำรอง)"}</td>
                       <td className={`py-1.5 pr-4 text-right font-semibold ${r.atLeastOne > r.randomAtLeastOne ? "text-emerald-600" : "text-slate-700"}`}>{pct(r.atLeastOne)}</td>
                       <td className="py-1.5 pr-4 text-right">{pct(r.all)}</td>
                       <td className="py-1.5 text-right text-slate-400">{pct(r.randomAtLeastOne)}</td>

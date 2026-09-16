@@ -375,6 +375,9 @@ export type TwoPick = {
   digits: [DigitDetail, DigitDetail];
   pAny: number;
   pBoth: number;
+  /** ตัวสำรอง (ตัวที่ 3): เลขที่ทำให้ "อย่างน้อย 1 ใน 3 โผล่" สูงสุดเมื่อรวมกับ 2 ตัวแรก */
+  third: DigitDetail;
+  pAny3: number;
   /** เลขที่เสมอกับตัวหลัก (โอกาสเท่ากันเป๊ะ) — วันส่วนใหญ่เสมอกัน 6–8 ตัว ตัวหลักจึงเป็นแค่ตัวแทนของกลุ่มนี้ */
   tiedWithMain: string[];
 };
@@ -385,6 +388,7 @@ export const tiedGroup = <T extends { p: number; digit: string }>(sorted: T[]) =
  * ฟัน 2 ตัวจากเลขเดี่ยว
  *   ตัวหลัก = เลขที่โอกาสโผล่สูงสุด (เสมอกัน → เลขมากก่อน; วันส่วนใหญ่เสมอกัน 6–8 ตัว ทุกกฎตัดสินเสมอได้ ~36% เท่ากันบน 10 ปี)
  *   ตัวรอง = คู่ของตัวหลักที่ทำให้ "อย่างน้อย 1 ใน 2 โผล่" สูงสุด (10 ปี 63.5% เทียบสุ่ม 59%)
+ *   ตัวสำรอง = ตัวที่ 3 ที่ทำให้ "อย่างน้อย 1 ใน 3 โผล่" สูงสุด
  */
 export function pickTwo(openValue: number, openChange: number, priceHistory: RecordLike[] = []): TwoPick {
   const D = prevCloseCents(openValue, openChange);
@@ -398,7 +402,15 @@ export function pickTwo(openValue: number, openChange: number, priceHistory: Rec
     for (const o of O) { const a = o.set.has(first.digit), b = o.set.has(d.digit); if (a || b) any += o.w; if (a && b) both += o.w; }
     if (!best || Math.round(any * 1e9) > Math.round(best.any * 1e9)) best = { d, any, both };
   }
-  return { digits: [first, best!.d], pAny: best!.any, pBoth: best!.both, tiedWithMain: tiedGroup(details) };
+  const second = best!.d;
+  let third: { d: DigitDetail; any: number } | null = null;
+  for (const d of details) {
+    if (d.digit === first.digit || d.digit === second.digit) continue;
+    let any = 0;
+    for (const o of O) if (o.set.has(first.digit) || o.set.has(second.digit) || o.set.has(d.digit)) any += o.w;
+    if (!third || Math.round(any * 1e9) > Math.round(third.any * 1e9)) third = { d, any };
+  }
+  return { digits: [first, second], pAny: best!.any, pBoth: best!.both, third: third!.d, pAny3: third!.any, tiedWithMain: tiedGroup(details) };
 }
 
 /** ระดับความแข็งของคู่วันนี้ เทียบการกระจาย 10 ปี (ส่วนใหญ่ 14–20%) */
@@ -430,7 +442,7 @@ export function backtestPicks(records: RecordLike[], minHistory = 0): Backtest {
     const two = pickTwo(sorted[i].openValue, sorted[i].openChange, hist);
     fair += two.tiedWithMain.filter((d) => days[i].closeDigits.includes(d)).length / two.tiedWithMain.length;
     if (two.tiedWithMain.length > 1) tieDays++;
-    const third = pickDigits(sorted[i].openValue, sorted[i].openChange, hist).map((x) => x.digit).find((d) => !two.digits.some((t) => t.digit === d))!;
+    const third = two.third.digit;
     const predicted = [two.digits[0].digit, two.digits[1].digit, third];
     const hits = predicted.filter((d) => days[i].closeDigits.includes(d));
     perDay.push({ date: days[i].date, predicted, actual: days[i].closeDigits, hits });
