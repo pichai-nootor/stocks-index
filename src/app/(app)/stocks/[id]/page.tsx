@@ -162,7 +162,8 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                               {liveNow.source === "bse" ? "BSE" : "Yahoo"} {fmtThaiTime(liveNow.f.at)} {fmtNum(liveNow.f.price)} {liveNow.f.call === "up" ? "▲ บวก" : liveNow.f.call === "down" ? "▼ ลบ" : "ยังไม่ฟัน"} {Math.round(liveNow.f.pSame * 100)}% <span className="font-normal text-slate-500">({liveNow.source === "bse" ? "ดีเลย์ ~1 น." : "ดีเลย์ ~15 น."})</span>
                             </span>
                             <div><LiveSaveButton recordId={r.id} label={r.liveValue === null ? "ฟันสดด้วยราคานี้" : "อัปเดตด้วยราคานี้"} /></div>
-                            <LiveManualForm recordId={r.id} compact />
+                            {/* ช่องกรอกเอง มีไว้เฉพาะตอนได้ราคาจาก Yahoo (ดีเลย์ 15 นาที) — BSE เรียลไทม์แล้วไม่ต้อง */}
+                            {liveNow.source !== "bse" && <LiveManualForm recordId={r.id} compact />}
                           </div>
                         )}
                         {/* ฟันจากเปิด (เปิดห่าง ≥1%) แสดงเฉพาะวันที่ฟันจริง — วันอื่นไม่ต้องบอกว่า "ไม่ฟัน" */}

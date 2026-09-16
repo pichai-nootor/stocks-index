@@ -65,9 +65,10 @@ export function LiveCard({ recordId, prevClose, live, saved, score }: {
         )}
         {score && score.called > 0 && <span className="text-xs text-slate-600">ผลฟันสดที่ผ่านมา: ถูก {score.hits}/{score.called} ({pct(score.hits / score.called)})</span>}
       </div>
-      {!live?.closed && (
+      {/* ช่องกรอกเอง มีไว้เฉพาะตอนไม่มีราคาเรียลไทม์ (BSE ล่ม → Yahoo ดีเลย์ 15 นาที หรือดึงไม่ได้เลย) */}
+      {!live?.closed && live?.source !== "bse" && (
         <div className="mt-2 text-xs text-slate-600">
-          <p className="mb-1">หรือกรอกราคาที่เห็นจากหน้าจอจริงตอนนี้ — ระบบใช้เวลาปัจจุบันเป็นเวลาที่อ่าน</p>
+          <p className="mb-1">ราคาเรียลไทม์ใช้ไม่ได้ตอนนี้ — กรอกราคาที่เห็นจากหน้าจอจริงแทนได้ (ระบบใช้เวลาปัจจุบันเป็นเวลาที่อ่าน)</p>
           <LiveManualForm recordId={recordId} compact />
         </div>
       )}
