@@ -3,7 +3,7 @@
 import { useActionState } from "react";
 import { saveLiveFromYahoo, fillCloseFromYahoo } from "@/app/actions/stocks";
 import { FormError } from "@/components/form-error";
-import { LIVE_CHECKPOINTS, LIVE_CALL_MIN, liveDirection, fmtThaiTime } from "@/lib/intraday";
+import { LIVE_CHECKPOINTS, USABLE_CHECKPOINTS, LIVE_CALL_MIN, CALL_DEADLINE_THAI, liveDirection, fmtThaiTime } from "@/lib/intraday";
 import { fmtNum, fmtChange } from "@/lib/stats";
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
@@ -31,7 +31,7 @@ export function LiveCard({ recordId, prevClose, live, saved, score }: {
   return (
     <div className={`card ${tone(show?.call ?? null)}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-600">ฟันทิศทางสด (ราคาระหว่างวัน)</p>
+        <p className="text-xs font-medium uppercase tracking-wide text-slate-600">ฟันทิศทางสด (ราคาระหว่างวัน) <span className="ml-1 rounded bg-red-100 px-1.5 py-0.5 normal-case text-red-700">ต้องฟันก่อน {CALL_DEADLINE_THAI} น.</span></p>
         {live && <p className="text-xs text-slate-500">Yahoo ล่าสุด {fmtNum(live.price)} <span className={live.price >= prevClose ? "text-emerald-600" : "text-red-600"}>{fmtChange(live.price - prevClose)}</span> · {fmtThaiTime(new Date(live.at))} น. ไทย{live.closed ? " · ปิดแล้ว" : ""}</p>}
       </div>
 
@@ -66,16 +66,19 @@ export function LiveCard({ recordId, prevClose, live, saved, score }: {
       <FormError message={ls?.error ?? cs?.error} />
 
       <details className="mt-3 text-xs text-slate-600">
-        <summary className="cursor-pointer">เช็กตอนไหนแม่นแค่ไหน (SENSEX 2 ปี, 718 วัน) — ฟันเมื่อ ≥ {pct(LIVE_CALL_MIN)}</summary>
+        <summary className="cursor-pointer">เช็กตอนไหนแม่นแค่ไหน (SENSEX 2 ปี, 718 วัน) — ฟันเมื่อ ≥ {pct(LIVE_CALL_MIN)} · จุดสุดท้ายที่ทัน {USABLE_CHECKPOINTS[USABLE_CHECKPOINTS.length - 1].thai} น.</summary>
         <table className="mt-2 w-full tabular-nums">
           <thead className="text-slate-400"><tr><th className="text-left font-normal">เวลาไทย</th>{LIVE_CHECKPOINTS[0].tiers.map((t) => <th key={t.minPct} className="text-right font-normal">≥{t.minPct}%</th>).reverse()}</tr></thead>
           <tbody>
-            {LIVE_CHECKPOINTS.map((c) => (
-              <tr key={c.ist}><td>{c.thai}</td>{[...c.tiers].reverse().map((t) => <td key={t.minPct} className={`text-right ${t.rate >= LIVE_CALL_MIN ? "font-semibold text-emerald-700" : ""}`}>{pct(t.rate)}</td>)}</tr>
-            ))}
+            {LIVE_CHECKPOINTS.map((c) => {
+              const late = !USABLE_CHECKPOINTS.includes(c);
+              return (
+                <tr key={c.ist} className={late ? "text-slate-300 line-through" : ""}><td>{c.thai}{late ? " (เลยเส้นตาย)" : ""}</td>{[...c.tiers].reverse().map((t) => <td key={t.minPct} className={`text-right ${!late && t.rate >= LIVE_CALL_MIN ? "font-semibold text-emerald-700" : ""}`}>{pct(t.rate)}</td>)}</tr>
+              );
+            })}
           </tbody>
         </table>
-        <p className="mt-1">คอลัมน์ = ระยะห่างจากปิดเมื่อวานตอนที่เช็ก · ทิศทางเทียบปิดวันก่อน ไม่ใช่เทียบเปิด</p>
+        <p className="mt-1">คอลัมน์ = ระยะห่างจากปิดเมื่อวานตอนที่เช็ก · ทิศทางเทียบปิดวันก่อน ไม่ใช่เทียบเปิด · แนะนำเช็ก 15:45 น. แล้วฟันทันทีถ้าห่าง ≥0.25% (97%)</p>
       </details>
     </div>
   );

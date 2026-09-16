@@ -14,6 +14,11 @@ export const LIVE_CHECKPOINTS = [
 
 /** ฟันสดเมื่อโอกาสถูก ≥ เกณฑ์นี้ */
 export const LIVE_CALL_MIN = 0.85;
+/** เส้นตายที่ต้องฟันให้เสร็จ (เวลาไทย) — จุดเวลาหลังจากนี้ใช้ไม่ได้ */
+export const CALL_DEADLINE_THAI = "16:30";
+export const CALL_DEADLINE_IST = 15 * 60;      // 16:30 ไทย = 15:00 IST
+/** จุดเวลาที่ยังทันเส้นตาย */
+export const USABLE_CHECKPOINTS = LIVE_CHECKPOINTS.filter((c) => c.istMin <= CALL_DEADLINE_IST);
 export const MARKET_OPEN_IST = 555;  // 09:15
 export const MARKET_CLOSE_IST = 930; // 15:30
 
@@ -44,18 +49,20 @@ export function liveDirection(prevClose: number, price: number, at: Date): LiveF
   const abs = Math.abs(pct);
   const direction = pct > 0 ? "up" : pct < 0 ? "down" : "flat";
   const m = istMinutes(at);
-  const checkpoint = [...LIVE_CHECKPOINTS].reverse().find((c) => m >= c.istMin) ?? null;
+  const checkpoint = [...USABLE_CHECKPOINTS].reverse().find((c) => m >= c.istMin) ?? null;
   const tier = checkpoint ? checkpoint.tiers.find((t) => abs >= t.minPct) ?? null : null;
   const pSame = tier ? tier.rate : 0.5;
   if (!checkpoint || !tier) {
     return { price, at, pct, direction, pSame, checkpoint, tier, call: null, reason: `ยังไม่ถึง ${LIVE_CHECKPOINTS[0].thai} น. ไทย — ใช้ค่าเปิดไปก่อน` };
   }
   const base = `${checkpoint.thai} น. ไทย ห่าง ${pct > 0 ? "+" : ""}${pct.toFixed(2)}% → ปิดทางเดียวกัน ${Math.round(pSame * 100)}% (${tier.n} วัน)`;
+  const pastDeadline = m > CALL_DEADLINE_IST;
   if (direction === "flat" || pSame < LIVE_CALL_MIN) {
-    const next = LIVE_CHECKPOINTS.find((c) => c.istMin > m);
-    return { price, at, pct, direction, pSame, checkpoint, tier, call: null, reason: `${base} — ยังไม่ถึง ${Math.round(LIVE_CALL_MIN * 100)}%${next ? ` ลองเช็กอีกที ${next.thai} น.` : ""}` };
+    const next = USABLE_CHECKPOINTS.find((c) => c.istMin > m);
+    const hint = pastDeadline ? ` (เลยเส้นตาย ${CALL_DEADLINE_THAI} แล้ว)` : next ? ` ลองเช็กอีกที ${next.thai} น.` : ` — จุดสุดท้ายก่อนเส้นตาย ${CALL_DEADLINE_THAI} น. ถ้าจะฟันต้องรับความเสี่ยงเอง`;
+    return { price, at, pct, direction, pSame, checkpoint, tier, call: null, reason: `${base} — ยังไม่ถึง ${Math.round(LIVE_CALL_MIN * 100)}%${hint}` };
   }
-  return { price, at, pct, direction, pSame, checkpoint, tier, call: direction, reason: base };
+  return { price, at, pct, direction, pSame, checkpoint, tier, call: direction, reason: pastDeadline ? `${base} (อ่านหลังเส้นตาย ${CALL_DEADLINE_THAI} — ใช้ตรวจย้อนหลังเท่านั้น)` : base };
 }
 
 export type LiveCallRecord = { date: Date; call: "up" | "down" | null; pSame: number; at: Date; actual: "up" | "down" | "flat" | null; hit: boolean | null };

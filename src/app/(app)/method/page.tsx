@@ -89,6 +89,7 @@ export default function MethodPage() {
             </tbody>
           </table>
         </div>
+        <p className="text-sm text-slate-600">ต้องฟันก่อน 16:30 น. ไทย → จุดสุดท้ายที่ใช้ได้คือ 15:45 น. (ห่าง ≥0.25% → 97%, 0.1–0.25% → 79%) แถว 16:45 มีไว้อ้างอิงเท่านั้น</p>
         <p className="text-sm text-slate-600">ทิศทางที่แม่นขึ้นไม่ช่วยเรื่องเลข (ต่อให้รู้ทิศทาง 100% เลขเดี่ยวก็ 35.5%) แต่ใช้ฟันบวก/ลบได้เกือบทุกวัน — ดู <Link href="/dashboard" className="text-blue-600 hover:underline">หน้าแรก</Link></p>
       </section>
     </div>
