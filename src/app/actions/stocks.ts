@@ -194,6 +194,7 @@ export async function importCsv(_prev: ImportState, formData: FormData): Promise
 /* ---------- ดึงจาก Yahoo: เปิด / ปิด / ราคาสด ---------- */
 
 import { fetchQuote } from "@/lib/yahoo";
+import { istMinutes, CALL_DEADLINE_IST, CALL_DEADLINE_THAI } from "@/lib/intraday";
 
 const dateOnly = (ymd: string) => new Date(ymd);
 
@@ -226,6 +227,8 @@ export async function saveLiveFromYahoo(_prev: ActionState, formData: FormData):
   if (!q) return { error: "ดึงราคาสดไม่ได้" };
   if (q.tradingDate !== record.date.toISOString().slice(0, 10)) return { error: `แหล่งราคายังอยู่ที่วัน ${q.tradingDate} — ตลาดยังไม่เปิดสำหรับวันนี้` };
   if (q.closed) return { error: "ตลาดปิดแล้ว — กด “เติมราคาปิดอัตโนมัติ” แทน" };
+  // หลังเส้นตายห้ามทับคำฟันเดิม ไม่งั้นราคาใกล้ปิดจะทำให้ "ถูก" แบบไม่ยุติธรรม
+  if (istMinutes(q.lastAt) > CALL_DEADLINE_IST) return { error: `เลยเส้นตาย ${CALL_DEADLINE_THAI} น. แล้ว — คำฟันที่บันทึกไว้ก่อนหน้าคงเดิม` };
   await prisma.record.update({ where: { id }, data: { liveValue: q.last, liveAt: q.lastAt } });
   revalidatePath("/dashboard"); revalidatePath(`/stocks/${record.stockId}`);
   return undefined;
@@ -263,6 +266,7 @@ export async function saveLiveManual(_prev: ActionState, formData: FormData): Pr
   if (record.closeValue !== null) return { error: "วันนี้มีผลปิดแล้ว" };
   const prev = record.openValue - record.openChange;
   if (Math.abs(price - prev) / prev > 0.1) return { error: `ราคา ${price} ห่างจากปิดเมื่อวาน ${prev.toFixed(2)} เกิน 10% — พิมพ์ผิดหรือเปล่า` };
+  if (istMinutes(new Date()) > CALL_DEADLINE_IST) return { error: `เลยเส้นตาย ${CALL_DEADLINE_THAI} น. แล้ว — คำฟันที่บันทึกไว้ก่อนหน้าคงเดิม` };
   await prisma.record.update({ where: { id }, data: { liveValue: price, liveAt: new Date() } });
   revalidatePath("/dashboard"); revalidatePath(`/stocks/${record.stockId}`);
   return undefined;

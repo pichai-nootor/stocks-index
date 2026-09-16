@@ -57,12 +57,15 @@ export function liveDirection(prevClose: number, price: number, at: Date): LiveF
   }
   const base = `${checkpoint.thai} น. ไทย ห่าง ${pct > 0 ? "+" : ""}${pct.toFixed(2)}% → ปิดทางเดียวกัน ${Math.round(pSame * 100)}% (${tier.n} วัน)`;
   const pastDeadline = m > CALL_DEADLINE_IST;
+  if (pastDeadline) {
+    return { price, at, pct, direction, pSame, checkpoint, tier, call: null, reason: `อ่านราคาหลังเส้นตาย ${CALL_DEADLINE_THAI} น. — ไม่นับเป็นคำฟัน` };
+  }
   if (direction === "flat" || pSame < LIVE_CALL_MIN) {
     const next = USABLE_CHECKPOINTS.find((c) => c.istMin > m);
-    const hint = pastDeadline ? ` (เลยเส้นตาย ${CALL_DEADLINE_THAI} แล้ว)` : next ? ` ลองเช็กอีกที ${next.thai} น.` : ` — จุดสุดท้ายก่อนเส้นตาย ${CALL_DEADLINE_THAI} น. ถ้าจะฟันต้องรับความเสี่ยงเอง`;
+    const hint = next ? ` ลองเช็กอีกที ${next.thai} น.` : ` — จุดสุดท้ายก่อนเส้นตาย ${CALL_DEADLINE_THAI} น. ถ้าจะฟันต้องรับความเสี่ยงเอง`;
     return { price, at, pct, direction, pSame, checkpoint, tier, call: null, reason: `${base} — ยังไม่ถึง ${Math.round(LIVE_CALL_MIN * 100)}%${hint}` };
   }
-  return { price, at, pct, direction, pSame, checkpoint, tier, call: direction, reason: pastDeadline ? `${base} (อ่านหลังเส้นตาย ${CALL_DEADLINE_THAI} — ใช้ตรวจย้อนหลังเท่านั้น)` : base };
+  return { price, at, pct, direction, pSame, checkpoint, tier, call: direction, reason: base };
 }
 
 export type LiveCallRecord = { date: Date; call: "up" | "down" | null; pSame: number; at: Date; actual: "up" | "down" | "flat" | null; hit: boolean | null };
