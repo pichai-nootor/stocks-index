@@ -42,9 +42,9 @@ export function TwoPickCard({ two, tied, score }: {
   return (
     <div>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="text-xs font-medium uppercase tracking-wide text-amber-800">ฟันเลข 2 ตัว + สำรอง 2 ตัว</p>
+        <p className="text-xs font-medium uppercase tracking-wide text-amber-800">ฟันเลข 2 ตัว + สำรอง 1 ตัว</p>
         <p className="text-sm text-slate-700">
-          โผล่อย่างน้อย 1 ตัว: 2 ตัว <span className="font-semibold">{pct(two.pAny)}</span> · 3 ตัว <span className="font-semibold">{pct(two.pAny3)}</span> · 4 ตัว <span className="font-semibold">{pct(two.pAny4)}</span>
+          โผล่อย่างน้อย 1 ตัว: 2 ตัว <span className="font-semibold">{pct(two.pAny)}</span> · รวมสำรอง <span className="font-semibold">{pct(two.pAny3)}</span>
           {score?.pair && <span className="text-xs text-slate-400"> · ของคุณ {score.days} วัน: 2 ตัว {pct(score.pair.any)}</span>}
         </p>
       </div>
@@ -62,13 +62,11 @@ export function TwoPickCard({ two, tied, score }: {
           </div>
         ))}
         <span className="mx-1 self-center text-2xl text-amber-300">+</span>
-        {[two.third, two.fourth].map((d, i) => (
-          <div key={d.digit} className="flex flex-col items-center">
-            <span className="flex h-14 w-14 items-center justify-center rounded-xl border-2 border-dashed border-amber-300 bg-white font-mono text-4xl font-bold text-amber-800">{d.digit}</span>
-            <span className="mt-1 text-xs text-slate-500">สำรอง {i + 1}</span>
-          </div>
-        ))}
-        <p className="ml-2 self-center text-xs text-slate-500">10 ปี: 2 ตัว 63% · 3 ตัว 82% · 4 ตัว 94% (สุ่ม 59 / 71 / 87%)</p>
+        <div className="flex flex-col items-center">
+          <span className="flex h-14 w-14 items-center justify-center rounded-xl border-2 border-dashed border-amber-300 bg-white font-mono text-4xl font-bold text-amber-800">{two.third.digit}</span>
+          <span className="mt-1 text-xs text-slate-500">สำรอง</span>
+        </div>
+        <p className="ml-2 self-center text-xs text-slate-500">10 ปี: 2 ตัว 63% · รวมสำรอง 82% (สุ่ม 59% / 71%)</p>
       </div>
       {two.digits.some(leans) && (
         <div className="mt-3 grid gap-3 sm:grid-cols-2">

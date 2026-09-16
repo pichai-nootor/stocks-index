@@ -38,10 +38,9 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
     const closeDigits = hasClose(r) ? [...new Set((top2(r.closeValue) + bottom2(r.closeChange)).split(""))] : null;
     const hit1 = pick !== null && closeDigits ? closeDigits.includes(pick) : null;
     const hit2 = pair && closeDigits ? pair.filter((d) => closeDigits.includes(d)) : null;
-    const third = two.third.digit, fourth = two.fourth.digit;
+    const third = two.third.digit;
     const hit3 = closeDigits ? closeDigits.includes(third) : null;
-    const hit4 = closeDigits ? closeDigits.includes(fourth) : null;
-    return { r, oTop, oBot, pick, pair, third, fourth, p: two.digits[0].p, closeDigits, hit1, hit2, hit3, hit4 };
+    return { r, oTop, oBot, pick, pair, third, closeDigits, hit1, hit2, hit3 };
   }).reverse();
 
   const calls = evaluateCalls(stock.records);
@@ -51,7 +50,6 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
   const hit1Count = judged.filter((x) => x.hit1).length;
   const hit2Count = judged.filter((x) => x.hit2 && x.hit2.length > 0).length;
   const hit3Count = judged.filter((x) => (x.hit2 && x.hit2.length > 0) || x.hit3).length;
-  const hit4Count = judged.filter((x) => (x.hit2 && x.hit2.length > 0) || x.hit3 || x.hit4).length;
   const pending = stock.records.filter((r) => !hasClose(r)).length;
 
   return (
@@ -90,9 +88,9 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
           tone={judged.length ? (hit2Count / judged.length > rnd2 ? "up" : "down") : "neutral"}
         />
         <StatCard
-          label="รวมตัวสำรอง (3–4 ตัว) โผล่ ≥1"
+          label="รวมตัวสำรอง (3 ตัว) โผล่ ≥1"
           value={judged.length ? `${hit3Count} / ${judged.length} วัน` : "-"}
-          hint={judged.length ? `${Math.round((hit3Count / judged.length) * 100)}% · สุ่ม ${Math.round(rnd3 * 100)}% · 10 ปี 82% — 4 ตัว ${hit4Count}/${judged.length} (${Math.round((hit4Count / judged.length) * 100)}%, 10 ปี 94%)` : undefined}
+          hint={judged.length ? `${Math.round((hit3Count / judged.length) * 100)}% · สุ่มเดา ${Math.round(rnd3 * 100)}% · 10 ปี 82%` : undefined}
           tone={judged.length ? (hit3Count / judged.length > rnd3 ? "up" : "down") : "neutral"}
         />
         <StatCard
@@ -140,7 +138,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {paged.items.map(({ r, oTop, oBot, pair, third, fourth, hit1, hit2, hit3, hit4 }) => (
+                  {paged.items.map(({ r, oTop, oBot, pair, third, hit1, hit2, hit3 }) => (
                     <tr key={r.id} className="hover:bg-slate-50">
                       <td className="px-3 py-2 whitespace-nowrap">{r.date.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" })}</td>
                       <td className="px-3 py-2 whitespace-nowrap tabular-nums">
@@ -158,9 +156,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                             return <span key={d} className={`flex h-9 w-9 items-center justify-center rounded-lg font-mono text-xl font-bold ${ok ? "bg-amber-400 text-white" : ok === false ? "bg-slate-200 text-slate-500 line-through" : "bg-amber-100 text-amber-900"}`}>{d}</span>;
                           })}
                           <span className="mx-0.5 text-amber-300">+</span>
-                          {[[third, hit3], [fourth, hit4]].map(([d, ok]) => (
-                            <span key={String(d)} className={`ml-1 flex h-7 w-7 items-center justify-center rounded-md border font-mono text-sm font-bold ${ok ? "border-amber-400 bg-amber-200 text-amber-900" : ok === false ? "border-slate-200 text-slate-400 line-through" : "border-amber-200 text-amber-800"}`} title="ตัวสำรอง">{d}</span>
-                          ))}
+                          <span className={`ml-1 flex h-7 w-7 items-center justify-center rounded-md border font-mono text-sm font-bold ${hit3 ? "border-amber-400 bg-amber-200 text-amber-900" : hit3 === false ? "border-slate-200 text-slate-400 line-through" : "border-amber-200 text-amber-800"}`} title="ตัวสำรอง">{third}</span>
                         </span>
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap tabular-nums">
@@ -175,9 +171,9 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                         ) : hit2 && hit2.length === 2 ? (
                           <span className="rounded bg-emerald-100 px-2 py-0.5 font-medium text-emerald-800">✓ ถูกทั้งคู่</span>
                         ) : hit2 && hit2.length ? (
-                          <span className="rounded bg-emerald-100 px-2 py-0.5 font-medium text-emerald-800">✓ ถูก {hit2.join(" ")}{hit3 || hit4 ? ` +สำรอง ${[hit3 ? third : null, hit4 ? fourth : null].filter(Boolean).join(" ")}` : ""}</span>
-                        ) : hit3 || hit4 ? (
-                          <span className="rounded bg-amber-100 px-2 py-0.5 font-medium text-amber-800">สำรองถูก {[hit3 ? third : null, hit4 ? fourth : null].filter(Boolean).join(" ")}</span>
+                          <span className="rounded bg-emerald-100 px-2 py-0.5 font-medium text-emerald-800">✓ ถูก {hit2.join(" ")}{hit3 ? ` +สำรอง ${third}` : ""}</span>
+                        ) : hit3 ? (
+                          <span className="rounded bg-amber-100 px-2 py-0.5 font-medium text-amber-800">สำรองถูก {third}</span>
                         ) : (
                           <span className="rounded bg-red-100 px-2 py-0.5 font-medium text-red-800">✗ ผิด</span>
                         )}
