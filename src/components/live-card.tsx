@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { saveLiveFromYahoo, fillCloseFromYahoo } from "@/app/actions/stocks";
 import { FormError } from "@/components/form-error";
+import { LiveManualForm } from "@/components/live-manual-form";
 import { LIVE_CHECKPOINTS, USABLE_CHECKPOINTS, LIVE_CALL_MIN, CALL_DEADLINE_THAI, liveDirection, fmtThaiTime } from "@/lib/intraday";
 import { fmtNum, fmtChange } from "@/lib/stats";
 
@@ -32,7 +33,7 @@ export function LiveCard({ recordId, prevClose, live, saved, score }: {
     <div className={`card ${tone(show?.call ?? null)}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <p className="text-xs font-medium uppercase tracking-wide text-slate-600">ฟันทิศทางสด (ราคาระหว่างวัน) <span className="ml-1 rounded bg-red-100 px-1.5 py-0.5 normal-case text-red-700">ต้องฟันก่อน {CALL_DEADLINE_THAI} น.</span></p>
-        {live && <p className="text-xs text-slate-500">Yahoo ล่าสุด {fmtNum(live.price)} <span className={live.price >= prevClose ? "text-emerald-600" : "text-red-600"}>{fmtChange(live.price - prevClose)}</span> · {fmtThaiTime(new Date(live.at))} น. ไทย{live.closed ? " · ปิดแล้ว" : ""}</p>}
+        {live && <p className="text-xs text-slate-500">Yahoo {fmtNum(live.price)} <span className={live.price >= prevClose ? "text-emerald-600" : "text-red-600"}>{fmtChange(live.price - prevClose)}</span> · เวลาราคา {fmtThaiTime(new Date(live.at))} น. ไทย{live.closed ? " · ปิดแล้ว" : " (Yahoo ดีเลย์ ~15 นาที)"}</p>}
       </div>
 
       {show ? (
@@ -63,6 +64,12 @@ export function LiveCard({ recordId, prevClose, live, saved, score }: {
         )}
         {score && score.called > 0 && <span className="text-xs text-slate-600">ผลฟันสดที่ผ่านมา: ถูก {score.hits}/{score.called} ({pct(score.hits / score.called)})</span>}
       </div>
+      {!live?.closed && (
+        <div className="mt-2 text-xs text-slate-600">
+          <p className="mb-1">หรือกรอกราคาที่เห็นจากหน้าจอจริงตอนนี้ (ไม่ดีเลย์) — ระบบใช้เวลาปัจจุบันเป็นเวลาที่อ่าน</p>
+          <LiveManualForm recordId={recordId} compact />
+        </div>
+      )}
       <FormError message={ls?.error ?? cs?.error} />
 
       <details className="mt-3 text-xs text-slate-600">

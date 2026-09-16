@@ -246,3 +246,24 @@ export async function fillCloseFromYahoo(_prev: ActionState, formData: FormData)
   revalidatePath("/dashboard"); revalidatePath("/digits"); revalidatePath("/calendar"); revalidatePath(`/stocks/${record.stockId}`);
   return undefined;
 }
+
+const liveManualSchema = z.object({
+  id: z.string().min(1),
+  price: z.coerce.number({ message: "ราคาต้องเป็นตัวเลข" }).positive("ราคาต้องมากกว่า 0"),
+});
+
+/** ระหว่างวัน: กรอกราคาที่เห็นจากหน้าจอจริง (Yahoo ดีเลย์ ~15 นาที) → บันทึกเป็นจุดฟันสด ณ เวลานี้ */
+export async function saveLiveManual(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const { userId } = await requireUser();
+  const parsed = liveManualSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
+  const { id, price } = parsed.data;
+  const record = await prisma.record.findFirst({ where: { id, stock: { userId } } });
+  if (!record) return { error: "ไม่พบรายการ" };
+  if (record.closeValue !== null) return { error: "วันนี้มีผลปิดแล้ว" };
+  const prev = record.openValue - record.openChange;
+  if (Math.abs(price - prev) / prev > 0.1) return { error: `ราคา ${price} ห่างจากปิดเมื่อวาน ${prev.toFixed(2)} เกิน 10% — พิมพ์ผิดหรือเปล่า` };
+  await prisma.record.update({ where: { id }, data: { liveValue: price, liveAt: new Date() } });
+  revalidatePath("/dashboard"); revalidatePath(`/stocks/${record.stockId}`);
+  return undefined;
+}

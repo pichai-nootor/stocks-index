@@ -7,6 +7,7 @@ import { pickTwo, top2, bottom2, randomAtLeastOne } from "@/lib/digits";
 import { todayThai, liveDirection, fmtThaiTime } from "@/lib/intraday";
 import { fetchQuote } from "@/lib/yahoo";
 import { LiveSaveButton } from "@/components/live-save-button";
+import { LiveManualForm } from "@/components/live-manual-form";
 import { deleteRecord, deleteStock } from "@/app/actions/stocks";
 import { StatCard } from "@/components/stat-card";
 import { Change, PatternBadge } from "@/components/change";
@@ -155,9 +156,10 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                         {!hasClose(r) && liveNow && liveNow.date === r.date.toISOString().slice(0, 10) && (
                           <div className="mb-1 space-y-1">
                             <span className={`rounded px-1.5 py-0.5 font-medium ${liveNow.f.call === "up" ? "bg-emerald-100 text-emerald-800" : liveNow.f.call === "down" ? "bg-red-100 text-red-800" : "bg-slate-100 text-slate-600"}`}>
-                              ตอนนี้ {fmtThaiTime(liveNow.f.at)} {liveNow.f.call === "up" ? "▲ บวก" : liveNow.f.call === "down" ? "▼ ลบ" : "ยังไม่ฟัน"} {Math.round(liveNow.f.pSame * 100)}%
+                              Yahoo {fmtThaiTime(liveNow.f.at)} {liveNow.f.call === "up" ? "▲ บวก" : liveNow.f.call === "down" ? "▼ ลบ" : "ยังไม่ฟัน"} {Math.round(liveNow.f.pSame * 100)}% <span className="font-normal text-slate-500">(ดีเลย์ ~15 น.)</span>
                             </span>
-                            <div><LiveSaveButton recordId={r.id} label={r.liveValue === null ? "บันทึกฟันสดตอนนี้" : "อัปเดตฟันสด"} /></div>
+                            <div><LiveSaveButton recordId={r.id} label={r.liveValue === null ? "ฟันสดด้วยราคา Yahoo" : "อัปเดตด้วยราคา Yahoo"} /></div>
+                            <LiveManualForm recordId={r.id} compact />
                           </div>
                         )}
                         {/* ฟันจากเปิด (เปิดห่าง ≥1%) แสดงเฉพาะวันที่ฟันจริง — วันอื่นไม่ต้องบอกว่า "ไม่ฟัน" */}
