@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
-import { VIP_MARKETS, isVipMarket, vipMarket, roundLabel, roundCloseThai, pastCloseThai, fetchVipToday, vipDigits, type VipMarket } from "@/lib/vip";
+import { VIP_MARKETS, isVipMarket, vipMarket, roundLabel, roundCloseThai, vipWaitReason, pastCloseThai, fetchVipToday, vipDigits, type VipMarket } from "@/lib/vip";
 import { formulaFor, hasOwnFormula } from "@/lib/formulas";
 import { gradeFormula, resultDigits as vipResultDigits, drillHit as vipDrillHit, RANDOM_ONE as VIP_RANDOM_ONE, RANDOM_TWO as VIP_RANDOM_TWO, type VipPick, type VipDraw } from "@/lib/formulas/types";
 import cnHistory from "@/data/vip-history/cn.json";
@@ -93,10 +93,16 @@ export default async function VipPage({ searchParams }: PageProps<"/vip">) {
   const drillScore = g.drill;
 
   // งวดถัดไป
-  const nextOpen = today && !today.closed ? today.open : pendingRow?.open ?? null;
+  const nextOpen = today && !today.closed ? today.open : pendingRow?.open ?? null; // ใช้เฉพาะสูตรที่อ่านราคาเปิด
   // ราคาปิดงวดล่าสุดก่อนวันนี้ (ไว้แสดง "เปิดวันนี้เทียบปิดวันก่อน" — VIP เปิดใกล้ปิดวันก่อนมาก ต่างกันไม่ถึง 1 จุด จึงไม่มีทิศทางให้ใช้แบบ SENSEX)
   const prevClose = rows.find((r) => r.close !== null && (!today || r.date.toISOString().slice(0, 10) < today.date))?.close ?? null;
-  const nextDate = today ? today.date : pendingRow ? pendingRow.date.toISOString().slice(0, 10) : thai;
+  const feedDate = today ? today.date : pendingRow ? pendingRow.date.toISOString().slice(0, 10) : thai;
+  // งวดในฟีดออกครบทุกรอบแล้ว (เว็บยังไม่ขึ้นวันใหม่ เช่น หลังเที่ยงคืน) → โชว์งวดถัดไปพร้อมเลขฟันเลย (VIP ออกทุกวัน)
+  const feedDone = info.rounds.every((r) => rows.some((x) => x.date.toISOString().slice(0, 10) === feedDate && x.round === r));
+  const dayAfter = new Date(Date.parse(`${feedDate}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
+  const nextDate = feedDone ? (thai > dayAfter ? thai : dayAfter) : feedDate;
+  /** ข้อมูลฟีดเป็นของงวดที่กำลังโชว์ไหม (ถ้าโชว์งวดถัดไปแล้ว ราคาในฟีดเป็นของวันก่อน ห้ามใช้ตัดสินว่า "ปิดแล้ว") */
+  const feedIsNext = !!today && today.date === nextDate;
 
   const digits10 = "0123456789".split("");
   const freq = Object.fromEntries(digits10.map((d) => [d, 0])) as Record<string, number>;
@@ -130,14 +136,17 @@ export default async function VipPage({ searchParams }: PageProps<"/vip">) {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold">งวด {new Date(nextDate).toLocaleDateString("th-TH", { weekday: "short", day: "numeric", month: "short", year: "2-digit" })}</h2>
-            <p className="text-xs text-slate-500">
-              {today ? <>
+            {today && feedIsNext ? (
+              <p className="text-xs text-slate-500">
                 {today.open !== null
                   ? <>ราคาเปิด <span className="tabular-nums">{fmtNum(today.open)}</span>{prevClose !== null && <span className="text-slate-400"> (เทียบปิดวันก่อน {fmtChange(Math.round((today.open - prevClose) * 100) / 100)})</span>}</>
                   : <span className="text-slate-400">ฟีดตลาดนี้ไม่มีราคาเปิด — เก็บราคาปิด + diff ของแต่ละรอบไว้แทน</span>}
                 {" · "}ล่าสุด <span className="tabular-nums">{fmtNum(today.last)}</span> <span className={today.diff < 0 ? "text-red-600" : "text-emerald-600"}>{fmtChange(today.diff)}</span> · เว็บอัปเดต {today.updatedAt}
-              </> : "ดึงราคาวันนี้จากเว็บไม่ได้ — ลองกดดึงอีกครั้ง"}
-            </p>
+              </p>
+            ) : today ? (
+              /* เว็บยังไม่ขึ้นวันใหม่: ไม่โชว์ราคาของวันก่อน (ทำให้สับสน) — บอกแค่ว่าเลขพร้อมแทงแล้ว */
+              <p className="mt-1 inline-block rounded-md bg-emerald-50 px-2 py-1 text-xs text-emerald-800">✓ เลขด้านล่างพร้อมแทงแล้ว — คิดจากผลถึงงวด {thDate(new Date(feedDate))} ครบ · ไม่ต้องรออะไร (ราคาวันนี้จะขึ้นเมื่อเว็บเริ่มวันใหม่ เลขไม่เปลี่ยน)</p>
+            ) : <p className="text-xs text-slate-500">ดึงราคาวันนี้จากเว็บไม่ได้ — ลองกดดึงอีกครั้ง</p>}
           </div>
           {/* ปุ่มเดียวใช้ได้ทุกเวลา: ดึงราคาเปิด/ล่าสุด + ผลทุกรอบที่ออกแล้ว */}
           <VipImportButton market={market} label="ดึงข้อมูลจากเว็บตอนนี้" />
@@ -145,18 +154,20 @@ export default async function VipPage({ searchParams }: PageProps<"/vip">) {
         <div className={`mt-3 grid gap-4 ${info.rounds.length > 1 ? "md:grid-cols-2" : ""}`}>
           {info.rounds.map((round) => {
             const rowOf = rows.find((x) => x.date.toISOString().slice(0, 10) === nextDate && x.round === round) ?? null;
-            const closed = today ? pastCloseThai(market, nextDate, new Date(), round) || (round === Math.max(...info.rounds) && today.closed) : false;
-            const feedReady = today ? (today.rounds.some((x) => x.round === round) || (round === Math.max(...info.rounds) && today.feedDone)) : false;
+            const closed = today ? pastCloseThai(market, nextDate, new Date(), round) || (feedIsNext && round === Math.max(...info.rounds) && today.closed) : false;
+            const feedReady = today && feedIsNext ? (today.rounds.some((x) => x.round === round) || (round === Math.max(...info.rounds) && today.feedDone)) : false;
             const title = info.rounds.length > 1 ? `รอบ${round === 1 ? "เช้า" : "บ่าย"} · ออกผล ${roundCloseThai(market, round)} น.` : `ออกผล ${roundCloseThai(market, round)} น. ไทย`;
             // เลขที่ฟันสำหรับรอบนี้: ใช้ทุกงวดก่อนหน้ารอบนี้ (รอบบ่ายรวมผลรอบเช้าของวันเดียวกัน)
             const histBefore = rowOf ? asc.slice(0, asc.length - 1 - rows.indexOf(rowOf)) : asc;
             // ส่งราคาสด (ราคา + diff) ให้สูตรด้วย — ตลาดที่หา "D สด" ได้จะคำนวณคู่ผูกจากโครงสร้างราคา
-            const liveNow = today && !rowOf ? { price: today.last, diff: today.diff } : null;
-            const computed = F.pick(histBefore, rowOf ? rowOf.open : nextOpen, round, liveNow ?? undefined);
+            // ไม่ส่งราคาสดให้สูตร (13 ต.ค. 69): เลขที่โชว์ต้องเป็นเลขสุดท้าย ไม่ขยับระหว่างวัน และตรงกับหน้า report
+            const computed = F.pick(histBefore, rowOf ? rowOf.open : nextOpen, round);
             // ถ้าเคยล็อกเลขไว้ (ตอนกดดึงข้อมูลก่อนหวยออก) ให้ยึดเลขนั้นเสมอ — ผลย้อนหลังจะได้ไม่เปลี่ยนตามสูตรที่แก้ทีหลัง
             const lockedRow = rowOf ?? pendingRow;
             const locked = lockedRow?.pick && lockedByCurrent(lockedRow.date) && lockedRow.date.toISOString().slice(0, 10) === (rowOf ? rowOf.date.toISOString().slice(0, 10) : nextDate) && lockedRow.round === round ? lockedRow.pick.split("-") : null;
             const p = computed && locked && locked.length === 2 ? { ...computed, digits: [locked[0], locked[1]] as [string, string], note: `${computed.note} · (เลขนี้ล็อกไว้ตอนดึงข้อมูลก่อนหวยออก)` } : computed;
+            // ยังฟันไม่ได้จริง (ผลงวดก่อนหน้ายังไม่เข้าระบบ) และยังไม่มีเลขล็อก → ไม่โชว์เลข บอกว่ารออะไร
+            const waitFor = !rowOf && !locked ? vipWaitReason(market, nextDate, round, (d, r) => rows.some((x) => x.date.toISOString().slice(0, 10) === d && x.round === r)) : null;
             const drill = p ? F.drill(p, histBefore) : [];
             const bp = F.experimental ? F.experimental.pick(rowOf ? rowOf.open : nextOpen, histBefore) : null;
             const bDrill = bp ? F.drill(bp, histBefore) : [];
@@ -209,19 +220,18 @@ export default async function VipPage({ searchParams }: PageProps<"/vip">) {
                     <VipImportButton market={market} label={info.rounds.length > 1 ? `ดึงผลรอบ${round === 1 ? "เช้า" : "บ่าย"}` : "ดึงผลปิดงวดนี้"} big />
                     <span className="text-xs text-slate-600">{feedReady ? "กดครั้งเดียว ระบบบันทึกผล ให้คะแนนเลขที่ฟัน และเตรียมรอบถัดไป" : "เว็บยังส่งราคาไม่ถึงแถวสุดท้าย — ถ้ากดตอนนี้จะยังไม่ได้ผล รออีกสักครู่แล้วกดใหม่"}</span>
                   </div>
-                  {p && <div className="mt-3"><p className="text-xs text-slate-500">ที่ฟันไว้</p><div className="mt-1"><PickBlock pick={p} drill={drill} /></div></div>}
+                  {p && !waitFor && <div className="mt-3"><p className="text-xs text-slate-500">ที่ฟันไว้</p><div className="mt-1"><PickBlock pick={p} drill={drill} /></div></div>}
                   {expBlock}
                   {planCBlock}
                 </div>
               );
             }
-            // รอบหลังของวัน: รอผลรอบก่อนหน้าก่อน (สูตรใช้ผลรอบก่อนเป็น "งวดก่อน") — ไม่โชว์เลขล่วงหน้าให้สับสน
-            const earlierPending = info.rounds.some((r2) => r2 < round && !rows.some((x) => x.date.toISOString().slice(0, 10) === nextDate && x.round === r2));
-            if (earlierPending) {
+            if (waitFor) {
               return (
-                <div key={round} className="rounded-xl border border-dashed border-slate-300 bg-white/50 p-3">
-                  <div className="flex items-baseline justify-between gap-2"><p className="text-sm font-medium text-slate-600">{title}</p><span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">รอผลรอบก่อน</span></div>
-                  <p className="mt-2 text-sm text-slate-500">จะฟันรอบนี้หลังดึงผลรอบเช้า — สูตรคำนวณใหม่โดยใช้ผลรอบเช้าเป็นงวดล่าสุด</p>
+                <div key={round} className="rounded-xl border border-dashed border-amber-300 bg-white/60 p-3">
+                  <div className="flex items-baseline justify-between gap-2"><p className="text-sm font-medium text-slate-700">{title}</p><span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">ยังฟันไม่ได้</span></div>
+                  <p className="mt-2 text-sm text-amber-800">⏳ {waitFor}</p>
+                  <p className="mt-1 text-xs text-slate-500">สูตรต้องใช้ผลงวดล่าสุดก่อน — ถ้าฟันตอนนี้จะได้เลขผิด จึงยังไม่แสดงและยังไม่ล็อก</p>
                 </div>
               );
             }

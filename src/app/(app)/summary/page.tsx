@@ -32,7 +32,7 @@ export default async function SummaryPage({ searchParams }: PageProps<"/summary"
     return `/summary${qs ? `?${qs}` : ""}`;
   };
   const stocks = await prisma.stock.findMany({ where: { userId }, include: { records: { orderBy: { date: "asc" } } }, orderBy: { symbol: "asc" } });
-  const [regular, vip] = [regularSummary(stocks, day, stake), await vipSummary(userId, day, stake)];
+  const [regular, vip] = [regularSummary(stocks, day, stake), await vipSummary(userId, day, stake, day === today)];
   const to = monthEnd(day) < today ? monthEnd(day) : today;
   const m = await monthMoney(userId, stocks, to, stake);
   const month = { label: `${new Date(day).toLocaleDateString("th-TH", { month: "short", year: "2-digit" })} (1–${Number(to.slice(8))})`, regular: m.regular, vip: m.vip, days: m.days, stake };

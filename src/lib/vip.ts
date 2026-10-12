@@ -32,6 +32,30 @@ export const roundLabel = (round: number, market: VipMarket) => (vipMarket(marke
 export const lastCloseThai = (market: VipMarket) => { const m = vipMarket(market); return (m.closeThai as Record<number, string>)[Math.max(...m.rounds)]; };
 /** เวลาออกผล (ไทย) ของรอบ */
 export const roundCloseThai = (market: VipMarket, round: number) => (vipMarket(market).closeThai as Record<number, string>)[round];
+
+/**
+ * งวดก่อนหน้าที่สูตรต้องมีผลแล้วก่อนฟันงวด (date, round) — VIP ออกทุกวัน:
+ *   รอบหลังของวัน → รอบก่อนหน้าของวันเดียวกัน · รอบแรกของวัน → รอบสุดท้ายของวันก่อน
+ */
+export function prevDraw(market: VipMarket, date: string, round: number): { date: string; round: number } {
+  const rs = [...vipMarket(market).rounds] as number[];
+  const earlier = rs.filter((r) => r < round);
+  if (earlier.length) return { date, round: Math.max(...earlier) };
+  return { date: new Date(Date.parse(`${date}T00:00:00Z`) - 86400000).toISOString().slice(0, 10), round: Math.max(...rs) };
+}
+
+/**
+ * งวดนี้ "ฟันได้จริง" หรือยัง — ถ้ายังให้คืนข้อความว่ารออะไรและต้องทำอะไร (แสดงแทนเลข ห้ามโชว์/ล็อกเลขที่ยังไม่ใช่ตัวจริง)
+ *   has(date, round) = มีผลของงวดนั้นในระบบแล้วหรือยัง
+ */
+export function vipWaitReason(market: VipMarket, date: string, round: number, has: (date: string, round: number) => boolean): string | null {
+  const p = prevDraw(market, date, round);
+  if (has(p.date, p.round)) return null;
+  const m = vipMarket(market);
+  if (p.date === date) return `รอผลรอบเช้า (ออก ${roundCloseThai(market, p.round)} น.) → พอผลออก กด "ดึงผล" ที่หน้า VIP`;
+  const d = new Date(`${p.date}T00:00:00Z`).toLocaleDateString("th-TH", { day: "numeric", month: "short", timeZone: "UTC" });
+  return `รอผลงวด ${d}${m.rounds.length > 1 ? (p.round === 1 ? " เช้า" : " บ่าย") : ""} เข้าระบบ → กด "ดึงผลย้อนหลังจากเว็บ" ที่หน้า VIP`;
+}
 /** วันนี้ (ไทย) ผ่านเวลาออกผลของวันที่ feedDate แล้วหรือยัง (ไม่ระบุรอบ = รอบสุดท้าย) */
 export function pastCloseThai(market: VipMarket, feedDate: string, now = new Date(), round?: number) {
   const thai = new Date(now.getTime() + 7 * 3600 * 1000);

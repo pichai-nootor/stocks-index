@@ -13,6 +13,8 @@ export type DaySummaryItem = {
   top?: string;
   bottom?: string;
   status: "star" | "second" | "miss" | "pending";
+  /** ข้อความแทนเลขฟันตอนยังฟันไม่ได้ (เช่น รอบบ่ายที่รอผลรอบเช้า) */
+  wait?: string;
   /** เลขเจาะ 2 ชุด (ชุดละ 6) และตัวที่มา */
   drill?: string[][];
   drillHits?: string[];
@@ -100,7 +102,8 @@ function Group({ title, items }: { title: string; items: DaySummaryItem[] }) {
           {items.map((x) => (
             <li key={x.key} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5 text-sm">
               <Link href={x.href} className="w-36 shrink-0 truncate text-blue-700 hover:underline">{x.label}</Link>
-              <span className="w-16 shrink-0 font-mono text-xs text-slate-600">{x.pick ? <>★{x.pick[0]} {x.pick[1]}</> : "–"}</span>
+              {x.wait && !x.pick ? <span className="min-w-0 flex-1 text-xs text-amber-700">⏳ {x.wait}</span>
+                : <span className="w-20 shrink-0 font-mono text-xs text-slate-600">{x.pick ? <>★{x.pick[0]} {x.pick[1]}</> : "–"}</span>}
               <span className="flex items-center gap-1">
                 {x.top !== undefined && x.bottom !== undefined ? <><Digits value={x.top} hilite={x.pick ?? []} tone="blue" /><span className="text-slate-300">/</span><Digits value={x.bottom} hilite={x.pick ?? []} tone="blue" /></> : null}
               </span>

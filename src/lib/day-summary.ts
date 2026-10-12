@@ -11,7 +11,7 @@ import { top2, bottom2 } from "@/lib/digits";
 import { pickTwoFor } from "@/lib/formulas/stocks";
 import { formulaFor } from "@/lib/formulas";
 import { resultDigits, drillHit } from "@/lib/formulas/types";
-import { VIP_MARKETS } from "@/lib/vip";
+import { VIP_MARKETS, vipWaitReason } from "@/lib/vip";
 import type { DaySummaryItem } from "@/components/day-summary";
 import { betCost, betResult } from "@/lib/bet";
 
@@ -42,8 +42,12 @@ export function regularSummary(stocks: (Stock & { records: Row[] })[], today: st
   });
 }
 
-/** หุ้น VIP: ทุกตลาด × ทุกรอบของวันนี้ */
-export async function vipSummary(userId: string, today: string, stake?: number): Promise<DaySummaryItem[]> {
+/**
+ * หุ้น VIP: ทุกตลาด × ทุกรอบของวันนี้
+ *   lock = true (ดูวันนี้): งวดที่ยังรอผลและยังไม่มีเลขล็อก → ล็อกเลขที่แสดงไว้ทันที (กติกาเดียวกับหน้า VIP: ล็อกครั้งเดียว ไม่เขียนทับ)
+ *   เพื่อให้เลขที่ผู้ใช้เห็นใน report = เลขที่ใช้ตัดสินหลังผลออก แม้ไม่ได้เปิดหน้า VIP และแม้สูตรถูกแก้ทีหลัง (ผู้ใช้ย้ำ 13 ต.ค. 69)
+ */
+export async function vipSummary(userId: string, today: string, stake?: number, lock = false): Promise<DaySummaryItem[]> {
   const date = new Date(`${today}T00:00:00.000Z`);
   const rows = await prisma.vipResult.findMany({ where: { userId, date } });
   const out: DaySummaryItem[] = [];
@@ -52,6 +56,15 @@ export async function vipSummary(userId: string, today: string, stake?: number):
       const row = rows.find((r) => r.market === m.code && r.round === round);
       const label = m.rounds.length > 1 ? `${m.label} ${round === 1 ? "เช้า" : "บ่าย"}` : m.label;
       const done = !!row && row.top !== "";
+      // ยังฟันไม่ได้จริง (งวดก่อนหน้ายังไม่มีผลในระบบ — รวมรอบบ่ายที่รอผลเช้า) → ไม่โชว์/ไม่ล็อกเลข บอกว่ารออะไร (กติกาเดียวกับหน้า VIP)
+      if (!done && !row?.pick) {
+        const prevKeys = await prisma.vipResult.findMany({ where: { userId, market: m.code, NOT: { top: "" }, date: { gte: new Date(date.getTime() - 86400000), lte: date } }, select: { date: true, round: true } });
+        const wait = vipWaitReason(m.code, today, round, (d, r) => prevKeys.some((x) => x.date.toISOString().slice(0, 10) === d && x.round === r));
+        if (wait) {
+          out.push({ key: `${m.code}-${round}`, label, href: `/vip?market=${m.code}`, pick: null, cost: betCost(2, 12, stake), status: "pending", wait });
+          continue;
+        }
+      }
       // ประวัติก่อนงวดนี้ → ใช้คำนวณเลขเจาะ (และเลขฟันถ้าไม่ได้ล็อกไว้) ด้วยสูตรของตลาดนั้น — แบบเดียวกับหน้า VIP
       const F = formulaFor(m.code);
       const hist = await prisma.vipResult.findMany({
@@ -59,7 +72,13 @@ export async function vipSummary(userId: string, today: string, stake?: number):
         orderBy: [{ date: "asc" }, { round: "asc" }],
       });
       const computed = F.pick(hist, row?.open ?? null, round);
-      const locked = row?.pick && (!F.lockedFrom || today >= F.lockedFrom) ? row.pick.split("-") : null;
+      if (lock && !done && computed && !row?.pick) {
+        const key = { userId_market_date_round: { userId, market: m.code, date, round } };
+        await prisma.vipResult.upsert({ where: key, create: { userId, market: m.code, date, round, top: "", bottom: "", source: "web", pick: computed.digits.join("-") }, update: {} });
+        await prisma.vipResult.updateMany({ where: { userId, market: m.code, date, round, pick: null }, data: { pick: computed.digits.join("-") } });
+      }
+      const lockedPick = row?.pick ?? (lock && !done && computed ? computed.digits.join("-") : null);
+      const locked = lockedPick && (!F.lockedFrom || today >= F.lockedFrom) ? lockedPick.split("-") : null;
       const p = computed && locked?.length === 2 ? { ...computed, digits: [locked[0], locked[1]] as [string, string] } : computed;
       const pick = p?.digits ?? null;
       const drill = p ? F.drill(p, hist).map((x) => x.numbers) : undefined;

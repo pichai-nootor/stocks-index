@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { formulaFor } from "@/lib/formulas";
 import { requireUser } from "@/lib/auth";
 import type { ActionState } from "./auth";
-import { fetchVipHistory, fetchVipToday, isVipMarket, vipTop3, vipBottom2, vipMarket, pastCloseThai } from "@/lib/vip";
+import { fetchVipHistory, fetchVipToday, isVipMarket, vipTop3, vipBottom2, vipMarket, pastCloseThai, vipWaitReason } from "@/lib/vip";
 
 export type VipImportState = { error?: string; imported?: number; updated?: number; total?: number } | undefined;
 
@@ -101,6 +101,8 @@ export async function lockVipPick(userId: string, market: string, date: Date, ro
     if (done < earlier.length) return;
   }
   const past = await prisma.vipResult.findMany({ where: { userId, market, NOT: { top: "" } }, orderBy: [{ date: "asc" }, { round: "asc" }] });
+  // ผลงวดก่อนหน้ายังไม่เข้าระบบ → ห้ามล็อก (สูตรจะฟันจากประวัติที่ขาดงวดล่าสุด ได้เลขผิด)
+  if (vipWaitReason(market, date.toISOString().slice(0, 10), round, (d, r) => past.some((x) => x.date.toISOString().slice(0, 10) === d && x.round === r))) return;
   const hist = past.filter((r) => r.date < date || (r.date.getTime() === date.getTime() && r.round < round)).map((r) => ({ top: r.top, bottom: r.bottom, round: r.round, date: r.date, open: r.open }));
   const F = formulaFor(market);
   const p = F.pick(hist, row.open, round);
