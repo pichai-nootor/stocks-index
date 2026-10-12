@@ -24,7 +24,7 @@ export async function login(_prev: ActionState, formData: FormData): Promise<Act
   if (!ok) return { error: "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง" };
 
   await createSession({ userId: user.id, username: user.username });
-  redirect(next && next.startsWith("/") ? next : "/dashboard");
+  redirect(next && next.startsWith("/") ? next : "/summary");
 }
 
 export async function logout() {

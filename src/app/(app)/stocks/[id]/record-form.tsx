@@ -5,8 +5,8 @@ import { createRecord } from "@/app/actions/stocks";
 import { FormError } from "@/components/form-error";
 import { OpenMismatch } from "@/components/open-mismatch";
 
-/** เช้า: บันทึกเฉพาะเลขเปิด → ระบบฟันธงทันทีในตารางประวัติ */
-export function RecordForm({ stockId, today }: { stockId: string; today: string }) {
+/** กรอกเปิดเอง — การ์ดแถวเดียว: วันที่ · เปิด · เปลี่ยนแปลง → ระบบฟันธงทันทีในตารางประวัติ */
+export function RecordForm({ stockId, symbol, today }: { stockId: string; symbol: string; today: string }) {
   const [state, action, pending] = useActionState(createRecord, undefined);
   const ref = useRef<HTMLFormElement>(null);
   const changeRef = useRef<HTMLInputElement>(null);
@@ -20,31 +20,21 @@ export function RecordForm({ stockId, today }: { stockId: string; today: string 
   }, [state]);
 
   return (
-    <form ref={ref} action={action} className="mt-4 space-y-4">
+    <form ref={ref} action={action} className="card flex flex-wrap items-end gap-2 border-blue-200 bg-blue-50/60 text-sm">
       <input type="hidden" name="stockId" value={stockId} />
-      <div>
-        <label htmlFor="date" className="label">วันที่</label>
-        <input id="date" name="date" type="date" className="input" defaultValue={today} required />
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label htmlFor="openValue" className="label">ค่าดัชนีตอนเปิด</label>
-          <input id="openValue" name="openValue" type="number" step="any" inputMode="decimal" className="input" placeholder="74781.76" required />
-        </div>
-        <div>
-          <label htmlFor="openChange" className="label">เปลี่ยนแปลง (+/−)</label>
-          <input ref={changeRef} id="openChange" name="openChange" type="number" step="any" inputMode="decimal" className="input" placeholder="-120.83" required />
-        </div>
-      </div>
-      <div>
-        <label htmlFor="note" className="label">หมายเหตุ (ไม่บังคับ)</label>
-        <input id="note" name="note" className="input" />
-      </div>
-      {state?.mismatch ? <OpenMismatch state={state} onUse={useSuggested} /> : <FormError message={state?.error} />}
-      <button type="submit" className="btn-primary w-full" disabled={pending}>
-        {pending ? "กำลังบันทึก..." : "บันทึกเปิด + ฟันธง"}
-      </button>
-      <p className="text-xs text-slate-500">ตอนเย็นมาเติม “ปิด” ในตารางประวัติ ระบบจะตรวจให้ว่าเลขที่ฟันโผล่ไหม</p>
+      <span className="self-center font-semibold">{symbol} — กรอกเปิด</span>
+      <label className="flex flex-col text-xs text-slate-600">วันที่
+        <input name="date" type="date" className="input w-40 px-2 py-1 text-sm" defaultValue={today} required />
+      </label>
+      <label className="flex flex-col text-xs text-slate-600">ค่าดัชนีตอนเปิด
+        <input name="openValue" type="number" step="any" inputMode="decimal" className="input w-36 px-2 py-1 text-sm" placeholder="74781.76" required />
+      </label>
+      <label className="flex flex-col text-xs text-slate-600">เปลี่ยนแปลง (+/−)
+        <input ref={changeRef} name="openChange" type="number" step="any" inputMode="decimal" className="input w-28 px-2 py-1 text-sm" placeholder="-120.83" required />
+      </label>
+      <button type="submit" className="btn-primary" disabled={pending}>{pending ? "..." : "บันทึกเปิด + ฟันธง"}</button>
+      <p className="w-full text-xs text-slate-500">แก้เปิดของแถวที่รอปิดได้ที่ช่อง “เปิด” ในตาราง · ตอนเย็นมาเติม “ปิด” ในตารางประวัติ</p>
+      {state?.mismatch ? <div className="w-full"><OpenMismatch state={state} onUse={useSuggested} /></div> : <FormError message={state?.error} />}
     </form>
   );
 }

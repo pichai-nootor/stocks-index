@@ -2,6 +2,8 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { StockForm } from "./stock-form";
+import { DowJonesSetup } from "./dowjones-setup";
+import { isDowJones } from "@/lib/stocks/dowjones";
 
 export default async function StocksPage() {
   const { userId } = await requireUser();
@@ -16,6 +18,7 @@ export default async function StocksPage() {
       <section className="card h-fit">
         <h2 className="font-medium">เพิ่มหุ้น</h2>
         <StockForm />
+        {!stocks.some((s) => isDowJones(s.symbol)) && <DowJonesSetup label="เพิ่มหุ้นดาวโจนส์ + ดึงย้อนหลัง 50 วัน" />}
       </section>
 
       <section className="card p-0">

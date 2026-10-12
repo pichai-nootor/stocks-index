@@ -1,6 +1,10 @@
 import Link from "next/link";
-import { pickPair, pickTwo, top2, bottom2, prevCloseCents } from "@/lib/digits";
+import { pickPair, top2, bottom2, prevCloseCents } from "@/lib/digits";
+import { pickTwoFor } from "@/lib/formulas/stocks";
+import { hangSengSession } from "@/lib/stocks/hangseng";
+import { isDowJones } from "@/lib/stocks/dowjones";
 import { TwoPickCard } from "@/components/two-pick";
+import { CloseYahooButton } from "@/components/close-yahoo-button";
 import { LiveCard } from "@/components/live-card";
 import { SHOW_DIRECTION } from "@/lib/config";
 import { fmtNum, fmtChange, forecastDirection, forecastClose, directionCall, evaluateCalls, checkOpen, type Summary, type RecordLike } from "@/lib/stats";
@@ -25,8 +29,8 @@ export function TodayCard({ stock, record, priceStats, priceHistory = [], live =
   liveScore?: { called: number; hits: number };
 }) {
   const oTop = top2(record.openValue), oBot = bottom2(record.openChange);
-  const pp = pickPair(record.openValue, record.openChange, priceHistory);
-  const two = pickTwo(record.openValue, record.openChange, priceHistory);
+  const pp = hangSengSession(stock.symbol) || isDowJones(stock.symbol) ? undefined : pickPair(record.openValue, record.openChange, priceHistory); // ฮั่งเส็ง/ดาวโจนส์ยังไม่มีหลักฐานคู่ผูกของตัวเอง
+  const two = pickTwoFor(stock.symbol, record.openValue, record.openChange, priceHistory);
   const D = prevCloseCents(record.openValue, record.openChange);
   const dir = record.openChange > 0 ? priceStats.whenOpenUp : record.openChange < 0 ? priceStats.whenOpenDown : priceStats.all;
   const df = forecastDirection(record.openValue, record.openChange, priceHistory);
@@ -43,7 +47,7 @@ export function TodayCard({ stock, record, priceStats, priceHistory = [], live =
         <h3 className="font-semibold">
           {stock.symbol} <span className="font-normal text-slate-500">· {record.date.toLocaleDateString("th-TH", { weekday: "short", day: "numeric", month: "short", year: "2-digit" })}</span>
         </h3>
-        <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">รอผลปิด</span>
+        <span className="flex items-center gap-2"><span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">รอผลปิด</span><CloseYahooButton recordId={record.id} /></span>
       </div>
 
       {check.mismatch && <div className="mt-3"><OpenWarning check={check} fixHref={`/digits?stock=${stock.id}&date=${dateStr}&openValue=${record.openValue}&openChange=${check.suggestedOpenChange}`} /></div>}
@@ -59,7 +63,7 @@ export function TodayCard({ stock, record, priceStats, priceHistory = [], live =
       </div>
 
       </>)}
-      <div className="mt-3"><TwoPickCard two={two} tied={pp} /></div>
+      <div className="mt-3"><TwoPickCard two={two} tied={pp} open={{ top: oTop, bottom: oBot }} /></div>
 
       <div className="mt-3 grid gap-4 sm:grid-cols-3">
         <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:col-span-3 sm:grid-cols-4">

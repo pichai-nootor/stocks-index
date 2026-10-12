@@ -1,0 +1,6 @@
+{
+  // .next เป็นไฟล์ที่ Next สร้างเอง (เขียนทับตลอดเวลาตอน dev) ไม่ใช่โค้ดของโปรเจกต์ — ซ่อนไว้ไม่ให้เผลอเปิด/แก้
+  "files.exclude": { "**/.next": true, "**/node_modules": true },
+  "search.exclude": { "**/.next": true, "**/node_modules": true },
+  "files.watcherExclude": { "**/.next/**": true, "**/node_modules/**": true }
+}

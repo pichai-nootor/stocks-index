@@ -4,12 +4,18 @@
  *   Yahoo ให้ค่าเป็น float32 (เช่น 74781.7578125) ปัดเป็น 2 ตำแหน่งแล้วตรงกับที่ตลาดประกาศ
  */
 
+import { nikkeiSession, fetchNikkeiQuote } from "@/lib/stocks/nikkei";
+import { isEgypt, fetchEgyptQuote } from "@/lib/stocks/egypt";
+import { chinaSession, fetchChinaQuote } from "@/lib/stocks/china";
+import { hangSengSession, fetchHangSengQuote } from "@/lib/stocks/hangseng";
+import { isDowJones, DOW_YAHOO } from "@/lib/stocks/dowjones";
+
 /** ชื่อหุ้นในระบบ → สัญลักษณ์ Yahoo (เพิ่มได้ตามต้องการ) */
 const SYMBOLS: Record<string, string> = {
   "BSE SENSEX": "^BSESN", SENSEX: "^BSESN", BSESN: "^BSESN",
   "NIFTY 50": "^NSEI", NIFTY: "^NSEI", NSEI: "^NSEI",
 };
-export const yahooSymbol = (stockSymbol: string) => SYMBOLS[stockSymbol.trim().toUpperCase()] ?? null;
+export const yahooSymbol = (stockSymbol: string) => SYMBOLS[stockSymbol.trim().toUpperCase()] ?? (nikkeiSession(stockSymbol) ? "^N225" : isEgypt(stockSymbol) ? "^CASE30" : chinaSession(stockSymbol) ? "399001.SZ" : hangSengSession(stockSymbol) ? "^HSI" : isDowJones(stockSymbol) ? DOW_YAHOO : null);
 
 export type Quote = {
   symbol: string;
@@ -65,6 +71,14 @@ export async function fetchBseSensexLive(): Promise<Quote | null> {
 }
 
 export async function fetchQuote(stockSymbol: string): Promise<Quote | null> {
+  // นิเคอิ (ปกติ) มีไฟล์ของตัวเอง: รอบเช้าใช้แท่ง 11:30 JST, รอบบ่ายใช้ปิดวัน
+  const nk = nikkeiSession(stockSymbol);
+  if (nk) return fetchNikkeiQuote(nk);
+  if (isEgypt(stockSymbol)) return fetchEgyptQuote(); // อียิปต์: mubasher.info (Yahoo ไม่มีประวัติ)
+  const cn = chinaSession(stockSymbol); // จีน (SZSE): รอบเช้าใช้แท่ง 11:30 จีน, รอบบ่ายใช้ปิดวัน
+  if (cn) return fetchChinaQuote(cn);
+  const hs = hangSengSession(stockSymbol); // ฮั่งเส็ง: เช้าใช้แท่ง 12:00 ฮ่องกง, บ่ายใช้แท่ง 16:00 (ก่อนประมูลปิด)
+  if (hs) return fetchHangSengQuote(hs);
   const symbol = yahooSymbol(stockSymbol);
   if (!symbol) return null;
   // SENSEX: ใช้ BSE เรียลไทม์ก่อน ถ้าล่มค่อยใช้ Yahoo

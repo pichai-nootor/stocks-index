@@ -5,11 +5,10 @@ import { usePathname } from "next/navigation";
 import { logout } from "@/app/actions/auth";
 
 const links = [
-  { href: "/dashboard", label: "ภาพรวม" },
+  // หน้าแรก = "สรุปผลวันนี้" (/summary) เข้าทางโลโก้ Stocks Index · เมนู "ภาพรวม" เอาออกตามที่ผู้ใช้สั่ง
   { href: "/stocks", label: "หุ้น" },
-  { href: "/predict", label: "คาดการณ์" },
   { href: "/digits", label: "วิเคราะห์เลขปิด" },
-  { href: "/calendar", label: "ปฏิทิน" },
+  { href: "/vip", label: "หุ้น VIP" },
   { href: "/lab", label: "ทดลองสูตร" },
   { href: "/method", label: "วิธีคิด" },
 ] as const;
@@ -19,7 +18,7 @@ export function Nav({ username }: { username: string }) {
   return (
     <header className="border-b border-slate-200 bg-white">
       <div className="mx-auto flex max-w-5xl items-center gap-6 px-4 py-3">
-        <Link href="/dashboard" className="font-semibold tracking-tight">
+        <Link href="/summary" className="font-semibold tracking-tight">
           📈 Stocks Index
         </Link>
         <nav className="flex gap-1">

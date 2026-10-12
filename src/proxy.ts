@@ -14,7 +14,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
   if (session && isPublic) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    return NextResponse.redirect(new URL("/summary", request.url));
   }
   return NextResponse.next();
 }

@@ -45,3 +45,25 @@ model Record {
 
   @@index([stockId, date])
 }
+
+// ผลหุ้น VIP (stocks-vip.com): 1 แถว = 1 ตลาด × 1 วัน × 1 รอบ — บน 3 หลัก (หลักหน่วย + ทศนิยม 2 ตำแหน่งของราคาปิด) ล่าง 2 หลัก (ทศนิยมของ ปิด − เปิด)
+// open/close/diff มีเฉพาะวันที่ดึงจากราคาสดได้ (endpoint ประวัติให้แค่เลขผล)
+model VipResult {
+  id        String   @id @default(cuid())
+  userId    String
+  market    String   // in | jp | cn | hk | tw | kr
+  date      DateTime
+  round     Int      // 1 = เช้า, 2 = เย็น (ตลาดที่มีรอบเดียวใช้ 2)
+  top       String   // "429"
+  bottom    String   // "32"
+  open      Float?
+  close     Float?
+  diff      Float?
+  source    String   @default("web") // web | manual
+  /** เลขที่ฟันไว้ตอนนั้น (ล็อกครั้งแรก ไม่เขียนทับ) เช่น "9-6" — เพื่อให้ผลย้อนหลังตรงกับที่ผู้ใช้เห็นจริง ไม่เปลี่ยนตามสูตรที่แก้ทีหลัง */
+  pick      String?
+  createdAt DateTime @default(now())
+
+  @@unique([userId, market, date, round])
+  @@index([userId, market, date])
+}

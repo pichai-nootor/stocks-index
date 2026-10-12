@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
-import { toDayDigits, scoreFromOpen, pickDigits, pickPair, pickTwo, pairProbs, PAIR_BASE, backtestPicks, fitModel, top2, bottom2, POSITIONS, positionLabel, positionDigits, prevCloseCents, exactDigitProbs } from "@/lib/digits";
+import { pickTwoFor } from "@/lib/formulas/stocks";
+import { toDayDigits, scoreFromOpen, pickDigits, pickPair, pairProbs, PAIR_BASE, DRILL_BASE, DRILL_PER_DIGIT, backtestPicks, fitModel, top2, bottom2, POSITIONS, positionLabel, positionDigits, prevCloseCents, exactDigitProbs } from "@/lib/digits";
 import { summarize, forecastDirection, checkOpen } from "@/lib/stats";
 import { OpenWarning } from "@/components/open-warning";
 import { todayThai } from "@/lib/intraday";
@@ -50,7 +51,7 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
   const openPos = hasOpen ? positionDigits(oTop, oBot) : null;
   const ranked = hasOpen ? pickDigits(openValue, openChange, records) : null;
   const pp = hasOpen ? pickPair(openValue, openChange, records) : null;
-  const two = hasOpen ? pickTwo(openValue, openChange, records) : null;
+  const two = hasOpen ? pickTwoFor(selected?.symbol ?? "", openValue, openChange, records) : null;
   const posRanked = hasOpen ? scoreFromOpen(days, oTop, oBot, model) : null;
   const bt = records.length ? backtestPicks(records) : null;
   const top1 = bt?.topK[0];
@@ -85,7 +86,7 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
           {ranked && openPos && two && (
             <section className="grid gap-4 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
               <div className="card bg-amber-50/60">
-                <TwoPickCard two={two} tied={pp ?? undefined} score={bt ? { days: bt.days, pair: bt.pair, tied: bt.tied, single: top1?.atLeastOne } : undefined} />
+                <TwoPickCard two={two} tied={pp ?? undefined} open={{ top: top2(openValue), bottom: bottom2(openChange) }} score={bt ? { days: bt.days, pair: bt.pair, tied: bt.tied, single: top1?.atLeastOne, drill: bt.drill } : undefined} />
                 <p className="mt-3 text-xs text-amber-700">
                   {top1 && bt ? `เลขเดี่ยวตัวหลักย้อนหลังถูก ${pct(top1.atLeastOne)} (${bt.days} วัน) · 10 ปี ≈ 36%` : "ยังไม่มีวันที่ปิดแล้วให้ทดสอบ"}
                   {" "}· ทุกตำแหน่งเริ่มที่ ~10% เพราะ “บน” สุ่ม — จะเอียงไปหลักสิบ/หน่วยเฉพาะวันที่ D ลงท้าย 0 หรือ 9
@@ -199,7 +200,7 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
                 {pendingRecords.map((r) => {
                   const t = top2(r.openValue), b = bottom2(r.openChange);
                   const before = records.filter((d) => d.date.getTime() < r.date.getTime());
-                  const tw = pickTwo(r.openValue, r.openChange, before), pr = pickPair(r.openValue, r.openChange, before);
+                  const tw = pickTwoFor(selected?.symbol ?? "", r.openValue, r.openChange, before), pr = pickPair(r.openValue, r.openChange, before);
                   return (
                     <div key={r.id} className="flex flex-wrap items-center gap-4 py-3 text-sm">
                       <span className="w-20 whitespace-nowrap">{r.date.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" })}</span>
@@ -256,13 +257,21 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
                       <td className="py-1.5 text-right text-slate-400">ครบคู่ {pct(PAIR_BASE.bothRandom)}</td>
                     </tr>
                   )}
+                  {bt.drill && (
+                    <tr>
+                      <td className="py-1.5 pr-4">เลขเจาะ (2 ตัว × {DRILL_PER_DIGIT} เลข กลับได้) <span className="text-xs text-slate-400">— ต่อชุด {pct(bt.drill.set)} (10 ปี {pct(DRILL_BASE.set10y)})</span></td>
+                      <td className={`py-1.5 pr-4 text-right font-semibold ${bt.drill.any > DRILL_BASE.dayRandom ? "text-emerald-600" : "text-slate-700"}`}>{pct(bt.drill.any)} <span className="text-xs font-normal text-slate-400">(10 ปี {pct(DRILL_BASE.day10y)})</span></td>
+                      <td className="py-1.5 pr-4 text-right">–</td>
+                      <td className="py-1.5 text-right text-slate-400">{pct(DRILL_BASE.dayRandom)}</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
               <details className="mt-3 text-sm">
                 <summary className="cursor-pointer text-blue-600">ดูรายวัน</summary>
                 <table className="mt-2 w-full text-sm">
                   <thead className="text-left text-xs uppercase text-slate-500">
-                    <tr><th className="py-1 pr-4">วันที่</th><th className="py-1 pr-4">เปิด</th><th className="py-1 pr-4">ฟัน (3 อันดับ)</th><th className="py-1 pr-4">ปิดจริง</th><th className="py-1">ถูก</th></tr>
+                    <tr><th className="py-1 pr-4">วันที่</th><th className="py-1 pr-4">เปิด</th><th className="py-1 pr-4">ฟัน (3 อันดับ)</th><th className="py-1 pr-4">ปิดจริง</th><th className="py-1 pr-4">ถูก</th><th className="py-1">เจาะ</th></tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {[...bt.perDay].reverse().map((d) => {
@@ -273,7 +282,8 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
                           <td className="py-1.5 pr-4 whitespace-nowrap"><Digits value={day.openTop2} /> <Digits value={day.openBottom2} /></td>
                           <td className="py-1.5 pr-4"><Digits value={d.predicted.join("")} hilite={d.hits} /></td>
                           <td className="py-1.5 pr-4 whitespace-nowrap"><Digits value={day.closeTop2} hilite={d.hits} tone="blue" /> <Digits value={day.closeBottom2} hilite={d.hits} tone="blue" /></td>
-                          <td className="py-1.5 font-medium">{d.hits.length ? `${d.hits.length} ตัว` : <span className="text-slate-400">–</span>}</td>
+                          <td className="py-1.5 pr-4 font-medium">{d.hits.length ? `${d.hits.length} ตัว` : <span className="text-slate-400">–</span>}</td>
+                          <td className="py-1.5 font-mono text-emerald-700">{d.drill?.hits.length ? d.drill.hits.join(" ") : <span className="text-slate-400">–</span>}</td>
                         </tr>
                       );
                     })}

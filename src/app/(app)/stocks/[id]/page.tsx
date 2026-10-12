@@ -3,9 +3,29 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { summarize, fmtChange, fmtNum, hasClose, evaluateCalls, CALL_MIN_GAP_PCT } from "@/lib/stats";
-import { pickTwo, top2, bottom2, randomAtLeastOne, dayStrength } from "@/lib/digits";
+import { pickTwo, pickPair, top2, bottom2, randomAtLeastOne, dayStrength, DRILL_BASE, DRILL_PER_DIGIT } from "@/lib/digits";
 import { todayThai, liveDirection, fmtThaiTime, evaluateLiveCalls } from "@/lib/intraday";
 import { fetchQuote } from "@/lib/yahoo";
+import { YahooOpenButton } from "@/components/yahoo-open-button";
+import { CloseYahooButton } from "@/components/close-yahoo-button";
+import { NikkeiSetup } from "../nikkei-setup";
+import { nikkeiSession } from "@/lib/stocks/nikkei";
+import { NIKKEI_PAIR_STRONG, NIKKEI_PAIR_BASE } from "@/lib/formulas/stocks/nikkei";
+import { chinaSession } from "@/lib/stocks/china";
+import { CHINA_PAIR_STRONG, CHINA_DOUBLE, CHINA_PAIR } from "@/lib/formulas/stocks/china";
+import { SENSEX_PAIR } from "@/lib/formulas/stocks/sensex";
+import { EgyptSetup, EgyptOpenNextButton, EgyptOpenPasteForm } from "../egypt-setup";
+import { ChinaSetup } from "../china-setup";
+import { HangSengSetup } from "../hangseng-setup";
+import { DowJonesSetup } from "../dowjones-setup";
+import { isDowJones } from "@/lib/stocks/dowjones";
+import { pickDowJones } from "@/lib/formulas/stocks/dowjones";
+import { ManualOpenForm } from "@/components/manual-open-form";
+import { OpenInlineEdit } from "@/components/open-inline-edit";
+import { hangSengSession } from "@/lib/stocks/hangseng";
+import { pickHangSeng } from "@/lib/formulas/stocks/hangseng";
+import { isEgypt, egyptNextTradingDay } from "@/lib/stocks/egypt";
+import { egyptTieBreak, EGYPT_2026 } from "@/lib/formulas/stocks/egypt";
 import { LiveSaveButton } from "@/components/live-save-button";
 import { LiveManualForm } from "@/components/live-manual-form";
 import { SHOW_DIRECTION } from "@/lib/config";
@@ -15,6 +35,7 @@ import { Change } from "@/components/change";
 import { RecordEdit } from "@/components/record-edit";
 import { PatternMatrix } from "@/components/pattern-matrix";
 import { Digits } from "@/components/digit-badges";
+import { PickRow, HitBadge } from "@/components/pick-view";
 import { RecordForm } from "./record-form";
 import { CloseForm } from "@/components/close-form";
 import { ImportForm } from "./import-form";
@@ -35,23 +56,77 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
   const st = summarize(closed);
 
   // ฟันธงของแต่ละวัน: ใช้เฉพาะวันที่ปิดแล้ว "ก่อนหน้า" วันนั้น (สำหรับทิศทาง)
-  const rows = stock.records.map((r) => {
+  const egypt = isEgypt(stock.symbol);
+  const nikkei = !!nikkeiSession(stock.symbol);
+  const china = !!chinaSession(stock.symbol);
+  const pm = chinaSession(stock.symbol) === "pm"; // รอบของหุ้นจีน (สถิติเบิ้ลคนละค่ากัน)
+  const hsSession = hangSengSession(stock.symbol);
+  const hangseng = !!hsSession; // ฮั่งเส็งใช้สูตรของตัวเอง (formulas/stocks/hangseng.ts) ไม่ใช้ pickTwo กลาง
+  const dow = isDowJones(stock.symbol); // ดาวโจนส์ใช้สูตรของตัวเอง (formulas/stocks/dowjones.ts)
+  const manualOpen = hsSession === "pm" || (china && pm) || nikkeiSession(stock.symbol) === "pm"; // รอบบ่าย (ฮั่งเส็ง/จีน/นิเคอิ): ผู้ใช้กรอกเปิดเองทั้งหมด แทนปุ่ม Yahoo
+  const sensex = !egypt && !nikkei && !china && !hangseng && !dow; // หลักฐาน 10 ปีในไฟล์กลางเป็นของ SENSEX — ห้ามเอาไปแสดงบนหุ้นตัวอื่น
+  // อียิปต์: ปิดป้าย ★ งวดคู่ผูกแข็ง เพราะข้อมูลของอียิปต์เองบอกว่ากลับด้าน (13.6% vs 21.3%)
+  const pairStrong = egypt ? 99 : china ? CHINA_PAIR_STRONG : sensex ? SENSEX_PAIR.threshold : NIKKEI_PAIR_STRONG; // เกณฑ์ "งวดคู่ผูกแข็ง" — ค่าเท่ากันเพราะมาจากโครงสร้าง D
+  const pairEvidence = egypt ? "อียิปต์: วันแบบนี้ถูกครบ 24.6% เทียบวันอื่น 18.4%"
+    : china ? `สถิติจีน${pm ? "บ่าย 10 ปี" : "เช้า 2 ปี"}: งวดแบบนี้ถูกครบ ${Math.round((pm ? CHINA_PAIR.pm.strong : CHINA_PAIR.am.strong) * 100)}% เทียบงวดอื่น ${Math.round((pm ? CHINA_PAIR.pm.other : CHINA_PAIR.am.other) * 100)}%`
+    : sensex ? `SENSEX 10 ปี: งวดแบบนี้ถูกครบ ${Math.round(SENSEX_PAIR.strong * 100)}% เทียบงวดอื่น ${Math.round(SENSEX_PAIR.other * 100)}%`
+    : `นิเคอิบ่าย: ${Math.round(NIKKEI_PAIR_BASE.pm.strong * 100)}% เทียบปกติ ${Math.round(NIKKEI_PAIR_BASE.pm.both * 100)}%`;
+  const rows = stock.records.map((r, i) => {
     const history = closed.filter((d) => d.date.getTime() < r.date.getTime());
+    // อียิปต์: วันที่ไม่มีค่าเปลี่ยนแปลงตอนเปิดจริง → คำนวณให้ = ปิด − เปิด ของวันนั้น (จากเปิดวันนั้น ราคาวิ่งไปเท่าไหร่)
+    const fromOpen = egypt && r.openChange === 0 && hasClose(r) ? Math.round((r.closeValue - r.openValue) * 100) / 100 : null;
+    const noOpenChange = egypt && r.openChange === 0 && fromOpen === null;
     const oTop = top2(r.openValue), oBot = bottom2(r.openChange);
-    const two = pickTwo(r.openValue, r.openChange, history);
+    // อียิปต์: วันส่วนใหญ่เลขบนสุดเสมอกัน 6–8 ตัว (โอกาสเท่ากันเป๊ะ) กฎกลาง "เลขมากก่อน" เลยฟัน 9 เกือบทุกวัน → หมุนตามวันที่แทน (ของอียิปต์เท่านั้น)
+    const two = hsSession ? pickHangSeng(r.openValue, r.openChange, history, hsSession) : dow ? pickDowJones(r.openValue, r.openChange, history) : pickTwo(r.openValue, r.openChange, history, egypt ? egyptTieBreak(r.date) : undefined);
     const pair = two.digits.map((x) => x.digit), pick = pair[0];
     const closeDigits = hasClose(r) ? [...new Set((top2(r.closeValue) + bottom2(r.closeChange)).split(""))] : null;
     const hit1 = pick !== null && closeDigits ? closeDigits.includes(pick) : null;
     const hit2 = pair && closeDigits ? pair.filter((d) => closeDigits.includes(d)) : null;
+    // คู่ผูก (ถูกต้องครบทั้ง 2 ตัว) — แสดงให้อียิปต์และนิเคอิเหมือนกัน (อียิปต์ ≥23.5% ถูกจริง 24.6% · นิเคอิบ่าย 24.8%)
+    const pp = egypt || nikkei || china ? pickPair(r.openValue, r.openChange, history) : null; // SENSEX ไม่แสดงคู่ผูก (17.6% ต่ำกว่าอียิปต์ 20.3% — ผู้ใช้ไม่เอา)
+    const pairBoth = pp && closeDigits ? pp.pair.every((d) => closeDigits.includes(d)) : null;
     const star = two.standout.digit;
     const hitStar = closeDigits ? closeDigits.includes(star) : null;
-    const weak = dayStrength(two.digits[0].p).level === "อ่อน";
-    return { r, oTop, oBot, pick, pair, star, weak, closeDigits, hit1, hit2, hitStar };
+    const weak = !hangseng && !dow && dayStrength(two.digits[0].p).level === "อ่อน"; // ฮั่งเส็ง: วันอ่อนแบบ SENSEX ไม่จริง (บ่าย <34% ถูก 50.5%)
+    // โอกาสเบิ้ลของวัน: โครงสร้าง 20% (วัน D เบิ้ล 10%) · "จับตา" = เลขเปิด สิบ+หน่วย = 10 (10 ปี ~23–24% แต่ยังเป็นสัญญาณอ่อน)
+    const sum10 = (x: string) => Number(x[0]) + Number(x[1]) === 10;
+    const dblWatch = sum10(oTop) || sum10(oBot);
+    const closeDbl = hasClose(r) ? [top2(r.closeValue), bottom2(r.closeChange)].filter((x) => x[0] === x[1]) : null;
+    // จีน: สิ่งเดียวที่สถิติจีนเองยืนยันเรื่องเบิ้ล คือ "D เป็นเบิ้ล → โอกาสเบิ้ลต่ำลง" (บ่าย 16.1% vs 20.4% · เช้า 12.5% vs 19.2%)
+    const dTwo = top2(r.openValue - r.openChange);
+    const cnDoubleLow = china && dTwo[0] === dTwo[1];
+    // เลขเจาะ (กลับได้): มาถ้าเท่ากับ บน/ล่าง ตรงหรือกลับ
+    const closeNums = hasClose(r) ? [top2(r.closeValue), bottom2(r.closeChange)] : null;
+    /**
+     * ชุดวิน 5 ตัว สำหรับ "วิน 3 ตัวบน" — บน 3 หลัก = หลักหน่วยของดัชนี + ทศนิยม 2 ตำแหน่ง (เช่น 73,580.54 → 054)
+     *   เข้าเมื่อทั้ง 3 หลักอยู่ในชุด · ซื้อ 125 เลข (โต๊ด 35 ชุด)
+     *   SENSEX 10 ปี: ชุด 5 ตัว 13.2% (สุ่ม 12.2%) · 6 ตัว 22.6% · 7 ตัว 36.0% — แต้มต่อน้อยมากเพราะหลักหน่วยของดัชนีสุ่มล้วน
+     */
+    const winSetDigits = two.win.digits;
+    const top3 = hasClose(r) ? `${Math.trunc(Math.abs(r.closeValue)) % 10}${top2(r.closeValue)}` : null;
+    const win3Hit = top3 ? [...top3].every((c) => winSetDigits.includes(c)) : null;          // วิน 3 ตัวบน (125 เลข)
+    const winBoth = closeNums ? [...closeNums[0]].every((c) => winSetDigits.includes(c)) && [...closeNums[1]].every((c) => winSetDigits.includes(c)) : null;
+    const win2Hit = closeNums ? (([...closeNums[0]].every((c) => winSetDigits.includes(c)) ? "บน" : null) ?? ([...closeNums[1]].every((c) => winSetDigits.includes(c)) ? "ล่าง" : null)) : null; // วิน 2 ตัว บน/ล่าง (25 เลข)
+    const drill = two.drill.sets.map((s) => ({ digit: s.digit, numbers: s.numbers.map((n) => n.number) }));
+    const drillHits = closeNums ? drill.flatMap((s) => s.numbers).filter((m) => closeNums.includes(m) || closeNums.includes(m[1] + m[0])) : null;
+    return { r, oTop, oBot, noOpenChange, fromOpen, winSetDigits, win3Hit, win2Hit, winBoth, pWin: two.win.pWin, pBoth: two.win.pBoth, pp, pairBoth, dTwo, cnDoubleLow, pick, pair, star, weak, closeDigits, hit1, hit2, hitStar, drill, drillHits, pDouble: two.pDouble, dblWatch, closeDbl };
   }).reverse();
 
   // ราคาสดจาก Yahoo สำหรับวันที่ยังไม่ปิด (ถ้ามี) — ให้ฟันสดได้จากหน้านี้เลย
-  const quote = SHOW_DIRECTION && stock.records.some((r) => !hasClose(r)) ? await fetchQuote(stock.symbol) : null;
-  const liveNow = quote && !quote.closed ? { date: quote.tradingDate, source: quote.source, f: liveDirection(quote.prevClose, quote.last, quote.lastAt) } : null;
+  // ราคาจาก Yahoo/BSE ของหุ้นตัวนี้ (หน้านี้มีปุ่มดึงเปิดของตัวเอง ไม่ต้องไปหน้าแรก)
+  const quote = await fetchQuote(stock.symbol);
+  // อียิปต์: เปิดของวันถัดไป = ปิดวันล่าสุด (ค่าเท่ากันทั้งวัน) แต่ขึ้นปุ่มเฉพาะเมื่อตลาดวันนั้นเปิดแล้วจริง ๆ
+  //   ดูจากไฟล์รายนาทีของ mubasher: ถ้ามันขยับไปวันใหม่แล้ว = ตลาดเปิดแล้ว (10:00 ไคโร = 15:00 ไทย)
+  const lastClosed = [...closed].sort((a, b) => b.date.getTime() - a.date.getTime())[0];
+  const egyptNext = egypt && lastClosed?.closeValue != null ? egyptNextTradingDay(lastClosed.date.toISOString().slice(0, 10)) : null;
+  const egyptOpened = !!egyptNext && quote?.tradingDate === egyptNext;
+  const egyptNextOpen = egyptNext && egyptOpened && !stock.records.some((r) => r.date.toISOString().slice(0, 10) === egyptNext)
+    ? { date: egyptNext, open: lastClosed.closeValue! } : null;
+  const srcLabel = egypt ? "mubasher" : quote?.source === "bse" ? "BSE" : "Yahoo"; // ชื่อแหล่งราคาของหุ้นตัวนี้ (อียิปต์ไม่ได้ใช้ Yahoo)
+  const openFromQuote = quote && !stock.records.some((r) => r.date.toISOString().slice(0, 10) === quote.tradingDate)
+    ? { tradingDate: quote.tradingDate, dateLabel: new Date(quote.tradingDate).toLocaleDateString("th-TH", { day: "numeric", month: "short" }), open: quote.open, prevClose: quote.prevClose } : null;
+  const liveNow = SHOW_DIRECTION && quote && !quote.closed && stock.records.some((r) => !hasClose(r)) ? { date: quote.tradingDate, source: quote.source, f: liveDirection(quote.prevClose, quote.last, quote.lastAt) } : null;
 
   const liveCalls = evaluateLiveCalls(stock.records);
   const calls = evaluateCalls(stock.records);
@@ -61,6 +136,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
   const hit1Count = judged.filter((x) => x.hitStar).length;
   const strong = judged.filter((x) => !x.weak), strongHit = strong.filter((x) => x.hitStar).length;
   const hit2Count = judged.filter((x) => x.hit2 && x.hit2.length > 0).length;
+  const drillCount = judged.filter((x) => x.drillHits && x.drillHits.length > 0).length;
   const pending = stock.records.filter((r) => !hasClose(r)).length;
 
   return (
@@ -75,7 +151,6 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
         </div>
         <div className="flex gap-2">
           <Link href={`/digits?stock=${stock.id}`} className="btn-ghost border border-slate-200">วิเคราะห์เลขปิด</Link>
-          <Link href={`/predict?stock=${stock.id}`} className="btn-ghost border border-slate-200">คาดการณ์ราคาปิด</Link>
           <form action={deleteStock}>
             <input type="hidden" name="id" value={stock.id} />
             <button type="submit" className="btn-danger">ลบหุ้น</button>
@@ -85,7 +160,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
 
       {/* ผลงานการฟันธง — เทียบกับสุ่มตามจำนวนเลขปิดจริงของแต่ละวัน */}
       {(() => { const sizes = judged.map((j) => j.closeDigits!.length); const rnd1 = randomAtLeastOne(sizes, 1), rnd2 = randomAtLeastOne(sizes, 2); return (
-      <div className={`grid gap-4 sm:grid-cols-2 ${SHOW_DIRECTION ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
+      <div className={`grid gap-4 sm:grid-cols-2 ${SHOW_DIRECTION ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
         <StatCard
           label="★ ตัวเด่น ถูก"
           value={judged.length ? `${hit1Count} / ${judged.length} วัน` : "-"}
@@ -95,8 +170,14 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
         <StatCard
           label="คู่ 2 ตัว โผล่อย่างน้อย 1"
           value={judged.length ? `${hit2Count} / ${judged.length} วัน` : "-"}
-          hint={judged.length ? `${Math.round((hit2Count / judged.length) * 100)}% · สุ่มเดา ${Math.round(rnd2 * 100)}% · 10 ปี 63%` : undefined}
+          hint={judged.length ? `${Math.round((hit2Count / judged.length) * 100)}% · สุ่มเดา ${Math.round(rnd2 * 100)}%${sensex ? " · 10 ปี 63%" : ""}` : undefined}
           tone={judged.length ? (hit2Count / judged.length > rnd2 ? "up" : "down") : "neutral"}
+        />
+        <StatCard
+          label={`เลขเจาะ (${DRILL_PER_DIGIT * 2} ตัว กลับได้) มาอย่างน้อย 1`}
+          value={judged.length ? `${drillCount} / ${judged.length} วัน` : "-"}
+          hint={judged.length ? `${Math.round((drillCount / judged.length) * 100)}% · สุ่มเดา ${Math.round(DRILL_BASE.dayRandom * 100)}%${sensex ? ` · 10 ปี ${Math.round(DRILL_BASE.day10y * 100)}%` : ""}` : undefined}
+          tone={judged.length ? (drillCount / judged.length > DRILL_BASE.dayRandom ? "up" : "down") : "neutral"}
         />
         {SHOW_DIRECTION && <StatCard
           label="ฟันสด (ทิศทาง) ถูก"
@@ -114,13 +195,37 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
       </div>
       ); })()}
 
-      {/* min-w-0 บนคอลัมน์ตาราง: ไม่งั้น grid จะยืดตามความกว้างตารางจนล้นหน้า แทนที่จะเลื่อนในกรอบ */}
-      <div className="grid gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
-        <section className="card h-fit">
-          <h2 className="font-medium">บันทึกเปิดวันนี้</h2>
-          <RecordForm stockId={stock.id} today={todayThai()} />
-        </section>
-
+      {/* ปุ่มดึงเปิดของหุ้นตัวนี้ + การ์ดกรอกเปิดเอง (แถวเดียว) + ซิงก์ย้อนหลัง (พับไว้) */}
+      <div className="space-y-4">
+        {/* อียิปต์: วางราคาเปิดจาก investing เองได้ (เว็บเขาบล็อกการดึงอัตโนมัติ) */}
+        {egypt && (() => {
+          const open = stock.records.filter((r) => !hasClose(r)).sort((a, b) => b.date.getTime() - a.date.getTime())[0];
+          return open ? <EgyptOpenPasteForm recordId={open.id} current={open.openValue} prevClose={Math.round((open.openValue - open.openChange) * 100) / 100} /> : null;
+        })()}
+        {egyptNextOpen && <EgyptOpenNextButton nextDate={egyptNextOpen.date} open={egyptNextOpen.open} />}
+        {egypt && egyptNext && !egyptOpened && !stock.records.some((r) => r.date.toISOString().slice(0, 10) === egyptNext) && (
+          <p className="card text-sm text-slate-500">รอตลาดไคโรเปิด (10:00 ไคโร = <b>15:00 น. ไทย</b>) แล้วปุ่มบันทึกเปิดของวัน {new Date(egyptNext).toLocaleDateString("th-TH", { day: "numeric", month: "short" })} จะขึ้นตรงนี้</p>
+        )}
+        {/* รอบบ่าย ฮั่งเส็ง · จีน · นิเคอิ: กรอกเปิดเองแทนปุ่ม Yahoo (แถวรอปิด = แก้เปิด · ยังไม่มีแถว = สร้างวันใหม่จากปิดวันก่อนของ Yahoo) */}
+        {manualOpen && (() => {
+          const open = stock.records.filter((r) => !hasClose(r)).sort((a, b) => b.date.getTime() - a.date.getTime())[0];
+          if (open) return <ManualOpenForm title={stock.symbol} stockId={stock.id} date={open.date.toISOString().slice(0, 10)} prevClose={Math.round((open.openValue - open.openChange) * 100) / 100} current={open.openValue} currentChange={open.openChange} />;
+          if (openFromQuote) return <ManualOpenForm title={stock.symbol} stockId={stock.id} date={openFromQuote.tradingDate} prevClose={openFromQuote.prevClose} yahooOpen={openFromQuote.open} />;
+          return <ManualOpenForm title={stock.symbol} stockId={stock.id} date={todayThai()} />; // Yahoo ยังไม่ขึ้นวันใหม่: ไม่รู้ปิดวันก่อน → กรอก +/− เอง
+        })()}
+        {!egyptNextOpen && openFromQuote && !manualOpen && <YahooOpenButton stockId={stock.id} symbol={stock.symbol} quote={openFromQuote} redirectTo="stock" sourceLabel={srcLabel} />}
+        {/* กรอกเปิดเอง — การ์ดแถวเดียวแบบเดียวกันทุกหุ้น (รอบบ่ายฮั่งเส็ง/จีน/นิเคอิใช้การ์ดด้านบนแทน) */}
+        {!manualOpen && <RecordForm stockId={stock.id} symbol={stock.symbol} today={todayThai()} />}
+        {(nikkeiSession(stock.symbol) || china || hangseng || dow || isEgypt(stock.symbol)) && (
+          <details className="card text-sm">
+            <summary className="cursor-pointer text-blue-600">ซิงก์ย้อนหลัง</summary>
+            {nikkeiSession(stock.symbol) && <NikkeiSetup />}
+            {china && <ChinaSetup />}
+            {hangseng && <HangSengSetup />}
+            {dow && <DowJonesSetup />}
+            {isEgypt(stock.symbol) && <EgyptSetup />}
+          </details>
+        )}
         <section className="card min-w-0 p-0">
           <div className="border-b border-slate-200 px-5 py-3">
             <h2 className="font-medium">ประวัติ + ผลฟันธงรายวัน</h2>
@@ -134,24 +239,24 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                 <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
                   <tr>
                     <th className="px-3 py-2">วันที่</th>
-                    <th className="px-3 py-2">เปิด</th>
-                    <th className="px-3 py-2">เลขเปิด</th>
+                    <th className="px-3 py-2">เลขเปิด บน / ล่าง</th>
                     {SHOW_DIRECTION && <th className="px-3 py-2">ทิศทาง</th>}
-                    <th className="px-3 py-2 bg-amber-50 text-amber-800">ฟัน 2 ตัว (★ เด่น)</th>
-                    <th className="px-3 py-2">ปิด</th>
-                    <th className="px-3 py-2">เลขปิด</th>
-                    <th className="px-3 py-2 bg-amber-50 text-amber-800">ผล</th>
+                    <th className="px-3 py-2 text-amber-800">ฟัน 2 ตัว (★ เด่น) + เจาะ</th>
+                    <th className="px-3 py-2" title="วิน 3 ตัวบน 216 เลข · วิน 2 ตัว บน/ล่าง 36 เลข">วิน 6 ตัว</th>
+                    <th className="px-3 py-2">ผลปิด บน / ล่าง</th>
+                    <th className="px-3 py-2 text-amber-800">ผลฟัน</th>
                     <th className="px-3 py-2" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {paged.items.map(({ r, oTop, oBot, pair, star, weak, hit1, hit2 }) => (
-                    <tr key={r.id} className="hover:bg-slate-50">
-                      <td className="px-3 py-2 whitespace-nowrap">{r.date.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" })}</td>
-                      <td className="px-3 py-2 whitespace-nowrap tabular-nums">
-                        {fmtNum(r.openValue)}<br /><Change value={r.openChange} className="text-xs" />
+                  {paged.items.map(({ r, oTop, oBot, noOpenChange, fromOpen, winSetDigits, win3Hit, win2Hit, winBoth, pWin, pBoth, pp, pairBoth, dTwo, cnDoubleLow, pair, star, weak, hit1, hit2, drill, drillHits, pDouble, dblWatch, closeDbl }) => (
+                    <tr key={r.id} className="transition hover:bg-slate-50/60">
+                      <td className="px-3 py-2 whitespace-nowrap font-medium text-slate-700">{r.date.toLocaleDateString("th-TH", { weekday: "short", day: "numeric", month: "short", year: "2-digit" })}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <Digits value={oTop} /> <Digits value={oBot} />
+                        <div className="mt-0.5 text-xs tabular-nums text-slate-400">เปิด {fmtNum(r.openValue)} {noOpenChange ? "—" : <Change value={fromOpen ?? r.openChange} className="text-xs" />}</div>
+                        {!hasClose(r) && <OpenInlineEdit id={r.id} open={r.openValue} change={r.openChange} />}
                       </td>
-                      <td className="px-3 py-2 whitespace-nowrap"><Digits value={oTop} /> <Digits value={oBot} /></td>
                       {SHOW_DIRECTION && <td className="px-3 py-2 whitespace-nowrap text-xs">
                         {/* ฟันสด (ถ้าบันทึกราคาระหว่างวันไว้) แสดงก่อน; วันที่ยังไม่ปิดและยังไม่ฟันสด → ชี้ไปหน้าแรก */}
                         {r.liveValue !== null && r.liveAt !== null && (() => {
@@ -177,34 +282,52 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                             : hasClose(r) && r.liveValue === null ? <span className="text-slate-300">–</span> : null;
                           return <span className={`rounded px-1.5 py-0.5 font-medium ${c.hit === true ? "bg-emerald-100 text-emerald-800" : c.hit === false ? "bg-red-100 text-red-800 line-through" : "bg-amber-100 text-amber-800"}`}>จากเปิด {c.call === "up" ? "▲ บวก" : "▼ ลบ"}{c.hit === true ? " ✓" : c.hit === false ? " ✗" : ""}</span>; })()}
                       </td>}
-                      <td className={`px-3 py-2 whitespace-nowrap ${weak ? "bg-red-50/60" : "bg-amber-50/50"}`}>
-                        {weak && <span className="mb-1 block text-[10px] font-medium text-red-600">วันอ่อน — ไม่แนะนำแทงเดี่ยว</span>}
-                        <span className="flex items-center gap-1.5">
-                          {pair.map((d) => {
-                            const ok = hit2 ? hit2.includes(d) : null;
-                            return (
-                              <span key={d} className={`relative flex h-9 w-9 items-center justify-center rounded-lg font-mono text-xl font-bold ${ok ? "bg-amber-400 text-white" : ok === false ? "bg-slate-200 text-slate-500 line-through" : "bg-amber-100 text-amber-900"} ${d === star ? "ring-2 ring-red-400" : ""}`}>
-                                {d}{d === star && <span className="absolute -right-1.5 -top-1.5 rounded-full bg-red-500 px-1 text-[9px] leading-4 text-white">★</span>}
-                              </span>
-                            );
-                          })}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap tabular-nums">
-                        {hasClose(r) ? (<>{fmtNum(r.closeValue)}<br /><Change value={r.closeChange} className="text-xs" /></>) : <CloseForm recordId={r.id} />}
+                      <td className={`px-3 py-2 whitespace-nowrap ${weak ? "bg-red-50/60" : ""}`}>
+                        {weak && <span className="mb-1 block text-[10px] font-medium text-red-600">{egypt ? `วันอ่อน — ควรข้ามทั้งวัน (ข้อมูลอียิปต์ปีนี้: วันแบบนี้ 2 ตัวเข้าแค่ ${Math.round(EGYPT_2026.weakTwo * 100)}% เทียบวันปกติ ${Math.round(EGYPT_2026.okTwo * 100)}%)` : "วันอ่อน — ไม่แนะนำแทงเดี่ยว"}</span>}
+                        {/* เลขฟันซ้าย · เลขเจาะขวา (เขียวเมื่อมา ตรงหรือกลับ) */}
+                        <PickRow digits={pair} star={star} hit={hit2 ? hit2 : hasClose(r) ? [] : null} drill={drill} isHit={drillHits ? (m) => drillHits.includes(m) : undefined} />
+                        {/* คู่ผูก (เฉพาะอียิปต์): ต้องมาครบทั้ง 2 ตัวถึงถูก — ★ วันที่โมเดลให้ ≥23.5% (ของจริง 24.6% เทียบวันอื่น 18.4%) */}
+                        {pp && (
+                          <span className={`mt-1.5 block text-[11px] ${pairBoth ? "font-semibold text-emerald-700" : pairBoth === false ? "text-slate-400" : "text-slate-500"}`}>
+                            คู่ผูก <span className="font-mono font-bold">{pp.pair.join("-")}</span> {Math.round(pp.pBoth * 100)}%
+                            {pp.pBoth >= pairStrong && <span className="ml-1 rounded bg-amber-100 px-1 font-medium text-amber-800" title={pairEvidence}>★ งวดคู่ผูกแข็ง</span>}
+                            {pairBoth === true && " ✓ ครบ"}{pairBoth === false && " ✗"}
+                          </span>
+                        )}
+                        {/* ป้ายเบิ้ลในช่องฟัน: ขึ้นเฉพาะวันที่ "ฟันว่ามีโอกาสเบิ้ล" (เลขเปิด สิบ+หน่วย = 10) หรือเตือนว่าต่ำ — วันอื่นไม่ต้องบอก */}
+                        {/* จีน: ป้ายเบิ้ลจากสถิติของจีนเอง (ไม่ใช้ตัวเลขของหุ้นอื่น) */}
+                        {cnDoubleLow && (
+                          <span className="mt-1.5 inline-block rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600">
+                            <span className="font-semibold">โอกาสเบิ้ลต่ำ</span> <span className="font-normal">(D = {dTwo} เป็นเบิ้ล · สถิติจีน{pm ? "บ่าย" : "เช้า"} {Math.round((pm ? CHINA_DOUBLE.pm.dDouble : CHINA_DOUBLE.am.dDouble) * 100)}% เทียบวันอื่น {Math.round((pm ? CHINA_DOUBLE.pm.normal : CHINA_DOUBLE.am.normal) * 100)}%)</span>
+                          </span>
+                        )}
+                        {sensex && dblWatch && pDouble >= 0.15 && (() => {
+                          const sT = Number(oTop[0]) + Number(oTop[1]);
+                          return <span className="mt-1.5 inline-block rounded bg-violet-100 px-1.5 py-0.5 text-[10px] text-violet-800"><span className="font-semibold">★ มีโอกาสเบิ้ล</span> <span className="font-normal">(เปิด{sT === 10 ? `บน ${oTop[0]}+${oTop[1]}` : `ล่าง ${oBot[0]}+${oBot[1]}`} = 10 · 10 ปี ~24% — หลักฐานของ SENSEX เท่านั้น)</span></span>;
+                        })()}
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap">
-                        {hasClose(r) ? <><Digits value={top2(r.closeValue)} hilite={hit2 ?? []} tone="blue" /> <Digits value={bottom2(r.closeChange)} hilite={hit2 ?? []} tone="blue" /></> : <span className="text-xs text-slate-400">รอปิด</span>}
+                        <span className="inline-flex gap-0.5 font-mono">{winSetDigits.map((d) => <span key={d} className="rounded bg-slate-100 px-1.5 py-0.5 text-sm font-semibold text-slate-700">{d}</span>)}</span>
+                        <div className="mt-1 flex gap-1 text-[10px] leading-4" title={`วิน 3 ตัวบน 216 เลข 23% · วิน 2 ตัว บน/ล่าง 36 เลข ${Math.round(pWin * 100)}% · เข้าทั้งบนและล่าง ${Math.round(pBoth * 100)}%`}>
+                          {([["3 บน", win3Hit], [win2Hit ? `2 ตัว ${win2Hit}` : "2 ตัว", win2Hit ? true : hasClose(r) ? false : null], ["บน+ล่าง", winBoth ? true : hasClose(r) ? false : null]] as const).map(([label, ok]) => (
+                            <span key={String(label)} className={`rounded px-1 ${ok ? "bg-emerald-100 font-medium text-emerald-800" : ok === false ? "bg-slate-50 text-slate-400" : "bg-slate-50 text-slate-500"}`}>{ok ? "✓ " : ok === false ? "✗ " : ""}{label}</span>
+                          ))}
+                        </div>
                       </td>
-                      <td className="px-3 py-2 whitespace-nowrap bg-amber-50/50 text-xs">
-                        {hit1 === null ? (
-                          <span className="text-slate-400">{hasClose(r) ? "–" : "รอผล"}</span>
-                        ) : hit2 && hit2.length === 2 ? (
-                          <span className="rounded bg-emerald-100 px-2 py-0.5 font-medium text-emerald-800">✓ ถูกทั้งคู่</span>
-                        ) : hit2 && hit2.length ? (
-                          <span className="rounded bg-emerald-100 px-2 py-0.5 font-medium text-emerald-800">✓ ถูก {hit2.join(" ")}</span>
-                        ) : (
-                          <span className="rounded bg-red-100 px-2 py-0.5 font-medium text-red-800">✗ ผิด</span>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {hasClose(r) ? <>
+                          <Digits value={top2(r.closeValue)} hilite={hit2 ?? []} tone="blue" /> <Digits value={bottom2(r.closeChange)} hilite={hit2 ?? []} tone="blue" />
+                          <div className="mt-0.5 text-xs tabular-nums text-slate-400">ปิด {fmtNum(r.closeValue)} <Change value={r.closeChange} className="text-xs" /></div>
+                        </> : <div className="space-y-1"><CloseYahooButton recordId={r.id} label={`เติมปิดจาก ${srcLabel}`} /><CloseForm recordId={r.id} /></div>}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap text-xs">
+                        <HitBadge pick={[star, ...pair.filter((d) => d !== star)]} hits={hit1 === null ? null : hit2 ?? []} drillHits={drillHits} pending={hasClose(r) ? "–" : "รอผล"} />
+                        {/* ผลเบิ้ล: ออกเบิ้ล → แสดงเสมอ · วันที่ฟัน "มีโอกาสเบิ้ล" แล้วไม่ออก → บอกว่าไม่เบิ้ล · วันอื่นที่ไม่ออกไม่ต้องบอก */}
+                        {closeDbl && closeDbl.length > 0 && (
+                          <div className="mt-1"><span className={`rounded px-2 py-0.5 font-medium ${dblWatch ? "bg-violet-100 text-violet-800" : "bg-slate-100 text-slate-600"}`}>เบิ้ล {closeDbl.join(" ")}{dblWatch ? " ✓ ฟันไว้" : ""}</span></div>
+                        )}
+                        {closeDbl && closeDbl.length === 0 && dblWatch && pDouble >= 0.15 && (
+                          <div className="mt-1"><span className="rounded-full bg-red-50 px-2 py-0.5 font-medium text-red-700" title="วันนี้ฟันว่ามีโอกาสเบิ้ล แต่ไม่ออกเบิ้ล">เบิ้ล ✗</span></div>
                         )}
                       </td>
                       <td className="px-3 py-2 text-right">

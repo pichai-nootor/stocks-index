@@ -241,8 +241,10 @@ export type Backtest = {
   /** ตัวหลักแบบยุติธรรม: วันที่เสมอกันนับสัดส่วนของกลุ่มที่โผล่ (ไม่ขึ้นกับว่าเลือกตัวไหนในกลุ่ม) */
   fairTop1?: number;
   tieDays?: number;
+  /** เลขเจาะ (กลับได้): ต่อชุด / ทั้งวัน (2 ชุด) มาอย่างน้อย 1 */
+  drill?: { set: number; any: number };
   avgCloseSize: number; // ปิดมีเลขเฉลี่ยกี่ตัว
-  perDay: { date: Date; predicted: string[]; actual: string[]; hits: string[] }[];
+  perDay: { date: Date; predicted: string[]; actual: string[]; hits: string[]; drill?: { numbers: string[]; hits: string[] } }[];
 };
 
 /** ทดสอบย้อนหลังแบบ walk-forward: วันที่ i ใช้แค่ข้อมูลก่อนหน้า */
@@ -287,8 +289,17 @@ export function bottomFromTop(top: number, D: number, up: boolean): string {
  */
 export type Outcome = { top: string; bottom: string; up: boolean; set: Set<string>; w: number };
 
-/** ทุกกรณีที่เป็นไปได้ของวันนี้: บน 00–99 × ทิศทาง (200 กรณี) พร้อมน้ำหนัก — บนสุ่ม, ทิศทางตาม pUp */
+/* แคชผลที่ขึ้นกับ (D, pUp) เท่านั้น — ผลลัพธ์เหมือนเดิมทุกตัว แค่ไม่คำนวณซ้ำ (หน้าหุ้น 2,000+ วัน มี D ไม่เกิน 100 แบบ) */
+const outcomeCache = new Map<string, Outcome[]>();
+const probsCache = new Map<string, DigitDetail[]>();
+const drillCache = new Map<string, Drill>();
+const cacheKey = (D: number, pUp: number) => `${D}|${Math.round(pUp * 1e6)}`;
+
+/** ทุกกรณีที่เป็นไปได้ของวันนี้: บน 00–99 × ทิศทาง (200 กรณี) พร้อมน้ำหนัก — บนสุ่ม, ทิศทางตาม pUp (อย่าแก้ค่าใน array ที่คืนมา: ใช้ร่วมกัน) */
 export function enumerateOutcomes(D: number, pUp = 0.5): Outcome[] {
+  const key = cacheKey(D, pUp);
+  const hit = outcomeCache.get(key);
+  if (hit) return hit;
   const out: Outcome[] = [];
   for (let t = 0; t < 100; t++) {
     const top = String(t).padStart(2, "0");
@@ -297,6 +308,7 @@ export function enumerateOutcomes(D: number, pUp = 0.5): Outcome[] {
       out.push({ top, bottom, up, set: new Set((top + bottom).split("")), w: w / 100 });
     }
   }
+  outcomeCache.set(key, out);
   return out;
 }
 
@@ -318,7 +330,11 @@ export type PairPick = { pair: [string, string]; pBoth: number; pAny: number };
 /** ค่าอ้างอิง 10 ปี (SENSEX 2,461 วัน) สำหรับเทียบบนหน้าจอ */
 export const PAIR_BASE = { both10y: 0.179, bothRandom: 0.098, bothMarginal: 0.111 } as const;
 
+const pairCache = new Map<string, PairPick[]>();
 export function pairProbs(D: number, pUp = 0.5): PairPick[] {
+  const ck = cacheKey(D, pUp);
+  const cached = pairCache.get(ck);
+  if (cached) return cached;
   const O = enumerateOutcomes(D, pUp);
   const out: PairPick[] = [];
   for (let a = 0; a < 10; a++) for (let b = a + 1; b < 10; b++) {
@@ -327,7 +343,9 @@ export function pairProbs(D: number, pUp = 0.5): PairPick[] {
     for (const o of O) { const ha = o.set.has(A), hb = o.set.has(B); if (ha && hb) both += o.w; if (ha || hb) any += o.w; }
     out.push({ pair: [A, B], pBoth: both, pAny: any });
   }
-  return out.sort((x, y) => y.pBoth - x.pBoth || y.pAny - x.pAny);
+  const sorted = out.sort((x, y) => y.pBoth - x.pBoth || y.pAny - x.pAny);
+  pairCache.set(ck, sorted);
+  return sorted;
 }
 
 export function pickPair(openValue: number, openChange: number, priceHistory: RecordLike[] = []): PairPick {
@@ -353,8 +371,11 @@ export type DigitDetail = {
 
 /** โอกาสของเลข 0–9 แยกตามตำแหน่ง จากการไล่ 200 กรณี (บนสุ่ม → แต่ละตำแหน่ง ≈10% ต่างกันได้เฉพาะเมื่อ D ทำให้ตำแหน่งซ้ำกัน) */
 export function digitPositionProbs(D: number, pUp = 0.5): DigitDetail[] {
+  const key = cacheKey(D, pUp);
+  const hit = probsCache.get(key);
+  if (hit) return hit;
   const O = enumerateOutcomes(D, pUp);
-  return DIGITS.map((digit) => {
+  const res = DIGITS.map((digit) => {
     const pos = { topTens: 0, topUnits: 0, botTens: 0, botUnits: 0 };
     let any = 0, tens = 0, units = 0, top = 0, bottom = 0;
     for (const o of O) {
@@ -369,6 +390,8 @@ export function digitPositionProbs(D: number, pUp = 0.5): DigitDetail[] {
     }
     return { digit, p: any, pos, tens, units, top, bottom, givenTens: any ? tens / any : 0, givenUnits: any ? units / any : 0 };
   }).sort(byProb);
+  probsCache.set(key, res);
+  return res;
 }
 
 /** อัตราที่เลข 0–9 โผล่ในเลขปิด (บน∪ล่าง) ของ SENSEX 10 ปี 2,462 วัน — ใช้เป็นฐานเลือก "ตัวเด่น" ระหว่าง 2 ตัวที่ฟัน */
@@ -395,9 +418,106 @@ export type TwoPick = {
   /** ตัวสำรองที่ 2 (ตัวที่ 4): ทำให้ "อย่างน้อย 1 ใน 4 โผล่" สูงสุด */
   fourth: DigitDetail;
   pAny4: number;
+  /** ชุดวิน 5 ตัว (บน หรือ ล่าง อยู่ครบในชุด) */
+  win: { digits: string[]; pWin: number; pBoth: number };
   /** เลขที่เสมอกับตัวหลัก (โอกาสเท่ากันเป๊ะ) — วันส่วนใหญ่เสมอกัน 6–8 ตัว ตัวหลักจึงเป็นแค่ตัวแทนของกลุ่มนี้ */
   tiedWithMain: string[];
+  /** เลขเจาะ: เลข 2 ตัวที่มีเลขที่ฟันอยู่ด้วย ชุดละ DRILL_PER_DIGIT ตัว (กลับได้) */
+  drill: Drill;
+  /**
+   * โอกาสที่ปิดจะมี "เลขเบิ้ล" (บน หรือ ล่าง) — จากโครงสร้างล้วน ๆ: บนเบิ้ล 10% เสมอ, ล่างเบิ้ล 10% เสมอ
+   * ซ้อนกันได้เฉพาะเมื่อ D เป็นเบิ้ล (บนเบิ้ล → ล่างเบิ้ลด้วย) → วัน D เบิ้ล ≈ 10%, วันอื่น ≈ 20% (10 ปี: 12.1% / 19.8%)
+   * ไม่มีทางรู้ว่าเลขไหนจะเบิ้ล และไม่มีลักษณะเลขเปิดใดทำให้เบิ้ลบ่อยขึ้น (ตรวจ 120 เงื่อนไข) — บอกได้แค่ "วันนี้ต่ำหรือปกติ"
+   */
+  pDouble: number;
 };
+
+/* ---------- เลขเจาะ: จากเลขเดี่ยวที่ฟัน → เลข 2 ตัว ไม่กี่ตัวต่อเลข ---------- */
+
+/**
+ * จำนวนเลขเจาะต่อเลขที่ฟัน — ทุกเลข 2 ตัวมีโอกาส ~4% เท่ากัน จึงเป็นเส้นตรง: 10 ปี 3 ตัว 12.6% · 4 ตัว 16.5% · 5 ตัว 20.7% · 6 ตัว 23.9% ต่อชุด
+ * (ต่อเลขที่แทง ~4.1% ทุกขนาด ไม่มีจุดที่คุ้มกว่ากัน) — ผู้ใช้เลือก 6 (12 เลขต่อวัน) เพื่อโอกาสมาบ่อยสุด
+ */
+export const DRILL_PER_DIGIT = 6;
+export type DrillNumber = { number: string; p: number };
+export type DrillSet = { digit: string; numbers: DrillNumber[]; pAny: number };
+export type Drill = { sets: [DrillSet, DrillSet]; pAny: number };
+/** ค่าอ้างอิง 10 ปี (SENSEX, กลับได้, 6 ตัวต่อชุด): ต่อชุด / อย่างน้อย 1 ใน 12 ตัวของทั้งวัน — ใกล้เพดาน 48% (4% ต่อเลขเมื่อ บน สุ่ม); ที่ได้เหนือสุ่มมาจากการเลี่ยงเลขที่มาในกรณีเดียวกัน */
+export const DRILL_BASE = { set10y: 0.242, setRandom: 0.226, day10y: 0.475, dayRandom: 0.401 } as const;
+
+/** เลข 2 ตัว m "มา" ถ้าเท่ากับ บน หรือ ล่าง ตรง ๆ หรือกลับหลัง (โต๊ด) */
+const drillHit = (o: Outcome, m: string) => { const r = m[1] + m[0]; return o.top === m || o.top === r || o.bottom === m || o.bottom === r; };
+const drillAny = (O: Outcome[], nums: string[]) => O.reduce((s, o) => s + (nums.some((m) => drillHit(o, m)) ? o.w : 0), 0);
+
+/**
+ * เจาะเลขจากตัวที่ฟัน: ไล่ 200 กรณีว่าเลข 2 ตัว dX (หรือ Xd) จะเป็น บน หรือ ล่าง กี่ %
+ * เมื่อ บน สุ่ม ทุกเลข 2 ตัวมีโอกาสเท่ากัน 1% ต่อตำแหน่ง → กลับได้ ≈ 4% ต่อเลข — สิ่งเดียวที่เลือกได้คือ "อย่าให้เลขในชุดทับกัน":
+ * บางคู่มาในกรณีเดียวกันเสมอ (เช่น D ทำให้ ล่าง = บน กลับหลัง) เลือกทั้งคู่ก็เท่ากับเลือกตัวเดียว
+ * จึงเลือกทีละตัว (greedy) ให้ "อย่างน้อย 1 ใน 12 ตัวมา" ของทั้งชุดสูงสุด ชุดละ DRILL_PER_DIGIT ตัวเท่ากัน — ลำดับในชุด = ลำดับที่ถูกเลือก (ตัวแรกมีค่าสุด)
+ * เสมอกัน → เลขคู่ที่ฟันอีกตัวก่อน แล้วเลขน้อยก่อน · dX กับ Xd คือเลขเดียวกันเมื่อกลับได้ จึงไม่ซ้ำข้ามชุด
+ * 10 ปี (2,362 วัน): ทั้งวัน 12 ตัวมาอย่างน้อย 1 = 47.5% (เลือกแยกชุดไม่ดูการทับ 45.5%, สุ่ม 40%, เพดาน 12×4% = 48%) · ต่อชุด 24.2%
+ * ลองกฎเลือกคู่ 12 แบบ (เลขร้อน/เลขเย็น 30–200 วัน, เลขเปิด, ปิดเมื่อวาน, D, โอกาสเลขเดี่ยว, คงที่) ได้เท่ากันหมด = noise; เลข 2 ตัวใน 10 ปีกระจายสม่ำเสมอ (บ่อยสุด 1.36% น้อยสุด 0.61% เทียบสุ่ม 1.00%)
+ * ถ้าไม่บังคับให้มีเลขที่ฟัน (เลือก 12 ตัวจาก 100 ตามการทับอย่างเดียว) ได้ 48.4% แต่ไม่ใช่ "เจาะ" แล้ว
+ */
+/**
+ * ชุด "วิน" k ตัว — เลือกให้โอกาสที่ **บน หรือ ล่าง อยู่ครบในชุด** สูงสุด (ไล่ทีละตัวแบบ greedy)
+ *   วินบนอย่างเดียวไม่มีแต้มต่อ (บนสุ่มล้วน — SENSEX 10 ปี: ชุด 5 ตัว 23.9% เท่าสุ่ม 24.7%)
+ *   แต่วิน "บน+ล่าง" ใช้ความผูกพันผ่าน D ได้: ชุด 5 ตัว 49.2% (สุ่ม 45.8%) · ชุด 6 ตัว 65.6% (สุ่ม 60.2%)
+ *   ซื้อ k² เลขต่อชุด (6 ตัว = 36 เลข) — ใช้กับหุ้นปกติทุกตัวเพราะเป็นคณิตศาสตร์ของ D ล้วน
+ *   ผู้ใช้เลือกชุด 6 ตัว (25 ก.ย. 69): 3 ตัวบน 22.6% (ซื้อ 216 เลข) · 2 ตัว บน/ล่าง 65.6% (ซื้อ 36 เลข)
+ */
+export function winSet(O: Outcome[], k = 6): { digits: string[]; pWin: number; pBoth: number } {
+  // เลือกชุดที่ทำให้ "ทั้งบนและล่างอยู่ในชุดพร้อมกัน" บ่อยที่สุด (ผู้ใช้เลือกแบบนี้ 25 ก.ย. 69)
+  //   เทียบกับแบบเดิมที่เลือกให้ "อย่างใดอย่างหนึ่ง": เข้าทั้งคู่ 6.5% → 22.4% (SENSEX 10 ปี)
+  //   หมายเหตุผลตอบแทน: ทั้งสองแบบคืนต่ำกว่าทุน (0.89–0.93 ต่อบาท ที่อัตราจ่าย 90) — ดูบันทึกในไฟล์สูตรของหุ้น
+  const both = (set: Set<string>) => O.reduce((s, o) => s + (([...o.top].every((c) => set.has(c)) && [...o.bottom].every((c) => set.has(c))) ? o.w : 0), 0);
+  const any = (set: Set<string>) => O.reduce((s, o) => s + (([...o.top].every((c) => set.has(c)) || [...o.bottom].every((c) => set.has(c))) ? o.w : 0), 0);
+  let best: { digits: string[]; p: number } | null = null;
+  const pick = (start: number, chosen: string[]) => {
+    if (chosen.length === k) { const p = both(new Set(chosen)); if (!best || p > best.p) best = { digits: [...chosen], p }; return; }
+    for (let i = start; i < DIGITS.length; i++) pick(i + 1, [...chosen, DIGITS[i]]);
+  };
+  pick(0, []);
+  const S = new Set(best!.digits);
+  return { digits: best!.digits, pWin: any(S), pBoth: both(S) };
+}
+
+export function drillNumbers(O: Outcome[], digits: [string, string]): Drill {
+  const [a, b] = digits;
+  const key = `${O[0].bottom}|${O[1].bottom}|${Math.round(O[0].w * 1e9)}|${a}${b}`; // O ขึ้นกับ (D, pUp) เท่านั้น
+  const hit = drillCache.get(key);
+  if (hit) return hit;
+  const canon = (m: string) => (m[0] <= m[1] ? m : m[1] + m[0]);
+  const cands = [
+    ...DIGITS.filter((x) => x !== a).map((x) => a + x),
+    ...DIGITS.filter((x) => x !== b && x !== a).map((x) => b + x),
+  ];
+  const chosen: string[] = [];
+  const count = (d: string) => chosen.filter((m) => m[0] === d).length;
+  while (chosen.length < 2 * DRILL_PER_DIGIT) {
+    let best: { m: string; p: number; own: number } | null = null;
+    for (const m of cands) {
+      if (count(m[0]) >= DRILL_PER_DIGIT || chosen.some((c) => canon(c) === canon(m))) continue;
+      const p = drillAny(O, [...chosen, m]);
+      const own = drillAny(O, [m]);
+      const other = m[0] === a ? b : a;
+      const better = !best || Math.round(p * 1e9) > Math.round(best.p * 1e9)
+        || (Math.round(p * 1e9) === Math.round(best.p * 1e9) && (Math.round(own * 1e9) > Math.round(best.own * 1e9)
+          || (Math.round(own * 1e9) === Math.round(best.own * 1e9) && ((m[1] === other && best.m[1] !== other) || (m[1] === other) === (best.m[1] === other) && m < best.m))));
+      if (better) best = { m, p, own };
+    }
+    if (!best) break;
+    chosen.push(best.m);
+  }
+  const set = (d: string): DrillSet => {
+    const numbers = chosen.filter((m) => m[0] === d).map((m) => ({ number: m, p: drillAny(O, [m]) }));
+    return { digit: d, numbers, pAny: drillAny(O, numbers.map((n) => n.number)) };
+  };
+  const out: Drill = { sets: [set(a), set(b)], pAny: drillAny(O, chosen) };
+  drillCache.set(key, out);
+  return out;
+}
+
 export const tiedGroup = <T extends { p: number; digit: string }>(sorted: T[]) =>
   sorted.filter((d) => Math.round(d.p * 1e6) === Math.round(sorted[0].p * 1e6)).map((d) => d.digit);
 
@@ -407,14 +527,21 @@ export const tiedGroup = <T extends { p: number; digit: string }>(sorted: T[]) =
  *   ตัวรอง = คู่ของตัวหลักที่ทำให้ "อย่างน้อย 1 ใน 2 โผล่" สูงสุด (10 ปี 63.5% เทียบสุ่ม 59%)
  *   ตัวสำรอง = ตัวที่ 3 ที่ทำให้ "อย่างน้อย 1 ใน 3 โผล่" สูงสุด
  */
-export function pickTwo(openValue: number, openChange: number, priceHistory: RecordLike[] = []): TwoPick {
+/**
+ * tieBreak: กฎเลือก "ตัวหลัก" เมื่อเลขบนสุดเสมอกันหลายตัว (ไม่ส่ง = เลขมากก่อน เหมือนเดิมทุกประการ)
+ *   ทุกตัวในกลุ่มเสมอมีโอกาสเท่ากันเป๊ะ (โมเดลไล่กรณีให้ค่าเท่ากัน) กฎไหนก็ได้ผลเท่ากัน — มีไว้ให้หุ้นที่ไม่อยากกองเลขเดียว (อียิปต์)
+ */
+export function pickTwo(openValue: number, openChange: number, priceHistory: RecordLike[] = [], tieBreak?: (tied: string[]) => string): TwoPick {
   const D = prevCloseCents(openValue, openChange);
   const { pUp } = forecastDirection(openValue, openChange, priceHistory);
   const details = digitPositionProbs(D, pUp);
-  const first = details[0];
+  const tied = tiedGroup(details);
+  const chosen = tieBreak && tied.length > 1 ? tieBreak([...tied].sort()) : null;
+  const first = (chosen && details.find((d) => d.digit === chosen)) || details[0];
   const O = enumerateOutcomes(D, pUp);
   let best: { d: DigitDetail; any: number; both: number } | null = null;
-  for (const d of details.slice(1)) {
+  for (const d of details) {
+    if (d.digit === first.digit) continue;
     let any = 0, both = 0;
     for (const o of O) { const a = o.set.has(first.digit), b = o.set.has(d.digit); if (a || b) any += o.w; if (a && b) both += o.w; }
     if (!best || Math.round(any * 1e9) > Math.round(best.any * 1e9)) best = { d, any, both };
@@ -435,7 +562,9 @@ export function pickTwo(openValue: number, openChange: number, priceHistory: Rec
   const fourth = extend([first.digit, second.digit, third.d.digit]);
   const rate = (d: DigitDetail) => digitRate(d.digit, priceHistory);
   const standout = Math.round(first.p * 1e6) !== Math.round(second.p * 1e6) ? first : rate(second) > rate(first) ? second : first;
-  return { digits: [first, second], standout, standoutRate: rate(standout), pAny: best!.any, pBoth: best!.both, third: third.d, pAny3: third.any, fourth: fourth.d, pAny4: fourth.any, tiedWithMain: tiedGroup(details) };
+  const drill = drillNumbers(O, [first.digit, second.digit]);
+  const pDouble = O.reduce((s, o) => s + (o.top[0] === o.top[1] || o.bottom[0] === o.bottom[1] ? o.w : 0), 0);
+  return { digits: [first, second], standout, standoutRate: rate(standout), pAny: best!.any, pBoth: best!.both, third: third.d, pAny3: third.any, fourth: fourth.d, pAny4: fourth.any, tiedWithMain: tiedGroup(details), drill, pDouble, win: winSet(O, 6) };
 }
 
 /**
@@ -473,16 +602,21 @@ export function backtestPicks(records: RecordLike[], minHistory = 0): Backtest {
   const sorted = [...records].sort((a, b) => a.date.getTime() - b.date.getTime());
   const days = toDayDigits(sorted);
   const perDay: Backtest["perDay"] = [];
-  let pairBoth = 0, pairAny = 0, tiedBoth = 0, tiedAny = 0, fair = 0, tieDays = 0;
+  let pairBoth = 0, pairAny = 0, tiedBoth = 0, tiedAny = 0, fair = 0, tieDays = 0, drillSet = 0, drillDay = 0;
   for (let i = minHistory; i < sorted.length; i++) {
     const hist = sorted.slice(0, i);
     const two = pickTwo(sorted[i].openValue, sorted[i].openChange, hist);
+    const closeNums = [days[i].closeTop2, days[i].closeBottom2];
+    const drillNums = two.drill.sets.flatMap((s) => s.numbers.map((n) => n.number));
+    const drillHits = drillNums.filter((m) => closeNums.includes(m) || closeNums.includes(m[1] + m[0]));
+    for (const s of two.drill.sets) if (s.numbers.some((n) => drillHits.includes(n.number))) drillSet++;
+    if (drillHits.length) drillDay++;
     fair += two.tiedWithMain.filter((d) => days[i].closeDigits.includes(d)).length / two.tiedWithMain.length;
     if (two.tiedWithMain.length > 1) tieDays++;
     const third = two.third.digit;
     const predicted = [two.digits[0].digit, two.digits[1].digit, third];
     const hits = predicted.filter((d) => days[i].closeDigits.includes(d));
-    perDay.push({ date: days[i].date, predicted, actual: days[i].closeDigits, hits });
+    perDay.push({ date: days[i].date, predicted, actual: days[i].closeDigits, hits, drill: { numbers: drillNums, hits: drillHits } });
     const two2 = hits.filter((d) => d !== third).length;
     if (two2 === 2) pairBoth++; if (two2 >= 1) pairAny++;
     const { pair } = pickPair(sorted[i].openValue, sorted[i].openChange, hist);
@@ -502,5 +636,6 @@ export function backtestPicks(records: RecordLike[], minHistory = 0): Backtest {
     tied: n ? { both: tiedBoth / n, any: tiedAny / n } : undefined,
     fairTop1: n ? fair / n : undefined,
     tieDays,
+    drill: n ? { set: drillSet / (2 * n), any: drillDay / n } : undefined,
   };
 }

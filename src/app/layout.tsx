@@ -9,7 +9,8 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="th" className="h-full antialiased">
-      <body className="min-h-full flex flex-col bg-slate-50 text-slate-900">{children}</body>
+      {/* suppressHydrationWarning: extension (ColorZilla ฯลฯ) ใส่ attribute ลง body ก่อน React hydrate — ไม่ใช่ปัญหาจากโค้ด */}
+      <body className="min-h-full flex flex-col bg-slate-50 text-slate-900" suppressHydrationWarning>{children}</body>
     </html>
   );
 }

@@ -2,11 +2,16 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { summarize, fmtNum, fmtChange, hasClose, evaluateCalls, CALL_MIN_GAP_PCT } from "@/lib/stats";
-import { toDayDigits, pickTwo } from "@/lib/digits";
+import { toDayDigits } from "@/lib/digits";
+import { pickTwoFor } from "@/lib/formulas/stocks";
 import { Digits } from "@/components/digit-badges";
 import { OpenForm } from "@/components/open-form";
 import { TodayCard } from "@/components/today-card";
 import { YahooOpenButton } from "@/components/yahoo-open-button";
+import { ManualOpenForm } from "@/components/manual-open-form";
+import { chinaSession } from "@/lib/stocks/china";
+import { nikkeiSession } from "@/lib/stocks/nikkei";
+import { hangSengSession } from "@/lib/stocks/hangseng";
 import { fetchQuote } from "@/lib/yahoo";
 import { evaluateLiveCalls, todayThai } from "@/lib/intraday";
 import { SHOW_DIRECTION } from "@/lib/config";
@@ -45,7 +50,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
     const closed = s.records.filter(hasClose);
     const days = toDayDigits(closed);
     const judged = days.map((d, i) => {
-      const two = pickTwo(closed[i].openValue, closed[i].openChange, closed.slice(0, i));
+      const two = pickTwoFor(s.symbol, closed[i].openValue, closed[i].openChange, closed.slice(0, i));
       const pair = two.digits.map((x) => x.digit);
       const pick = two.standout.digit;
       const rec = closed[i]; // closed เรียงตามวันที่เหมือน days
@@ -73,27 +78,37 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
 
       {stocks.length === 0 ? (
         <p className="card text-sm text-slate-500">ยังไม่มีหุ้น — <Link href="/stocks" className="text-blue-600 hover:underline">เพิ่มหุ้นก่อน</Link></p>
-      ) : pending.length === 0 ? (
-        <section className="space-y-2">
-          <p className="text-sm text-slate-600">ยังไม่ได้กรอกเปิดของวันนี้ — กรอกแล้วระบบจะฟันธงให้ทันที</p>
-          <YahooOpenButton stockId={defaultStock.id} symbol={defaultStock.symbol} quote={(() => {
-            const q = quotes.get(defaultStock.id);
-            // ซ่อนถ้าวันซื้อขายล่าสุดของ Yahoo มีผลปิดในระบบแล้ว (= วันนี้ตลาดยังไม่เปิด)
-            const done = q && defaultStock.records.some((r) => r.date.toISOString().slice(0, 10) === q.tradingDate && hasClose(r));
-            return q && !done ? { tradingDate: q.tradingDate, dateLabel: new Date(q.tradingDate).toLocaleDateString("th-TH", { day: "numeric", month: "short" }), open: q.open, prevClose: q.prevClose } : null;
-          })()} />
-          {(() => { const q = quotes.get(defaultStock.id); return q && defaultStock.records.some((r) => r.date.toISOString().slice(0, 10) === q.tradingDate && hasClose(r)) ? <p className="text-xs text-slate-500">Yahoo ยังอยู่ที่วัน {q.tradingDate} (บันทึกครบแล้ว) — ปุ่มดึงเปิดจะขึ้นหลังตลาดเปิด 10:45 น. ไทย</p> : null; })()}
-          <OpenForm stocks={stocks} stockId={defaultStock.id} date={today} redirectTo="dashboard" />
-        </section>
       ) : (
         <>
-          <div className="grid gap-4">
-            {pending.map((p) => <TodayCard key={p.record.id} {...p} />)}
-          </div>
-          <details className="text-sm">
-            <summary className="cursor-pointer text-blue-600">กรอกเปิดวันอื่น / หุ้นอื่น</summary>
-            <div className="mt-2"><OpenForm stocks={stocks} stockId={defaultStock.id} date={today} redirectTo="dashboard" /></div>
-          </details>
+          {/* ปุ่มดึงเปิดจาก Yahoo ของแต่ละหุ้นที่ยังไม่มีเปิดของวันซื้อขายล่าสุด (ซ่อนถ้าวันนั้นบันทึกครบแล้ว = ตลาดยังไม่เปิดวันใหม่) */}
+          {stocks.map((s) => {
+            const q = quotes.get(s.id);
+            if (!q) return null;
+            const row = s.records.find((r) => r.date.toISOString().slice(0, 10) === q.tradingDate);
+            if (row) return null; // มีเปิด (รอปิด → อยู่ในการ์ดวันนี้) หรือปิดครบแล้ว
+            // รอบบ่าย ฮั่งเส็ง · จีน · นิเคอิ: ผู้ใช้กรอกเปิดเองแทนปุ่ม Yahoo
+            if (hangSengSession(s.symbol) === "pm" || chinaSession(s.symbol) === "pm" || nikkeiSession(s.symbol) === "pm") return <ManualOpenForm key={s.id} title={s.symbol} stockId={s.id} date={q.tradingDate} prevClose={q.prevClose} yahooOpen={q.open} />;
+            return <YahooOpenButton key={s.id} stockId={s.id} symbol={s.symbol} quote={{ tradingDate: q.tradingDate, dateLabel: new Date(q.tradingDate).toLocaleDateString("th-TH", { day: "numeric", month: "short" }), open: q.open, prevClose: q.prevClose }} />;
+          })}
+          {pending.length === 0 ? (
+            <section className="space-y-2">
+              <p className="text-sm text-slate-600">ยังไม่ได้กรอกเปิดของวันนี้ — กรอกแล้วระบบจะฟันธงให้ทันที</p>
+              {stocks.every((s) => { const q = quotes.get(s.id); return !q || s.records.some((r) => r.date.toISOString().slice(0, 10) === q.tradingDate && hasClose(r)); }) && (
+                <p className="text-xs text-slate-500">ทุกหุ้นบันทึกครบถึงวันซื้อขายล่าสุดแล้ว — ปุ่มดึงเปิดจะขึ้นเมื่อตลาดเปิดวันใหม่ (SENSEX 10:45 น. · นิเคอิ 07:00 น. ไทย)</p>
+              )}
+              <OpenForm stocks={stocks} stockId={defaultStock.id} date={today} redirectTo="dashboard" />
+            </section>
+          ) : (
+            <>
+              <div className="grid gap-4">
+                {pending.map((p) => <TodayCard key={p.record.id} {...p} />)}
+              </div>
+              <details className="text-sm">
+                <summary className="cursor-pointer text-blue-600">กรอกเปิดวันอื่น / หุ้นอื่น</summary>
+                <div className="mt-2"><OpenForm stocks={stocks} stockId={defaultStock.id} date={today} redirectTo="dashboard" /></div>
+              </details>
+            </>
+          )}
         </>
       )}
 
