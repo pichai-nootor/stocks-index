@@ -77,5 +77,6 @@ export const sgFormula: MarketFormula = {
   drill: drillSg,
   noManualOpen: true, // สูตรไม่ใช้ราคาเปิด — ระบบเก็บเองจากฟีดถ้าทัน ไม่ต้องกรอก
   minHistory: SG_MIN_HISTORY,
+  since: "2026-10-13", // วันที่สูตรปัจจุบันเริ่มใช้ (ปรับ 13 ต.ค. 69) — ไว้บอกในหมายเหตุของงวดที่ไม่มีเลขล็อก
   drillRandom: 0.452,
 };

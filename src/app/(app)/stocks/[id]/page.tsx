@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { summarize, fmtChange, fmtNum, hasClose, evaluateCalls, CALL_MIN_GAP_PCT } from "@/lib/stats";
-import { pickTwo, pickPair, top2, bottom2, randomAtLeastOne, dayStrength, DRILL_BASE, DRILL_PER_DIGIT } from "@/lib/digits";
+import { pickPair, top2, bottom2, randomAtLeastOne, dayStrength, DRILL_BASE, DRILL_PER_DIGIT } from "@/lib/digits";
 import { todayThai, liveDirection, fmtThaiTime, evaluateLiveCalls } from "@/lib/intraday";
 import { fetchQuote } from "@/lib/yahoo";
 import { YahooOpenButton } from "@/components/yahoo-open-button";
@@ -19,13 +19,12 @@ import { ChinaSetup } from "../china-setup";
 import { HangSengSetup } from "../hangseng-setup";
 import { DowJonesSetup } from "../dowjones-setup";
 import { isDowJones } from "@/lib/stocks/dowjones";
-import { pickDowJones } from "@/lib/formulas/stocks/dowjones";
 import { ManualOpenForm } from "@/components/manual-open-form";
 import { OpenInlineEdit } from "@/components/open-inline-edit";
 import { hangSengSession } from "@/lib/stocks/hangseng";
-import { pickHangSeng } from "@/lib/formulas/stocks/hangseng";
+import { pickTwoFor, amDigitsFor } from "@/lib/formulas/stocks";
 import { isEgypt, egyptNextTradingDay } from "@/lib/stocks/egypt";
-import { egyptTieBreak, EGYPT_2026 } from "@/lib/formulas/stocks/egypt";
+import { EGYPT_2026 } from "@/lib/formulas/stocks/egypt";
 import { LiveSaveButton } from "@/components/live-save-button";
 import { LiveManualForm } from "@/components/live-manual-form";
 import { SHOW_DIRECTION } from "@/lib/config";
@@ -71,14 +70,17 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
     : china ? `สถิติจีน${pm ? "บ่าย 10 ปี" : "เช้า 2 ปี"}: งวดแบบนี้ถูกครบ ${Math.round((pm ? CHINA_PAIR.pm.strong : CHINA_PAIR.am.strong) * 100)}% เทียบงวดอื่น ${Math.round((pm ? CHINA_PAIR.pm.other : CHINA_PAIR.am.other) * 100)}%`
     : sensex ? `SENSEX 10 ปี: งวดแบบนี้ถูกครบ ${Math.round(SENSEX_PAIR.strong * 100)}% เทียบงวดอื่น ${Math.round(SENSEX_PAIR.other * 100)}%`
     : `นิเคอิบ่าย: ${Math.round(NIKKEI_PAIR_BASE.pm.strong * 100)}% เทียบปกติ ${Math.round(NIKKEI_PAIR_BASE.pm.both * 100)}%`;
+  // รอบบ่ายจีน/นิเคอิ: เลขเสมอเลือกจากเลขที่ออกรอบเช้า (ดู formulas/stocks/index.ts)
+  const amSrc = manualOpen ? await prisma.stock.findMany({ where: { userId }, select: { symbol: true, records: { select: { date: true, closeValue: true, closeChange: true } } } }) : [];
+  const am = amDigitsFor(amSrc, stock.symbol);
   const rows = stock.records.map((r, i) => {
     const history = closed.filter((d) => d.date.getTime() < r.date.getTime());
     // อียิปต์: วันที่ไม่มีค่าเปลี่ยนแปลงตอนเปิดจริง → คำนวณให้ = ปิด − เปิด ของวันนั้น (จากเปิดวันนั้น ราคาวิ่งไปเท่าไหร่)
     const fromOpen = egypt && r.openChange === 0 && hasClose(r) ? Math.round((r.closeValue - r.openValue) * 100) / 100 : null;
     const noOpenChange = egypt && r.openChange === 0 && fromOpen === null;
     const oTop = top2(r.openValue), oBot = bottom2(r.openChange);
-    // อียิปต์: วันส่วนใหญ่เลขบนสุดเสมอกัน 6–8 ตัว (โอกาสเท่ากันเป๊ะ) กฎกลาง "เลขมากก่อน" เลยฟัน 9 เกือบทุกวัน → หมุนตามวันที่แทน (ของอียิปต์เท่านั้น)
-    const two = hsSession ? pickHangSeng(r.openValue, r.openChange, history, hsSession) : dow ? pickDowJones(r.openValue, r.openChange, history) : pickTwo(r.openValue, r.openChange, history, egypt ? egyptTieBreak(r.date) : undefined);
+    const two = pickTwoFor(stock.symbol, r.openValue, r.openChange, history, { date: r.date, am }); // สูตรของหุ้นตัวนี้ (formulas/stocks/<หุ้น>.ts)
+    const amWait = "amWait" in two && !!two.amWait && !hasClose(r); // ผลเช้ายังไม่เข้า → ยังไม่มีเลขฟันจริง
     const pair = two.digits.map((x) => x.digit), pick = pair[0];
     const closeDigits = hasClose(r) ? [...new Set((top2(r.closeValue) + bottom2(r.closeChange)).split(""))] : null;
     const hit1 = pick !== null && closeDigits ? closeDigits.includes(pick) : null;
@@ -110,7 +112,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
     const win2Hit = closeNums ? (([...closeNums[0]].every((c) => winSetDigits.includes(c)) ? "บน" : null) ?? ([...closeNums[1]].every((c) => winSetDigits.includes(c)) ? "ล่าง" : null)) : null; // วิน 2 ตัว บน/ล่าง (25 เลข)
     const drill = two.drill.sets.map((s) => ({ digit: s.digit, numbers: s.numbers.map((n) => n.number) }));
     const drillHits = closeNums ? drill.flatMap((s) => s.numbers).filter((m) => closeNums.includes(m) || closeNums.includes(m[1] + m[0])) : null;
-    return { r, oTop, oBot, noOpenChange, fromOpen, winSetDigits, win3Hit, win2Hit, winBoth, pWin: two.win.pWin, pBoth: two.win.pBoth, pp, pairBoth, dTwo, cnDoubleLow, pick, pair, star, weak, closeDigits, hit1, hit2, hitStar, drill, drillHits, pDouble: two.pDouble, dblWatch, closeDbl };
+    return { r, oTop, oBot, noOpenChange, fromOpen, winSetDigits, win3Hit, win2Hit, winBoth, pWin: two.win.pWin, pBoth: two.win.pBoth, pp, pairBoth, dTwo, cnDoubleLow, pick, pair, star, weak, closeDigits, hit1, hit2, hitStar, drill, drillHits, pDouble: two.pDouble, dblWatch, closeDbl, amWait };
   }).reverse();
 
   // ราคาสดจาก Yahoo สำหรับวันที่ยังไม่ปิด (ถ้ามี) — ให้ฟันสดได้จากหน้านี้เลย
@@ -249,7 +251,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {paged.items.map(({ r, oTop, oBot, noOpenChange, fromOpen, winSetDigits, win3Hit, win2Hit, winBoth, pWin, pBoth, pp, pairBoth, dTwo, cnDoubleLow, pair, star, weak, hit1, hit2, drill, drillHits, pDouble, dblWatch, closeDbl }) => (
+                  {paged.items.map(({ r, oTop, oBot, noOpenChange, fromOpen, winSetDigits, win3Hit, win2Hit, winBoth, pWin, pBoth, pp, pairBoth, dTwo, cnDoubleLow, pair, star, weak, hit1, hit2, drill, drillHits, pDouble, dblWatch, closeDbl, amWait }) => (
                     <tr key={r.id} className="transition hover:bg-slate-50/60">
                       <td className="px-3 py-2 whitespace-nowrap font-medium text-slate-700">{r.date.toLocaleDateString("th-TH", { weekday: "short", day: "numeric", month: "short", year: "2-digit" })}</td>
                       <td className="px-3 py-2 whitespace-nowrap">
@@ -285,7 +287,8 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                       <td className={`px-3 py-2 whitespace-nowrap ${weak ? "bg-red-50/60" : ""}`}>
                         {weak && <span className="mb-1 block text-[10px] font-medium text-red-600">{egypt ? `วันอ่อน — ควรข้ามทั้งวัน (ข้อมูลอียิปต์ปีนี้: วันแบบนี้ 2 ตัวเข้าแค่ ${Math.round(EGYPT_2026.weakTwo * 100)}% เทียบวันปกติ ${Math.round(EGYPT_2026.okTwo * 100)}%)` : "วันอ่อน — ไม่แนะนำแทงเดี่ยว"}</span>}
                         {/* เลขฟันซ้าย · เลขเจาะขวา (เขียวเมื่อมา ตรงหรือกลับ) */}
-                        <PickRow digits={pair} star={star} hit={hit2 ? hit2 : hasClose(r) ? [] : null} drill={drill} isHit={drillHits ? (m) => drillHits.includes(m) : undefined} />
+                        {amWait ? <span className="text-xs text-amber-700">⏳ รอผลรอบเช้าเข้าระบบ (บ่ายใช้เลขเช้าด้วย)</span>
+                          : <PickRow digits={pair} star={star} hit={hit2 ? hit2 : hasClose(r) ? [] : null} drill={drill} isHit={drillHits ? (m) => drillHits.includes(m) : undefined} />}
                         {/* คู่ผูก (เฉพาะอียิปต์): ต้องมาครบทั้ง 2 ตัวถึงถูก — ★ วันที่โมเดลให้ ≥23.5% (ของจริง 24.6% เทียบวันอื่น 18.4%) */}
                         {pp && (
                           <span className={`mt-1.5 block text-[11px] ${pairBoth ? "font-semibold text-emerald-700" : pairBoth === false ? "text-slate-400" : "text-slate-500"}`}>

@@ -528,15 +528,16 @@ export const tiedGroup = <T extends { p: number; digit: string }>(sorted: T[]) =
  *   ตัวสำรอง = ตัวที่ 3 ที่ทำให้ "อย่างน้อย 1 ใน 3 โผล่" สูงสุด
  */
 /**
- * tieBreak: กฎเลือก "ตัวหลัก" เมื่อเลขบนสุดเสมอกันหลายตัว (ไม่ส่ง = เลขมากก่อน เหมือนเดิมทุกประการ)
- *   ทุกตัวในกลุ่มเสมอมีโอกาสเท่ากันเป๊ะ (โมเดลไล่กรณีให้ค่าเท่ากัน) กฎไหนก็ได้ผลเท่ากัน — มีไว้ให้หุ้นที่ไม่อยากกองเลขเดียว (อียิปต์)
+ * เครื่องคิดกลาง (คณิตศาสตร์ล้วน: ไล่ 200 กรณีจาก D) — ห้ามแก้ไฟล์นี้เพื่อหุ้นตัวใดตัวหนึ่ง
+ *   กฎเฉพาะหุ้น (เช่นตัดเลขเสมอ) อยู่ในไฟล์ของหุ้นนั้นที่ formulas/stocks/<หุ้น>.ts แล้วส่งเข้ามาทาง tieKey
+ * tieKey: คะแนนตัดเสมอจากข้อมูลจริงของหุ้นนั้น (มาก = มาก่อน) ใช้ทั้งตัวหลักและตัวรอง · เท่ากันอีก/ไม่ส่ง → เลขมากก่อน
  */
-export function pickTwo(openValue: number, openChange: number, priceHistory: RecordLike[] = [], tieBreak?: (tied: string[]) => string): TwoPick {
+export function pickTwo(openValue: number, openChange: number, priceHistory: RecordLike[] = [], tieKey?: (digit: string) => number): TwoPick {
   const D = prevCloseCents(openValue, openChange);
   const { pUp } = forecastDirection(openValue, openChange, priceHistory);
   const details = digitPositionProbs(D, pUp);
   const tied = tiedGroup(details);
-  const chosen = tieBreak && tied.length > 1 ? tieBreak([...tied].sort()) : null;
+  const chosen = tieKey ? tied.reduce((b, d) => (tieKey(d) > tieKey(b) ? d : b)) : null; // tied เรียงตามลำดับเดิม (เลขมากก่อน)
   const first = (chosen && details.find((d) => d.digit === chosen)) || details[0];
   const O = enumerateOutcomes(D, pUp);
   let best: { d: DigitDetail; any: number; both: number } | null = null;
@@ -544,7 +545,8 @@ export function pickTwo(openValue: number, openChange: number, priceHistory: Rec
     if (d.digit === first.digit) continue;
     let any = 0, both = 0;
     for (const o of O) { const a = o.set.has(first.digit), b = o.set.has(d.digit); if (a || b) any += o.w; if (a && b) both += o.w; }
-    if (!best || Math.round(any * 1e9) > Math.round(best.any * 1e9)) best = { d, any, both };
+    const cmp = best ? Math.round(any * 1e9) - Math.round(best.any * 1e9) : 1;
+    if (cmp > 0 || (cmp === 0 && tieKey && tieKey(d.digit) > tieKey(best!.d.digit))) best = { d, any, both };
   }
   const second = best!.d;
   // เพิ่มทีละตัว (greedy): เลือกตัวที่ทำให้ "อย่างน้อย 1 ตัวโผล่" ของทั้งชุดสูงสุด
@@ -597,15 +599,18 @@ export function pickDigits(openValue: number, openChange: number, priceHistory: 
   return exactDigitProbs(D, pUp);
 }
 
-/** ทดสอบย้อนหลังของ pickDigits (ทิศทางใช้เฉพาะข้อมูลก่อนหน้าวันนั้น) */
-export function backtestPicks(records: RecordLike[], minHistory = 0): Backtest {
+/**
+ * ทดสอบย้อนหลังของการฟัน (ใช้เฉพาะข้อมูลก่อนหน้าวันนั้น)
+ *   pick: สูตรของหุ้นตัวนั้น (pickTwoFor) — ไม่ส่ง = เครื่องกลาง · หน้าจอต้องส่งเสมอ ไม่งั้นผลย้อนหลังจะไม่ตรงกับเลขที่ฟันจริง
+ */
+export function backtestPicks(records: RecordLike[], minHistory = 0, pick: (openValue: number, openChange: number, history: RecordLike[], date: Date) => TwoPick = (o, c, h) => pickTwo(o, c, h)): Backtest {
   const sorted = [...records].sort((a, b) => a.date.getTime() - b.date.getTime());
   const days = toDayDigits(sorted);
   const perDay: Backtest["perDay"] = [];
   let pairBoth = 0, pairAny = 0, tiedBoth = 0, tiedAny = 0, fair = 0, tieDays = 0, drillSet = 0, drillDay = 0;
   for (let i = minHistory; i < sorted.length; i++) {
     const hist = sorted.slice(0, i);
-    const two = pickTwo(sorted[i].openValue, sorted[i].openChange, hist);
+    const two = pick(sorted[i].openValue, sorted[i].openChange, hist, sorted[i].date);
     const closeNums = [days[i].closeTop2, days[i].closeBottom2];
     const drillNums = two.drill.sets.flatMap((s) => s.numbers.map((n) => n.number));
     const drillHits = drillNums.filter((m) => closeNums.includes(m) || closeNums.includes(m[1] + m[0]));

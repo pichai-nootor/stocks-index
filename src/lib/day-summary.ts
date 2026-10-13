@@ -8,9 +8,9 @@ import type { Record as Row, Stock } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { hasClose } from "@/lib/stats";
 import { top2, bottom2 } from "@/lib/digits";
-import { pickTwoFor } from "@/lib/formulas/stocks";
+import { pickTwoFor, amDigitsFor } from "@/lib/formulas/stocks";
 import { formulaFor } from "@/lib/formulas";
-import { resultDigits, drillHit } from "@/lib/formulas/types";
+import { resultDigits, drillHit, lockedDrill } from "@/lib/formulas/types";
 import { VIP_MARKETS, vipWaitReason } from "@/lib/vip";
 import type { DaySummaryItem } from "@/components/day-summary";
 import { betCost, betResult } from "@/lib/bet";
@@ -22,6 +22,7 @@ import { betCost, betResult } from "@/lib/bet";
 export const REPORT_SKIP_VIP: readonly string[] = ["in"];
 const REPORT_VIP = VIP_MARKETS.filter((m) => !REPORT_SKIP_VIP.includes(m.code));
 
+
 const status = (pick: string[] | null, digits: string[] | null): DaySummaryItem["status"] =>
   !digits || !pick ? "pending" : digits.includes(pick[0]) ? "star" : digits.includes(pick[1]) ? "second" : "miss";
 
@@ -31,7 +32,9 @@ export function regularSummary(stocks: (Stock & { records: Row[] })[], today: st
     const rec = s.records.find((r) => r.date.toISOString().slice(0, 10) === today);
     if (!rec) return [];
     const before = s.records.filter(hasClose).filter((r) => r.date < rec.date);
-    const two = pickTwoFor(s.symbol, rec.openValue, rec.openChange, before);
+    const two = pickTwoFor(s.symbol, rec.openValue, rec.openChange, before, { date: rec.date, am: amDigitsFor(stocks, s.symbol) });
+    // รอบบ่ายจีน/นิเคอิ: ฟันจากเลขรอบเช้าด้วย → ผลเช้ายังไม่เข้าระบบ = ยังไม่มีเลขจริง (ไม่โชว์เลข บอกว่ารออะไร)
+    if (two.amWait && !hasClose(rec)) return [{ key: s.id, label: s.symbol, href: `/stocks/${s.id}`, pick: null, cost: betCost(2, 12, stake), status: "pending", wait: "รอผลรอบเช้าเข้าระบบ → บันทึกปิดรอบเช้าที่หน้าหุ้น" }];
     const pick = two.digits.map((x) => x.digit);
     const drill = two.drill.sets.map((x) => x.numbers.map((n) => n.number));
     if (!hasClose(rec)) return [{ key: s.id, label: s.symbol, href: `/stocks/${s.id}`, pick, drill, cost: betCost(pick.length, drill.flat().length, stake), status: "pending" }];
@@ -74,19 +77,21 @@ export async function vipSummary(userId: string, today: string, stake?: number, 
       const computed = F.pick(hist, row?.open ?? null, round);
       if (lock && !done && computed && !row?.pick) {
         const key = { userId_market_date_round: { userId, market: m.code, date, round } };
-        await prisma.vipResult.upsert({ where: key, create: { userId, market: m.code, date, round, top: "", bottom: "", source: "web", pick: computed.digits.join("-") }, update: {} });
-        await prisma.vipResult.updateMany({ where: { userId, market: m.code, date, round, pick: null }, data: { pick: computed.digits.join("-") } });
+        const data = { pick: computed.digits.join("-"), drill: JSON.stringify(F.drill(computed, hist)) }; // ล็อกเลขฟัน + เลขเจาะพร้อมกัน
+        await prisma.vipResult.upsert({ where: key, create: { userId, market: m.code, date, round, top: "", bottom: "", source: "web", ...data }, update: {} });
+        await prisma.vipResult.updateMany({ where: { userId, market: m.code, date, round, pick: null }, data });
       }
       const lockedPick = row?.pick ?? (lock && !done && computed ? computed.digits.join("-") : null);
       const locked = lockedPick && (!F.lockedFrom || today >= F.lockedFrom) ? lockedPick.split("-") : null;
       const p = computed && locked?.length === 2 ? { ...computed, digits: [locked[0], locked[1]] as [string, string] } : computed;
       const pick = p?.digits ?? null;
-      const drill = p ? F.drill(p, hist).map((x) => x.numbers) : undefined;
-      const drillHits = done && drill ? drill.flat().filter((d) => drillHit(d, row!.top, row!.bottom)) : undefined;
+      const drill = p ? (locked && lockedDrill(row?.drill)) || F.drill(p, hist) : null;
+      const drillNums = drill?.map((x) => x.numbers);
+      const drillHits = done && drillNums ? drillNums.flat().filter((d) => drillHit(d, row!.top, row!.bottom)) : undefined;
       out.push({
-        key: `${m.code}-${round}`, label, href: `/vip?market=${m.code}`, pick, drill, drillHits,
+        key: `${m.code}-${round}`, label, href: `/vip?market=${m.code}`, pick, drill: drillNums, drillHits,
         ...(done ? { top: row!.top.slice(-2), bottom: row!.bottom } : {}),
-        ...(pick && drill ? (done ? betResult(pick, drill.flat(), row!.top.slice(-2), row!.bottom, stake) : { cost: betCost(pick.length, drill.flat().length, stake) }) : {}),
+        ...(pick && drillNums ? (done ? betResult(pick, drillNums.flat(), row!.top.slice(-2), row!.bottom, stake) : { cost: betCost(pick.length, drillNums.flat().length, stake) }) : {}),
         status: done ? status(pick, resultDigits(row!.top, row!.bottom)) : "pending",
       });
     }
@@ -101,6 +106,8 @@ const addTo = (t: MoneyTotal, r: { cost: number; win: number; profit: number }) 
 export type MonthItem = MoneyTotal & {
   key: string; label: string; href: string; group: "ปกติ" | "VIP";
   star: number; any: number; drill: number;
+  /** งวดที่ไม่มีเลขล็อก ใช้เลขที่สูตรปัจจุบันคิดย้อนหลัง (VIP) */
+  formulaN: number;
   /** กำไรสะสมหลังแต่ละงวด (ไว้วาดกราฟเส้นเล็ก) */
   curve: number[];
 };
@@ -115,7 +122,7 @@ export async function monthMoney(userId: string, stocks: (Stock & { records: Row
   const regular: MoneyTotal = { n: 0, cost: 0, win: 0, profit: 0 }, vip: MoneyTotal = { n: 0, cost: 0, win: 0, profit: 0 };
   const days = new Set<string>(); // วันที่มีผลออก (ไว้บอกว่า "กี่วัน" แยกจาก "กี่งวด")
   const items: MonthItem[] = [];
-  const item = (key: string, label: string, href: string, group: MonthItem["group"]): MonthItem => ({ key, label, href, group, n: 0, cost: 0, win: 0, profit: 0, star: 0, any: 0, drill: 0, curve: [] });
+  const item = (key: string, label: string, href: string, group: MonthItem["group"]): MonthItem => ({ key, label, href, group, n: 0, cost: 0, win: 0, profit: 0, star: 0, any: 0, drill: 0, formulaN: 0, curve: [] });
   /** บันทึกผล 1 งวดลงทั้งยอดรวมกลุ่มและรายตัว */
   const record = (total: MoneyTotal, it: MonthItem, pick: string[], drill: string[], top: string, bottom: string) => {
     const r = betResult(pick, drill, top, bottom, stake);
@@ -128,11 +135,12 @@ export async function monthMoney(userId: string, stocks: (Stock & { records: Row
   };
   for (const s of stocks) {
     const closed = s.records.filter(hasClose);
+    const am = amDigitsFor(stocks, s.symbol);
     const it = item(s.id, s.symbol, `/stocks/${s.id}`, "ปกติ");
     closed.forEach((rec, i) => {
       if (!inMonth(rec.date)) return;
       days.add(rec.date.toISOString().slice(0, 10));
-      const two = pickTwoFor(s.symbol, rec.openValue, rec.openChange, closed.slice(0, i));
+      const two = pickTwoFor(s.symbol, rec.openValue, rec.openChange, closed.slice(0, i), { date: rec.date, am });
       record(regular, it, two.digits.map((x) => x.digit), two.drill.sets.flatMap((x) => x.numbers.map((n) => n.number)), top2(rec.closeValue!), bottom2(rec.closeChange!));
     });
     if (it.n) items.push(it);
@@ -145,13 +153,21 @@ export async function monthMoney(userId: string, stocks: (Stock & { records: Row
       if (!inMonth(row.date)) return;
       const it = per.get(row.round as 1 | 2);
       if (!it) return;
-      days.add(row.date.toISOString().slice(0, 10));
       const hist = all.slice(0, i);
-      const computed = F.pick(hist, row.open, row.round);
-      if (!computed) return;
+      // ยึดเลขที่ล็อกไว้ก่อนผลออก (เลขฟัน + เลขเจาะ) · ไม่มีล็อก → ใช้เลขที่สูตรปัจจุบันคิดย้อนหลัง และนับแยกไว้ใน formulaN (ผู้ใช้ขอ 13 ต.ค. 69)
       const locked = row.pick && (!F.lockedFrom || row.date.toISOString().slice(0, 10) >= F.lockedFrom) ? row.pick.split("-") : null;
-      const p = locked?.length === 2 ? { ...computed, digits: [locked[0], locked[1]] as [string, string] } : computed;
-      record(vip, it, p.digits, F.drill(p, hist).flatMap((x) => x.numbers), row.top.slice(-2), row.bottom);
+      let digits: [string, string], drill: { numbers: string[] }[] | null;
+      if (locked?.length === 2) {
+        digits = [locked[0], locked[1]];
+        drill = lockedDrill(row.drill) ?? (() => { const c = F.pick(hist, row.open, row.round); return c ? F.drill({ ...c, digits }, hist) : null; })();
+      } else {
+        const c = F.pick(hist, row.open, row.round);
+        if (!c) return;
+        digits = c.digits; drill = F.drill(c, hist); it.formulaN++;
+      }
+      if (!drill) return;
+      days.add(row.date.toISOString().slice(0, 10));
+      record(vip, it, digits, drill.flatMap((x) => x.numbers), row.top.slice(-2), row.bottom);
     });
     for (const it of per.values()) if (it.n) items.push(it);
   }

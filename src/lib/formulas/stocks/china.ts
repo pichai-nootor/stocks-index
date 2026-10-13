@@ -19,6 +19,9 @@
  *     (★ เสมอกันหลายตัว 97% ของงวด → ตัวตัดสินคือกติกาเสมอ ไม่ใช่ทิศ) · ผลรอบเช้าก็ไม่ช่วย (เลขเช้าโผล่บ่าย 34.3% vs 34.0%)
  *   กติกาเสมอ: 3 ปีล่าสุด "เลขน้อย" ★40.9 vs เลขมาก 30.2 ดูดีมาก แต่ 10 ปี (2,272 งวด) เท่ากัน 36.1 vs 35.7 และสลับกันชนะแต่ละช่วง → ไม่เปลี่ยน
  */
+import { pickTwo, type TwoPick } from "@/lib/digits";
+import type { RecordLike } from "@/lib/stats";
+import type { ChinaSession } from "@/lib/stocks/china";
 export const CHINA_BASE = {
   pm: { days: 174, star: 0.345, two: 0.569, pairBoth: 0.218, drill: 0.448, weakStar: 0.200, weakDays: 25 },
   am: { days: 56, star: 0.393, two: 0.643, pairBoth: 0.071, drill: 0.518, note: "งวดน้อย ยังสรุปไม่ได้" },
@@ -52,3 +55,16 @@ export const CHINA_PAIR = {
   am: { both: 0.181, strong: 0.207, strongDays: 92, other: 0.177, days: 724 },
 } as const;
 export const CHINA_PAIR_STRONG = 0.235; // ยืนยันด้วยข้อมูลจีนเอง (บ่าย 25.7% เทียบ 17.7%)
+
+/**
+ * ฟันของหุ้นจีน (เช้า/บ่าย) — เครื่องไล่ 200 กรณีจาก D · กฎของจีนอยู่ที่นี่ที่เดียว (แก้จีนแก้ไฟล์นี้ ไม่กระทบหุ้นอื่น)
+ *   เช้า: เลขเสมอ → เลขมากก่อน (ค่าเดิมของเครื่อง)
+ *   บ่าย: เลขเสมอ → เลขที่ออกรอบเช้าวันเดียวกันก่อน ทั้งตัวหลักและตัวรอง (ผู้ใช้สั่ง 13 ต.ค. 69 "ถ้าดีกว่าก็ควรปรับ" · ใช้กับทุกงวดรวมย้อนหลัง)
+ *     ทดสอบ 726 งวด (~3 ปี Yahoo ปิดเช้า + เปิดบ่าย · ครึ่ง A / B): 2 ตัว 61.7→65.8 / 57.6→60.9 · เจาะ 45.2→47.7 / 44.4→44.4
+ *       กำไร/งวด −105→+87 / −232→−138 · ★ 33.6→32.5 / 31.4→34.4 (สลับกัน)
+ *     ยังไม่มีผลเช้า → amWait (ยังไม่ใช่เลขจริง ห้ามโชว์เป็นเลขฟัน)
+ */
+export function pickChina(openValue: number, openChange: number, history: RecordLike[], session: ChinaSession, amOfDay: string[] | undefined): TwoPick & { amWait?: boolean } {
+  if (session === "am") return pickTwo(openValue, openChange, history);
+  return amOfDay ? pickTwo(openValue, openChange, history, (d) => (amOfDay.includes(d) ? 1 : 0)) : { ...pickTwo(openValue, openChange, history), amWait: true };
+}

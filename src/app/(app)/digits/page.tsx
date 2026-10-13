@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
-import { pickTwoFor } from "@/lib/formulas/stocks";
+import { pickTwoFor, amDigitsFor } from "@/lib/formulas/stocks";
 import { toDayDigits, scoreFromOpen, pickDigits, pickPair, pairProbs, PAIR_BASE, DRILL_BASE, DRILL_PER_DIGIT, backtestPicks, fitModel, top2, bottom2, POSITIONS, positionLabel, positionDigits, prevCloseCents, exactDigitProbs } from "@/lib/digits";
 import { summarize, forecastDirection, checkOpen } from "@/lib/stats";
 import { OpenWarning } from "@/components/open-warning";
@@ -40,6 +40,10 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
 
   const allRecords = selected ? await prisma.record.findMany({ where: { stockId: selected.id }, orderBy: { date: "asc" } }) : [];
   const records = allRecords.filter(hasClose);
+  // รอบบ่ายจีน/นิเคอิ: เลขเสมอเลือกจากเลขที่ออกรอบเช้า (ดู formulas/stocks/index.ts)
+  const amSrc = await prisma.stock.findMany({ where: { userId }, select: { symbol: true, records: { select: { date: true, closeValue: true, closeChange: true } } } });
+  const am = amDigitsFor(amSrc, selected?.symbol ?? "");
+  const dateOf = (x: string) => new Date(`${/^\d{4}-\d{2}-\d{2}$/.test(x) ? x : todayThai()}T00:00:00.000Z`);
   const pendingRecords = allRecords.filter((r) => !hasClose(r)).reverse();
   const days = toDayDigits(records);
   const model = fitModel(days);
@@ -51,9 +55,9 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
   const openPos = hasOpen ? positionDigits(oTop, oBot) : null;
   const ranked = hasOpen ? pickDigits(openValue, openChange, records) : null;
   const pp = hasOpen ? pickPair(openValue, openChange, records) : null;
-  const two = hasOpen ? pickTwoFor(selected?.symbol ?? "", openValue, openChange, records) : null;
+  const two = hasOpen ? pickTwoFor(selected?.symbol ?? "", openValue, openChange, records, { date: dateOf(dateRaw), am }) : null;
   const posRanked = hasOpen ? scoreFromOpen(days, oTop, oBot, model) : null;
-  const bt = records.length ? backtestPicks(records) : null;
+  const bt = records.length ? backtestPicks(records, 0, (o, c, h, date) => pickTwoFor(selected?.symbol ?? "", o, c, h, { date, am })) : null; // สูตรของหุ้นตัวนี้ — ผลย้อนหลังตรงกับเลขที่ฟันจริง
   const top1 = bt?.topK[0];
 
   // โครงสร้าง + ทิศทาง
@@ -86,6 +90,7 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
           {ranked && openPos && two && (
             <section className="grid gap-4 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
               <div className="card bg-amber-50/60">
+                {two.amWait && <p className="mb-2 rounded-lg bg-amber-100 px-3 py-2 text-sm text-amber-800">⏳ รอบบ่ายใช้เลขที่ออกรอบเช้าด้วย — ผลเช้าวันนี้ยังไม่เข้าระบบ เลขด้านล่างยังไม่ใช่เลขจริง</p>}
                 <TwoPickCard two={two} tied={pp ?? undefined} open={{ top: top2(openValue), bottom: bottom2(openChange) }} score={bt ? { days: bt.days, pair: bt.pair, tied: bt.tied, single: top1?.atLeastOne, drill: bt.drill } : undefined} />
                 <p className="mt-3 text-xs text-amber-700">
                   {top1 && bt ? `เลขเดี่ยวตัวหลักย้อนหลังถูก ${pct(top1.atLeastOne)} (${bt.days} วัน) · 10 ปี ≈ 36%` : "ยังไม่มีวันที่ปิดแล้วให้ทดสอบ"}
@@ -200,7 +205,7 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
                 {pendingRecords.map((r) => {
                   const t = top2(r.openValue), b = bottom2(r.openChange);
                   const before = records.filter((d) => d.date.getTime() < r.date.getTime());
-                  const tw = pickTwoFor(selected?.symbol ?? "", r.openValue, r.openChange, before), pr = pickPair(r.openValue, r.openChange, before);
+                  const tw = pickTwoFor(selected?.symbol ?? "", r.openValue, r.openChange, before, { date: r.date, am }), pr = pickPair(r.openValue, r.openChange, before);
                   return (
                     <div key={r.id} className="flex flex-wrap items-center gap-4 py-3 text-sm">
                       <span className="w-20 whitespace-nowrap">{r.date.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" })}</span>
@@ -208,8 +213,9 @@ export default async function DigitsPage({ searchParams }: PageProps<"/digits">)
                       <span><Digits value={t} /> <Digits value={b} /></span>
                       <span className="flex items-center gap-1">
                         <span className="text-xs text-slate-500">ฟัน</span>
+                        {tw.amWait ? <span className="text-xs text-amber-700">⏳ รอผลเช้า</span> : <>
                         <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-400 font-mono text-lg font-bold text-white">{tw.digits[0].digit}</span>
-                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-200 font-mono text-lg font-bold text-amber-900">{tw.digits[1].digit}</span>
+                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-200 font-mono text-lg font-bold text-amber-900">{tw.digits[1].digit}</span></>}
                         <span className="ml-2 text-xs text-slate-500">คู่ผูก</span>
                         <span className="flex h-8 items-center justify-center rounded-lg bg-amber-100 px-2 font-mono text-lg font-bold text-amber-900">{pr.pair.join(" ")}</span>
                         <span className="text-xs text-slate-500">{pct(pr.pBoth)}</span>

@@ -15,6 +15,8 @@ export type DaySummaryItem = {
   status: "star" | "second" | "miss" | "pending";
   /** ข้อความแทนเลขฟันตอนยังฟันไม่ได้ (เช่น รอบบ่ายที่รอผลรอบเช้า) */
   wait?: string;
+  /** หมายเหตุใต้แถว (เช่น เลขจากสูตรคิดย้อนหลัง ไม่ใช่เลขที่ล็อกไว้) */
+  note?: string;
   /** เลขเจาะ 2 ชุด (ชุดละ 6) และตัวที่มา */
   drill?: string[][];
   drillHits?: string[];
@@ -114,6 +116,7 @@ function Group({ title, items }: { title: string; items: DaySummaryItem[] }) {
                 {x.drill && <DrillTip drill={x.drill} hits={x.drillHits} />}
                 <span className={`rounded px-2 py-0.5 text-xs font-medium ${BADGE[x.status].cls}`}>{BADGE[x.status].text}</span>
               </span>
+              {x.note && <p className="w-full text-[11px] text-slate-400">ⓘ {x.note}</p>}
             </li>
           ))}
         </ul>

@@ -11,6 +11,11 @@ export type VipPick = {
   order?: string[];
 };
 export type VipDrillSet = { digit: string; numbers: string[] };
+/** เลขเจาะที่ล็อกไว้ในแถว VipResult.drill (JSON) — ไม่มี/อ่านไม่ได้ = null (ให้คิดด้วยสูตรแทน) */
+export function lockedDrill(json: string | null | undefined): VipDrillSet[] | null {
+  if (!json) return null;
+  try { const v = JSON.parse(json); return Array.isArray(v) && v.every((x) => typeof x?.digit === "string" && Array.isArray(x?.numbers)) ? v : null; } catch { return null; }
+}
 export type VipScore = { n: number; star: number; any: number };
 
 export type MarketFormula = {
@@ -34,6 +39,8 @@ export type MarketFormula = {
    * หน้า /vip จะแสดงเลขของสูตรปัจจุบัน (ฟันย้อนหลังจากงวดก่อนหน้าเท่านั้น) แทน และโชว์เลขเก่าที่ล็อกไว้เป็นหมายเหตุ · ไม่ระบุ = ยึดเลขที่ล็อกทุกงวด
    */
   lockedFrom?: string;
+  /** วันที่ (YYYY-MM-DD) ที่สูตรปัจจุบันเริ่มใช้ — โชว์ในหมายเหตุของงวดที่ไม่มีเลขล็อก (เลขคิดย้อนหลังด้วยสูตรนี้) */
+  since?: string;
   /** สูตรทุกช่องของตลาดนี้ไม่ใช้ราคาเปิด → ซ่อนปุ่ม "ใส่ราคาเปิด" ในตาราง (ราคาที่ระบบเก็บเองยังแสดงอยู่) */
   noManualOpen?: boolean;
   /** โอกาส "เจาะมา" ถ้าเลือกคู่แบบสุ่ม (วัดจากข้อมูลของตลาดนั้น) — ไม่ระบุ = ป้ายเดิม ~42% */

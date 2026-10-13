@@ -106,7 +106,7 @@ export async function lockVipPick(userId: string, market: string, date: Date, ro
   const hist = past.filter((r) => r.date < date || (r.date.getTime() === date.getTime() && r.round < round)).map((r) => ({ top: r.top, bottom: r.bottom, round: r.round, date: r.date, open: r.open }));
   const F = formulaFor(market);
   const p = F.pick(hist, row.open, round);
-  if (p) await prisma.vipResult.update({ where: { id: row.id }, data: { pick: p.digits.join("-") } });
+  if (p) await prisma.vipResult.update({ where: { id: row.id }, data: { pick: p.digits.join("-"), drill: JSON.stringify(F.drill(p, hist)) } }); // ล็อกเลขเจาะพร้อมกัน (แทงเงินจริง)
 }
 
 export async function rememberVipOpen(userId: string, market: string, today: { date: string; open: number | null; last: number; diff: number; closed: boolean; feedDone: boolean; rounds: { round: number; price: number; diff: number }[] }) {

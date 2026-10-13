@@ -20,6 +20,9 @@
  *     แม้รู้ทิศจริงล่วงหน้า ★ ก็ไม่ดีขึ้น (36.8%) — ★ เสมอกันหลายตัว 96% ของงวด ตัวตัดสินคือกติกาเสมอ ไม่ใช่ทิศ
  *   กติกาเสมอ 10 ปี: เลขมาก (ตอนนี้) ★34.9 · เลขน้อย 34.6 · ออกบ่อย 37.0 · ออกน้อย 34.7 — "ออกบ่อย" ชนะรวมแต่แพ้ช่วง 2023–26 → ไม่เปลี่ยน
  */
+import { pickTwo, type TwoPick } from "@/lib/digits";
+import type { RecordLike } from "@/lib/stats";
+import type { NikkeiSession } from "@/lib/stocks/nikkei";
 export const NIKKEI_BASE = {
   pm: { days: 2412, star: 0.349, two: 0.622, pairBoth: 0.168, drill: 0.455, randomStar: 0.344, randomTwo: 0.591 },
   am: { days: 30, star: 0.267, two: 0.5, note: "ข้อมูลน้อย ยังสรุปไม่ได้" },
@@ -38,3 +41,16 @@ export const NIKKEI_PAIR_BASE = { pm: { both: 0.183, strong: 0.248, strongDays: 
 
 /** เวลาออกผล (ไทย) ของแต่ละรอบ — ไว้แสดง/เตือนบนหน้าจอ */
 export const NIKKEI_CLOSE_THAI = { am: "09:30", pm: "13:30" } as const;
+
+/**
+ * ฟันของหุ้นนิเคอิ (เช้า/บ่าย) — เครื่องไล่ 200 กรณีจาก D · กฎของนิเคอิอยู่ที่นี่ที่เดียว (แก้นิเคอิแก้ไฟล์นี้ ไม่กระทบหุ้นอื่น)
+ *   เช้า: เลขเสมอ → เลขมากก่อน (ค่าเดิมของเครื่อง)
+ *   บ่าย: เลขเสมอ → เลขที่ออกรอบเช้าวันเดียวกันก่อน ทั้งตัวหลักและตัวรอง (13 ต.ค. 69 · ทดสอบกับข้อมูลนิเคอิเอง · ใช้กับทุกงวดรวมย้อนหลัง)
+ *     ทดสอบ 729 งวด (~3 ปี Yahoo ปิดเช้า + เปิดบ่าย · ครึ่ง A / B): 2 ตัว 66.8→70.1 / 62.2→64.7 · เจาะ 52.2→54.1 / 44.1→47.1
+ *       กำไร/งวด +196→+328 / −102→+30 · ★ 38.2→39.8 / 39.2→36.2 (สลับกัน)
+ *     ยังไม่มีผลเช้า → amWait (ยังไม่ใช่เลขจริง ห้ามโชว์เป็นเลขฟัน)
+ */
+export function pickNikkei(openValue: number, openChange: number, history: RecordLike[], session: NikkeiSession, amOfDay: string[] | undefined): TwoPick & { amWait?: boolean } {
+  if (session === "am") return pickTwo(openValue, openChange, history);
+  return amOfDay ? pickTwo(openValue, openChange, history, (d) => (amOfDay.includes(d) ? 1 : 0)) : { ...pickTwo(openValue, openChange, history), amWait: true };
+}

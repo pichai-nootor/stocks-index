@@ -66,5 +66,6 @@ export const ukFormula: MarketFormula = {
   drill: drillUk,
   noManualOpen: true, // ผู้ใช้ไม่ต้องกรอกราคาเปิด (13 ต.ค. 69) — สูตรไม่ใช้ ระบบเก็บเองจากกราฟถ้าทัน
   minHistory: UK_MIN_HISTORY,
+  since: "2026-10-12", // วันที่สูตรปัจจุบันเริ่มใช้ (12 ต.ค. 69) — ไว้บอกในหมายเหตุของงวดที่ไม่มีเลขล็อก
   drillRandom: 0.478,
 };

@@ -54,10 +54,11 @@ export function DrillChips({ sets, isHit, size = "sm", inline = false }: {
   return (
     <span className={`flex flex-col gap-1 ${inline ? "" : "mt-1.5"}`}>
       {sets.map((set) => (
-        <span key={set.digit} className="flex items-center gap-0.5 whitespace-nowrap font-mono">
-          <span className={`mr-0.5 rounded bg-amber-50 font-semibold text-amber-700 ${chip}`}>{set.digit}</span>
-          {set.numbers.map((m) => (
-            <span key={m} className={`rounded ${chip} ${isHit?.(m) ? "bg-emerald-100 font-semibold text-emerald-800" : "bg-slate-50 text-slate-500"}`}>{m}</span>
+        // แถวละชุด · ชิปเป็น inline-block คั่นด้วยช่องว่างจริง → ก๊อปแล้วได้ "12 16 13 …" บรรทัดเดียวต่อชุด (เลขชุดไม่ติดไปด้วย)
+        <span key={set.digit} className="block whitespace-nowrap font-mono">
+          <span className={`mr-1 inline-block select-none rounded bg-amber-50 font-semibold text-amber-700 ${chip}`}>{set.digit}</span>
+          {set.numbers.map((m, k) => (
+            <span key={m}>{k > 0 && " "}<span className={`inline-block rounded ${chip} ${isHit?.(m) ? "bg-emerald-100 font-semibold text-emerald-800" : "bg-slate-50 text-slate-500"}`}>{m}</span></span>
           ))}
         </span>
       ))}

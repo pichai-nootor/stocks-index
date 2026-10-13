@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { summarize, fmtNum, fmtChange, hasClose, evaluateCalls, CALL_MIN_GAP_PCT } from "@/lib/stats";
 import { toDayDigits } from "@/lib/digits";
-import { pickTwoFor } from "@/lib/formulas/stocks";
+import { pickTwoFor, amDigitsFor } from "@/lib/formulas/stocks";
 import { Digits } from "@/components/digit-badges";
 import { OpenForm } from "@/components/open-form";
 import { TodayCard } from "@/components/today-card";
@@ -39,7 +39,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
     return s.records
       .filter((r) => !hasClose(r))
       .map((r) => ({
-        stock: s, record: r, priceStats, priceHistory: closed,
+        stock: s, record: r, priceStats, priceHistory: closed, amDigits: amDigitsFor(stocks, s.symbol),
         live: q && q.tradingDate === r.date.toISOString().slice(0, 10) ? { price: q.last, at: q.lastAt.toISOString(), closed: q.closed, source: q.source } : null,
         liveScore: { called: liveScore.called, hits: liveScore.hits },
       }));
@@ -49,8 +49,9 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
   const scoreboard = stocks.map((s) => {
     const closed = s.records.filter(hasClose);
     const days = toDayDigits(closed);
+    const am = amDigitsFor(stocks, s.symbol);
     const judged = days.map((d, i) => {
-      const two = pickTwoFor(s.symbol, closed[i].openValue, closed[i].openChange, closed.slice(0, i));
+      const two = pickTwoFor(s.symbol, closed[i].openValue, closed[i].openChange, closed.slice(0, i), { date: closed[i].date, am });
       const pair = two.digits.map((x) => x.digit);
       const pick = two.standout.digit;
       const rec = closed[i]; // closed เรียงตามวันที่เหมือน days

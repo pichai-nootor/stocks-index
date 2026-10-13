@@ -154,7 +154,7 @@ function pickCn(history: VipDraw[], _open?: number | null, forRound?: number, li
   const expected = round === 1
     ? ` · รอบเช้าทดสอบนอกตัวอย่างได้ ★ ${(100 * CN_BASE.amStar).toFixed(1)}% · 2 ตัว ${(100 * CN_BASE.amAny).toFixed(1)}%`
     : ` · รอบบ่ายทดสอบนอกตัวอย่างได้ 2 ตัว ${(100 * CN_BASE.pmAny).toFixed(1)}% (สุ่มคู่ ${(100 * CN_BASE.randomAny).toFixed(1)}%) แต่ตัว ★ ได้ ${(100 * CN_BASE.pmStar).toFixed(1)}% เท่าสุ่ม — รอบบ่ายให้เล่นทั้งสองตัว อย่ายึด ★`;
-  return { liveD, formula: "cn-model", label: "สูตรจีน VIP", digits: [s[0].digit, second.digit], note: `โมเดลให้ ${s[0].digit}: ${(100 * s[0].p).toFixed(1)}% · ${s[1].digit}: ${(100 * s[1].p).toFixed(1)}% (สุ่ม ${(100 * CN_BASE.randomStar).toFixed(1)}%) · อันดับถัดไป ${s.slice(2, 5).map((x) => `${x.digit} ${(100 * x.p).toFixed(0)}%`).join(", ")}${expected}${amNote}` };
+  return { order: [s[0].digit, second.digit, ...s.map((x) => x.digit).filter((d) => d !== s[0].digit && d !== second.digit)], liveD, formula: "cn-model", label: "สูตรจีน VIP", digits: [s[0].digit, second.digit], note: `โมเดลให้ ${s[0].digit}: ${(100 * s[0].p).toFixed(1)}% · ${s[1].digit}: ${(100 * s[1].p).toFixed(1)}% (สุ่ม ${(100 * CN_BASE.randomStar).toFixed(1)}%) · อันดับถัดไป ${s.slice(2, 5).map((x) => `${x.digit} ${(100 * x.p).toFixed(0)}%`).join(", ")}${expected}${amNote}` };
 }
 
 /** เลข 2 ตัวเรียงตามที่เครื่องออกบ่อยสุด — ตัดเบิ้ล, ตัดเลขของงวดก่อน */
@@ -217,4 +217,5 @@ export const cnFormula: MarketFormula = {
   drill: drillCn,
   noManualOpen: true, // ถอดสูตรทดลอง B (จากทศนิยมราคาเปิด) 13 ต.ค. 69 — แพ้สูตรหลัก และผล VIP ไม่ผูกกับราคาเปิด · ระบบยังเก็บราคาเปิดเองจากฟีด
   minHistory: CN_MIN_HISTORY,
+  since: "2026-09-27", // วันที่สูตรปัจจุบันเริ่มใช้ (ฝึกใหม่ 27 ก.ย. 69) — ไว้บอกในหมายเหตุของงวดที่ไม่มีเลขล็อก
 };

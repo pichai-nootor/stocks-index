@@ -68,7 +68,7 @@ function pickKr(history: VipDraw[]): VipPick | null {
   if (history.length < KR_MIN_HISTORY) return null;
   const { round, weekday } = nextRoundInfo(history as (VipDraw & Draw)[]);
   const s = krScores(history, round, weekday);
-  return { formula: "kr-model", label: "สูตรเกาหลี VIP", digits: [s[0].digit, s[1].digit], note: `โมเดลให้ ${s[0].digit}: ${(100 * s[0].p).toFixed(1)}% · ${s[1].digit}: ${(100 * s[1].p).toFixed(1)}% (สุ่ม 34.4%) · อันดับถัดไป ${s.slice(2, 5).map((x) => `${x.digit} ${(100 * x.p).toFixed(0)}%`).join(", ")}` };
+  return { order: s.map((x) => x.digit), formula: "kr-model", label: "สูตรเกาหลี VIP", digits: [s[0].digit, s[1].digit], note: `โมเดลให้ ${s[0].digit}: ${(100 * s[0].p).toFixed(1)}% · ${s[1].digit}: ${(100 * s[1].p).toFixed(1)}% (สุ่ม 34.4%) · อันดับถัดไป ${s.slice(2, 5).map((x) => `${x.digit} ${(100 * x.p).toFixed(0)}%`).join(", ")}` };
 }
 
 /** เลข 2 ตัวเรียงตามที่เครื่องออกบ่อยสุด — ตัดเบิ้ล, ตัดเลขของงวดก่อน */
@@ -97,4 +97,5 @@ export const krFormula: MarketFormula = {
   pick: pickKr,
   drill: drillKr,
   minHistory: KR_MIN_HISTORY,
+  since: "2026-09-23", // วันที่สูตรปัจจุบันเริ่มใช้ (ฝึกใหม่ 23 ก.ย. 69) — ไว้บอกในหมายเหตุของงวดที่ไม่มีเลขล็อก
 };

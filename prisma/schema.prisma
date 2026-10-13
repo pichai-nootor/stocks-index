@@ -62,6 +62,8 @@ model VipResult {
   source    String   @default("web") // web | manual
   /** เลขที่ฟันไว้ตอนนั้น (ล็อกครั้งแรก ไม่เขียนทับ) เช่น "9-6" — เพื่อให้ผลย้อนหลังตรงกับที่ผู้ใช้เห็นจริง ไม่เปลี่ยนตามสูตรที่แก้ทีหลัง */
   pick      String?
+  /** เลขเจาะ 2 ชุดที่ล็อกพร้อมเลขฟัน (JSON ของ VipDrillSet[]) — รายงานใช้ชุดนี้ ไม่คิดใหม่ตามสูตรที่แก้ทีหลัง (ผู้ใช้แทงเงินจริง 13 ต.ค. 69) */
+  drill     String?
   createdAt DateTime @default(now())
 
   @@unique([userId, market, date, round])

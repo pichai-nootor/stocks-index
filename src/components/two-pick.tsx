@@ -108,10 +108,11 @@ export function TwoPickCard({ two, tied, score, open }: {
             const star = s.digit === two.standout.digit;
             return (
               <div key={s.digit} className="flex flex-wrap items-center gap-2">
-                <span className={`flex h-8 w-8 items-center justify-center rounded-lg font-mono text-lg font-bold ${star ? "bg-amber-400 text-white" : "bg-amber-200 text-amber-900"}`}>{s.digit}</span>
-                <span className="text-slate-400">→</span>
-                <span className="flex flex-wrap gap-1.5 font-mono text-lg font-semibold text-amber-900">
-                  {s.numbers.map((n) => <span key={n.number} className="rounded-md bg-amber-100 px-2 py-0.5">{n.number}</span>)}
+                <span className={`flex h-8 w-8 select-none items-center justify-center rounded-lg font-mono text-lg font-bold ${star ? "bg-amber-400 text-white" : "bg-amber-200 text-amber-900"}`}>{s.digit}</span>
+                <span className="select-none text-slate-400">→</span>
+                <span className="font-mono text-lg font-semibold text-amber-900">
+                  {/* inline-block + ช่องว่างจริง → ก๊อปได้เลขเรียงบรรทัดเดียว */}
+                  {s.numbers.map((n, k) => <span key={n.number}>{k > 0 && " "}<span className="mb-1 inline-block rounded-md bg-amber-100 px-2 py-0.5">{n.number}</span></span>)}
                 </span>
                 <span className="text-xs text-slate-500">ชุดนี้มา {pct(s.pAny)}</span>
               </div>

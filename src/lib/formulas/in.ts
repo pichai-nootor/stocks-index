@@ -83,4 +83,5 @@ export const inFormula: MarketFormula = {
   },
   drill: vipDrill,
   minHistory: VIP_MIN_HISTORY,
+  since: "2026-09-27", // วันที่สูตรปัจจุบันเริ่มใช้ (โมเดลรวมวันละรอบ 27 ก.ย. 69) — ไว้บอกในหมายเหตุของงวดที่ไม่มีเลขล็อก
 };

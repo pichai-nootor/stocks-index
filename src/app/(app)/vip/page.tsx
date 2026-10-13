@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { VIP_MARKETS, isVipMarket, vipMarket, roundLabel, roundCloseThai, vipWaitReason, pastCloseThai, fetchVipToday, vipDigits, type VipMarket } from "@/lib/vip";
 import { formulaFor, hasOwnFormula } from "@/lib/formulas";
-import { gradeFormula, resultDigits as vipResultDigits, drillHit as vipDrillHit, RANDOM_ONE as VIP_RANDOM_ONE, RANDOM_TWO as VIP_RANDOM_TWO, type VipPick, type VipDraw } from "@/lib/formulas/types";
+import { gradeFormula, lockedDrill, resultDigits as vipResultDigits, drillHit as vipDrillHit, RANDOM_ONE as VIP_RANDOM_ONE, RANDOM_TWO as VIP_RANDOM_TWO, type VipPick, type VipDraw } from "@/lib/formulas/types";
 import cnHistory from "@/data/vip-history/cn.json";
 import hkHistory from "@/data/vip-history/hk.json";
 import krHistory from "@/data/vip-history/kr.json";
@@ -11,6 +11,7 @@ import twHistory from "@/data/vip-history/tw.json";
 import sgHistory from "@/data/vip-history/sg.json";
 import ukHistory from "@/data/vip-history/uk.json";
 import jpHistory from "@/data/vip-history/jp.json";
+import rankRates from "@/data/vip-history/rank-rates.json";
 import { fmtNum, fmtChange } from "@/lib/stats"; // แค่ฟอร์แมตตัวเลข — การวิเคราะห์ VIP ใช้ src/lib/formulas/vip.ts เท่านั้น
 import { todayThai } from "@/lib/intraday";
 import { Digits } from "@/components/digit-badges";
@@ -35,6 +36,31 @@ function PickBlock({ pick, drill, result, size = "sm", row = false, muted = fals
   );
 }
 
+/**
+ * การวิเคราะห์เลข 0–9 ของงวดนี้ — เรียงตามอันดับสุดท้ายของสูตร (ตัวเดียวกับที่ใช้ฟัน: 2 ตัวแรก = เลขที่ฟันเสมอ)
+ *   % = โอกาสออกจริงของ "อันดับนั้น" วัดย้อนหลัง 500 งวดของตลาดนี้เอง (src/data/vip-history/rank-rates.json)
+ */
+function DigitRankTable({ order, rates, result }: { order: string[]; rates?: number[]; result?: { top: string; bottom: string } | null }) {
+  const out = result ? vipResultDigits(result.top, result.bottom) : null;
+  return (
+    <div className="mt-3">
+      <p className="mb-1 text-[11px] text-slate-500">วิเคราะห์เลข 0–9 งวดนี้ (เรียงตามสูตร · % = อันดับนี้ออกจริงย้อนหลัง 500 งวด)</p>
+      <div className="grid grid-cols-10 gap-1 text-center">
+        {order.map((d, k) => {
+          const picked = k < 2, came = out?.includes(d);
+          return (
+            <div key={d} className={`rounded-md py-1 ${picked ? "bg-amber-100 ring-1 ring-amber-300" : "bg-slate-50"}`}>
+              <div className={`font-mono text-base font-bold ${came ? "text-emerald-700 underline decoration-2" : picked ? "text-amber-900" : "text-slate-600"}`}>{d}</div>
+              <div className="text-[10px] tabular-nums text-slate-500">{rates?.[k] !== undefined ? `${Math.round(rates[k] * 100)}%` : "–"}</div>
+            </div>
+          );
+        })}
+      </div>
+      <p className="mt-1 text-[10px] text-slate-400">กรอบเหลือง = เลขที่ฟัน (2 อันดับแรก){out ? " · ขีดเส้นใต้เขียว = ออกจริงงวดนี้" : ""} · สุ่มเดา ≈ 33% ต่อเลข</p>
+    </div>
+  );
+}
+
 /** ชื่อสั้นในแท็บ: "หุ้นอินเดีย VIP" → "อินเดีย" */
 const shortLabel = (label: string) => label.replace(/^หุ้น/, "").replace(/ VIP$/, "");
 
@@ -50,6 +76,8 @@ export default async function VipPage({ searchParams }: PageProps<"/vip">) {
   const info = vipMarket(market);
   const thai = todayThai();
   const F = formulaFor(market); // สูตรของตลาดนี้ (src/lib/formulas/<market>.ts)
+  const rates = (rankRates as Record<string, { n: number; rank: number[] }>)[market];
+  const rankRate = rates && rates.n >= 100 ? rates.rank : undefined;
   const bundledCount = market === "cn" ? (cnHistory as unknown[]).length : market === "hk" ? (hkHistory as unknown[]).length : market === "kr" ? (krHistory as unknown[]).length : market === "jp" ? (jpHistory as unknown[]).length : market === "tw" ? (twHistory as unknown[]).length : market === "sg" ? (sgHistory as unknown[]).length : market === "uk" ? (ukHistory as unknown[]).length : 0;
 
   const today = await fetchVipToday(market);
@@ -79,7 +107,7 @@ export default async function VipPage({ searchParams }: PageProps<"/vip">) {
     const a = computedA && lockedA?.length === 2 ? { ...computedA, digits: [lockedA[0], lockedA[1]] as [string, string] } : computedA;
     const b = F.experimental ? F.experimental.pick(r.open, hist) : null;
     const c = F.experimental2 ? F.experimental2.pick(regularByDate.get(r.date.toISOString().slice(0, 10))) : null;
-    return [r.id, { a: a ? { pick: a, drill: F.drill(a, hist) } : null, b: b ? { pick: b, drill: F.drill(b, hist) } : null, c: c ? { pick: c, drill: F.drill(c, hist) } : null }] as const;
+    return [r.id, { a: a ? { pick: a, drill: (lockedA?.length === 2 && lockedDrill(r.drill)) || F.drill(a, hist) } : null, b: b ? { pick: b, drill: F.drill(b, hist) } : null, c: c ? { pick: c, drill: F.drill(c, hist) } : null }] as const;
   }));
   const g = gradeFormula(F, asc);
   // คะแนนของ "เลขที่ล็อกไว้จริง" — นับเฉพาะงวดที่ระบบฟันไว้ก่อนหวยออกแล้วเก็บเลขนั้นไว้ (เชื่อถือได้ 100% ไม่ถูกคำนวณใหม่)
@@ -168,7 +196,7 @@ export default async function VipPage({ searchParams }: PageProps<"/vip">) {
             const p = computed && locked && locked.length === 2 ? { ...computed, digits: [locked[0], locked[1]] as [string, string], note: `${computed.note} · (เลขนี้ล็อกไว้ตอนดึงข้อมูลก่อนหวยออก)` } : computed;
             // ยังฟันไม่ได้จริง (ผลงวดก่อนหน้ายังไม่เข้าระบบ) และยังไม่มีเลขล็อก → ไม่โชว์เลข บอกว่ารออะไร
             const waitFor = !rowOf && !locked ? vipWaitReason(market, nextDate, round, (d, r) => rows.some((x) => x.date.toISOString().slice(0, 10) === d && x.round === r)) : null;
-            const drill = p ? F.drill(p, histBefore) : [];
+            const drill = p ? (locked && locked.length === 2 && lockedDrill(lockedRow?.drill)) || F.drill(p, histBefore) : []; // เลขเจาะที่ล็อกไว้ก่อน (แทงจริง)
             const bp = F.experimental ? F.experimental.pick(rowOf ? rowOf.open : nextOpen, histBefore) : null;
             const bDrill = bp ? F.drill(bp, histBefore) : [];
             const cp = F.experimental2 ? F.experimental2.pick(regularByDate.get(rowOf ? rowOf.date.toISOString().slice(0, 10) : nextDate)) : null;
@@ -204,6 +232,7 @@ export default async function VipPage({ searchParams }: PageProps<"/vip">) {
                         <p className="text-xs text-slate-500">ที่ฟันไว้</p>
                         <div className="mt-1"><PickBlock pick={p} drill={drill} result={rowOf} /></div>
                         <div className="mt-2"><HitBadge pick={p.digits} hits={hit} drillHits={dh} /></div>
+                        {p.order && p.order[0] === p.digits[0] && p.order[1] === p.digits[1] && <DigitRankTable order={p.order} rates={rankRate} result={rowOf} />}
                       </div>
                     )}
                   </div>
@@ -220,7 +249,7 @@ export default async function VipPage({ searchParams }: PageProps<"/vip">) {
                     <VipImportButton market={market} label={info.rounds.length > 1 ? `ดึงผลรอบ${round === 1 ? "เช้า" : "บ่าย"}` : "ดึงผลปิดงวดนี้"} big />
                     <span className="text-xs text-slate-600">{feedReady ? "กดครั้งเดียว ระบบบันทึกผล ให้คะแนนเลขที่ฟัน และเตรียมรอบถัดไป" : "เว็บยังส่งราคาไม่ถึงแถวสุดท้าย — ถ้ากดตอนนี้จะยังไม่ได้ผล รออีกสักครู่แล้วกดใหม่"}</span>
                   </div>
-                  {p && !waitFor && <div className="mt-3"><p className="text-xs text-slate-500">ที่ฟันไว้</p><div className="mt-1"><PickBlock pick={p} drill={drill} /></div></div>}
+                  {p && !waitFor && <div className="mt-3"><p className="text-xs text-slate-500">ที่ฟันไว้</p><div className="mt-1"><PickBlock pick={p} drill={drill} /></div>{p.order && p.order[0] === p.digits[0] && p.order[1] === p.digits[1] && <DigitRankTable order={p.order} rates={rankRate} />}</div>}
                   {expBlock}
                   {planCBlock}
                 </div>
@@ -242,6 +271,7 @@ export default async function VipPage({ searchParams }: PageProps<"/vip">) {
                   <div className="mt-3">
                     <p className="mb-2 text-xs text-slate-500">เลขฟัน (★ = ตัวเด่น) · เลขเจาะ 2 ชุด กลับได้</p>
                     <PickBlock pick={p} drill={drill} size="lg" />
+                    {p.order && p.order[0] === p.digits[0] && p.order[1] === p.digits[1] && <DigitRankTable order={p.order} rates={rankRate} />}
                     <details className="mt-2 text-xs text-slate-500"><summary className="cursor-pointer text-blue-600">ทำไมเลขนี้</summary><p className="mt-1">{p.note}</p></details>
                   </div>
                 ) : <p className="mt-2 text-sm text-slate-500">ยังฟันไม่ได้ — ต้องมีผลอย่างน้อย {F.minHistory} งวด</p>}
