@@ -6,6 +6,7 @@ import { DaySummary } from "@/components/day-summary";
 import { MonthBoard } from "@/components/month-board";
 import { regularSummary, vipSummary, monthMoney } from "@/lib/day-summary";
 import { BET, STAKES, parseStake } from "@/lib/bet";
+import { lockStockPicks } from "@/lib/stock-lock";
 
 const shift = (ymd: string, days: number) => new Date(Date.parse(`${ymd}T00:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
 const monthEnd = (ymd: string) => { const d = new Date(`${ymd.slice(0, 7)}-01T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() + 1, 0); return d.toISOString().slice(0, 10); };
@@ -32,6 +33,7 @@ export default async function SummaryPage({ searchParams }: PageProps<"/summary"
     return `/summary${qs ? `?${qs}` : ""}`;
   };
   const stocks = await prisma.stock.findMany({ where: { userId }, include: { records: { orderBy: { date: "asc" } } }, orderBy: { symbol: "asc" } });
+  await lockStockPicks(stocks); // หุ้นปกติ: ล็อกเลขของงวดที่รอผล (เหมือน VIP) — รายงานนับเฉพาะเลขล็อก
   const [regular, vip] = [regularSummary(stocks, day, stake), await vipSummary(userId, day, stake, day === today)];
   const to = monthEnd(day) < today ? monthEnd(day) : today;
   const m = await monthMoney(userId, stocks, to, stake);

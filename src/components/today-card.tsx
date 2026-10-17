@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { pickPair, top2, bottom2, prevCloseCents } from "@/lib/digits";
-import { pickTwoFor, type AmDigits } from "@/lib/formulas/stocks";
+import { pickTwoFor, latePickFor, type AmDigits } from "@/lib/formulas/stocks";
+import { LateCard } from "@/components/late-card";
 import { hangSengSession } from "@/lib/stocks/hangseng";
 import { isDowJones } from "@/lib/stocks/dowjones";
 import { TwoPickCard } from "@/components/two-pick";
 import { CloseYahooButton } from "@/components/close-yahoo-button";
 import { LiveCard } from "@/components/live-card";
 import { SHOW_DIRECTION } from "@/lib/config";
-import { fmtNum, fmtChange, forecastDirection, forecastClose, directionCall, evaluateCalls, checkOpen, type Summary, type RecordLike } from "@/lib/stats";
+import { fmtNum, fmtChange, fmtPct, forecastDirection, forecastClose, directionCall, evaluateCalls, checkOpen, type Summary, type RecordLike } from "@/lib/stats";
 import { OpenWarning } from "@/components/open-warning";
 import { CallCard } from "@/components/call-card";
 import { CloseForecastCard } from "@/components/close-forecast-card";
@@ -33,6 +34,7 @@ export function TodayCard({ stock, record, priceStats, priceHistory = [], live =
   const oTop = top2(record.openValue), oBot = bottom2(record.openChange);
   const pp = hangSengSession(stock.symbol) || isDowJones(stock.symbol) ? undefined : pickPair(record.openValue, record.openChange, priceHistory); // ฮั่งเส็ง/ดาวโจนส์ยังไม่มีหลักฐานคู่ผูกของตัวเอง
   const two = pickTwoFor(stock.symbol, record.openValue, record.openChange, priceHistory, { date: record.date, am: amDigits });
+  const late = record.liveValue !== null ? latePickFor(stock.symbol, record.openValue, record.openChange, record.liveValue, priceHistory, { date: record.date, am: amDigits }) : null; // ฟันช่วงท้าย (ทดลอง) — โชว์คู่กับเลขฟันปกติ
   const D = prevCloseCents(record.openValue, record.openChange);
   const dir = record.openChange > 0 ? priceStats.whenOpenUp : record.openChange < 0 ? priceStats.whenOpenDown : priceStats.all;
   const df = forecastDirection(record.openValue, record.openChange, priceHistory);
@@ -68,12 +70,17 @@ export function TodayCard({ stock, record, priceStats, priceHistory = [], live =
       <div className="mt-3">{two.amWait
         ? <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">⏳ ยังฟันไม่ได้ — รอบบ่ายใช้เลขที่ออกรอบเช้าด้วย · รอผลรอบเช้าเข้าระบบ (บันทึกปิดรอบเช้าก่อน)</p>
         : <TwoPickCard two={two} tied={pp} open={{ top: oTop, bottom: oBot }} />}</div>
+      {/* ฟันช่วงท้าย (ทดลอง): เลขฟันปกติด้านบนยังเป็นชุดหลัก · ชุดนี้ใช้ทิศจากราคาก่อนปิด แล้วนับคะแนนเทียบกันในหน้าหุ้น */}
+      <div className="mt-3 rounded-lg border border-dashed border-slate-300 p-3">
+        <LateCard recordId={record.id} prevClose={record.openValue - record.openChange} saved={record.liveValue !== null && record.liveAt ? { price: record.liveValue, at: record.liveAt.toISOString() } : null} />
+        {late && !late.amWait && <div className="mt-2"><p className="mb-1 text-xs text-slate-500">เลขฟันช่วงท้าย (ทิศ{late.up ? "บวก" : "ลบ"}) — เทียบกับเลขฟันปกติด้านบน</p><TwoPickCard two={late} open={{ top: oTop, bottom: oBot }} /></div>}
+      </div>
 
       <div className="mt-3 grid gap-4 sm:grid-cols-3">
         <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:col-span-3 sm:grid-cols-4">
           <div>
             <dt className="text-xs text-slate-500">เปิด</dt>
-            <dd className="tabular-nums">{fmtNum(record.openValue)} <span className={record.openChange < 0 ? "text-red-600" : "text-emerald-600"}>{fmtChange(record.openChange)}</span></dd>
+            <dd className="tabular-nums">{fmtNum(record.openValue)} <span className={record.openChange < 0 ? "text-red-600" : "text-emerald-600"}>{fmtChange(record.openChange)}{record.openValue - record.openChange ? ` (${fmtPct(record.openChange / (record.openValue - record.openChange))})` : ""}</span></dd>
           </div>
           <div>
             <dt className="text-xs text-slate-500">เลขเปิด บน / ล่าง</dt>

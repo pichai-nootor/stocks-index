@@ -8,9 +8,9 @@ const links = [
   // หน้าแรก = "สรุปผลวันนี้" (/summary) เข้าทางโลโก้ Stocks Index · เมนู "ภาพรวม" เอาออกตามที่ผู้ใช้สั่ง
   { href: "/stocks", label: "หุ้น" },
   { href: "/digits", label: "วิเคราะห์เลขปิด" },
+  { href: "/pct", label: "สถิติ %" },
   { href: "/vip", label: "หุ้น VIP" },
-  { href: "/lab", label: "ทดลองสูตร" },
-  { href: "/method", label: "วิธีคิด" },
+  // "ทดลองสูตร" (/lab) และ "วิธีคิด" (/method) ซ่อนจากเมนูตามที่ผู้ใช้สั่ง — หน้ายังอยู่ เข้าทาง URL ได้
 ] as const;
 
 export function Nav({ username }: { username: string }) {

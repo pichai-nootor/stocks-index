@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
-import { summarize, fmtNum, fmtChange, hasClose, evaluateCalls, CALL_MIN_GAP_PCT } from "@/lib/stats";
+import { summarize, fmtNum, fmtChange, fmtPct, hasClose, evaluateCalls, CALL_MIN_GAP_PCT } from "@/lib/stats";
 import { toDayDigits } from "@/lib/digits";
 import { pickTwoFor, amDigitsFor } from "@/lib/formulas/stocks";
+import { lockStockPicks } from "@/lib/stock-lock";
 import { Digits } from "@/components/digit-badges";
 import { OpenForm } from "@/components/open-form";
 import { TodayCard } from "@/components/today-card";
@@ -25,6 +26,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
     include: { records: { orderBy: { date: "asc" } } },
     orderBy: { symbol: "asc" },
   });
+  await lockStockPicks(stocks); // ล็อกเลขฟันของงวดที่รอผล (รายงานนับเฉพาะเลขล็อก)
   const today = todayThai();
 
   // ราคาสดจาก Yahoo ต่อหุ้น (ดึงครั้งเดียวต่อการโหลดหน้า; หุ้นที่ไม่รู้จักสัญลักษณ์ → null)
@@ -202,7 +204,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
                         <Digits value={last.d.closeTop2} hilite={last.hit2} tone="blue" /> <Digits value={last.d.closeBottom2} hilite={last.hit2} tone="blue" />
                         <span className="text-xs">คู่ <span className="font-mono font-bold">{last.pair.join(" ")}</span></span>
                         {last.hit2.length === 2 ? <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-800">✓ ถูกทั้งคู่</span> : last.hit1 ? <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-800">✓ ★ เด่นถูก</span> : last.hit2.length ? <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-800">✓ ถูก {last.hit2.join(" ")}</span> : <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs text-red-800">✗</span>}
-                        <span className="text-xs text-slate-400">{fmtNum(last.rec.closeValue)} ({fmtChange(last.rec.closeChange)})</span>
+                        <span className="text-xs text-slate-400">{fmtNum(last.rec.closeValue)} ({fmtChange(last.rec.closeChange)}{last.rec.closeValue - last.rec.closeChange ? ` · ${fmtPct(last.rec.closeChange / (last.rec.closeValue - last.rec.closeChange))}` : ""})</span>
                       </span>
                     ) : "-"}
                   </td>

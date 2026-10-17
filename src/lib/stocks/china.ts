@@ -28,7 +28,8 @@ export const CHINA_STOCKS = [
 export const CHINA_CLOSE_THAI = { am: "10:30", pm: "14:00" } as const;
 
 type Bar = { t: number; open: number; close: number };
-async function chart(params: string): Promise<{ bars: Bar[]; meta: Record<string, unknown> } | null> {
+/** openOnly = เก็บแท่งที่ยังไม่มีราคาปิดด้วย (close = NaN) — แท่งวันนี้ระหว่างตลาดเปิด Yahoo ส่ง close เป็น null */
+async function chart(params: string, openOnly = false): Promise<{ bars: Bar[]; meta: Record<string, unknown> } | null> {
   try {
     const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${SYMBOL}?${params}`, { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store", signal: AbortSignal.timeout(10000) });
     if (!res.ok) return null;
@@ -36,7 +37,7 @@ async function chart(params: string): Promise<{ bars: Bar[]; meta: Record<string
     if (!r?.timestamp) return null;
     const q = r.indicators.quote[0];
     const bars: Bar[] = [];
-    for (let i = 0; i < r.timestamp.length; i++) if (q.open?.[i] != null && q.close?.[i] != null) bars.push({ t: r.timestamp[i], open: q.open[i], close: q.close[i] });
+    for (let i = 0; i < r.timestamp.length; i++) if (q.open?.[i] != null && (q.close?.[i] != null || openOnly)) bars.push({ t: r.timestamp[i], open: q.open[i], close: q.close?.[i] ?? NaN });
     return { bars, meta: r.meta ?? {} };
   } catch {
     return null;
@@ -82,9 +83,11 @@ export async function chinaMorningCloses(range = "730d"): Promise<Record<string,
 
 /** ราคาสำหรับปุ่มบันทึกเปิด/เติมปิดของแต่ละรอบ */
 export async function fetchChinaQuote(session: ChinaSession): Promise<Quote | null> {
-  const daily = await chart("range=10d&interval=1d");
+  // แท่งวันนี้ระหว่างตลาดเปิดไม่มีราคาปิด — เดิมถูกตัดทิ้ง ทำให้ได้ปิดของสองวันก่อน (14 ต.ค. 69 รอบเช้า: 12,384.87 แทน 12,353.70)
+  const daily = await chart("range=10d&interval=1d", true);
   if (!daily || daily.bars.length < 2) return null;
-  const today = daily.bars[daily.bars.length - 1], prev = daily.bars[daily.bars.length - 2];
+  const today = daily.bars[daily.bars.length - 1], prev = daily.bars.slice(0, -1).findLast((b) => Number.isFinite(b.close));
+  if (!prev) return null;
   const tradingDate = cnDate(today.t);
   const meta = daily.meta as { regularMarketPrice?: number; regularMarketTime?: number; currentTradingPeriod?: { regular?: { end?: number } } };
   const base = { symbol: SYMBOL, source: "yahoo" as const, tradingDate, prevClose: r2(prev.close), open: r2(today.open), lastAt: new Date((meta.regularMarketTime ?? today.t) * 1000) };
@@ -94,7 +97,7 @@ export async function fetchChinaQuote(session: ChinaSession): Promise<Quote | nu
     const lastCn = cnHHMM(Math.floor(base.lastAt.getTime() / 1000));
     const end = meta.currentTradingPeriod?.regular?.end;
     const closed = lastCn >= "15:00" && (end ? Date.now() / 1000 > end + 60 || cnDate(end) !== tradingDate : true);
-    return { ...base, last: r2(meta.regularMarketPrice ?? today.close), closed };
+    return { ...base, last: r2(meta.regularMarketPrice ?? (Number.isFinite(today.close) ? today.close : today.open)), closed };
   }
   const intra = await chart("range=5d&interval=1h");
   const amBar = intra?.bars.filter((b) => cnDate(b.t) === tradingDate).find((b) => cnHHMM(b.t) === AM_BAR) ?? null;

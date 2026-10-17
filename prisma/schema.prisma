@@ -41,6 +41,10 @@ model Record {
   note        String?
   liveValue   Float?   // ค่าดัชนีที่อ่านระหว่างวัน (ใช้ฟันทิศทางสด) — บันทึกครั้งเดียวต่อวัน
   liveAt      DateTime? // เวลาที่อ่านค่านั้น
+  /** เลขฟันที่ล็อกไว้ตอนโชว์ครั้งแรกก่อนผลปิด เช่น "4-2" — รายงานนับเฉพาะงวดที่มีเลขล็อก = ผลจริง (ผู้ใช้แทงจริง ต.ค. 69) · แก้ราคาเปิดก่อนปิด → ล้างแล้วล็อกใหม่ */
+  pick        String?
+  /** เลขเจาะ 2 ชุดที่ล็อกพร้อมเลขฟัน (JSON string[][]) */
+  drill       String?
   createdAt   DateTime @default(now())
 
   @@index([stockId, date])
@@ -68,4 +72,19 @@ model VipResult {
 
   @@unique([userId, market, date, round])
   @@index([userId, market, date])
+}
+
+/// ราคารายวันของดัชนี (หุ้นปกติ) ไว้ทำสถิติ % → เลขที่ออก — เก็บถาวร เพราะ Yahoo ให้ปิดภาคเช้าย้อนหลังแค่ ~2 ปีแบบเลื่อน (ผู้ใช้ขอ 14 ต.ค. 69)
+/// key = nk-am | nk-pm | cn-am | cn-pm | hk-am | hk-pm | sx | dj | eg · close = ราคาผลของรอบนั้น · prevClose = ปิดวันก่อน
+model IndexDay {
+  id        String   @id @default(cuid())
+  key       String
+  date      String
+  prevClose Float
+  open      Float?
+  close     Float
+  createdAt DateTime @default(now())
+
+  @@unique([key, date])
+  @@index([key, date])
 }

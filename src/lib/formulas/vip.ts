@@ -99,7 +99,7 @@ export function vipHotPick(history: VipDraw[]): VipPick | null {
     ? ` · วัดกับเกาหลีที่โมเดลไม่เคยเห็น 1,264 งวด: ★ 36.6% · 2 ตัว 60.8% (สุ่ม 32.9 / 57.1)`
       + (history.length < 100 ? ` · ⚠ ตลาดนี้มีประวัติแค่ ${history.length} งวด — ตัวเลขข้างต้นเป็นค่าอ้างอิงจากเกาหลี ไม่ใช่ผลของตลาดนี้ (จะพิสูจน์ด้วยสถิติของตลาดนี้เองต้องใช้ ~900 งวดขึ้นไป) อย่าตัดสินจากผลไม่กี่งวด` : "")
     : "";
-  return { formula: "hot", label: daily ? "โมเดลรวมวันละรอบ" : "โมเดลรวม", digits: [s[0].digit, s[1].digit], note: `${src} ให้ ${s[0].digit}: ${(100 * s[0].p).toFixed(1)}% · ${s[1].digit}: ${(100 * s[1].p).toFixed(1)}% (สุ่ม 33%) · อันดับถัดไป ${s.slice(2, 5).map((x) => `${x.digit} ${(100 * x.p).toFixed(0)}%`).join(", ")}${bench}` };
+  return { order: s.map((x) => x.digit), formula: "hot", label: daily ? "โมเดลรวมวันละรอบ" : "โมเดลรวม", digits: [s[0].digit, s[1].digit], note: `${src} ให้ ${s[0].digit}: ${(100 * s[0].p).toFixed(1)}% · ${s[1].digit}: ${(100 * s[1].p).toFixed(1)}% (สุ่ม 33%) · อันดับถัดไป ${s.slice(2, 5).map((x) => `${x.digit} ${(100 * x.p).toFixed(0)}%`).join(", ")}${bench}` };
 }
 
 /* ---------- B. จากตัวเปิด (โครงสร้าง ล่าง = ปิด − เปิด) ---------- */

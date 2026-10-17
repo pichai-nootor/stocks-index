@@ -22,7 +22,14 @@ import { isDowJones } from "@/lib/stocks/dowjones";
 import { ManualOpenForm } from "@/components/manual-open-form";
 import { OpenInlineEdit } from "@/components/open-inline-edit";
 import { hangSengSession } from "@/lib/stocks/hangseng";
-import { pickTwoFor, amDigitsFor } from "@/lib/formulas/stocks";
+import { pickTwoFor, amDigitsFor, latePickFor } from "@/lib/formulas/stocks";
+import { lockUserStockPicks } from "@/lib/stock-lock";
+import { betResult } from "@/lib/bet";
+import { LateCard } from "@/components/late-card";
+import { ScrollHere } from "@/components/scroll-here";
+import { TryRangeForm } from "@/components/try-range-form";
+import { pctKeyOf, closeBandStats } from "@/lib/pct-stats";
+import { openRangeHistory, openRangePick } from "@/lib/open-range";
 import { isEgypt, egyptNextTradingDay } from "@/lib/stocks/egypt";
 import { EGYPT_2026 } from "@/lib/formulas/stocks/egypt";
 import { LiveSaveButton } from "@/components/live-save-button";
@@ -44,7 +51,13 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
   const { id } = await params;
   const sp = await searchParams;
   const page = Number(sp.page) || 1;
+  // ลองคาดช่วง % ปิด (ไม่บันทึก ไม่นับคะแนน): ?tid=<record id>&pf=<% ตั้งแต่>&pt=<% ถึง> — ใช้ได้ทั้งวันที่ยังไม่ปิดและปิดแล้ว
+  const pnum = (v: unknown) => { const t = typeof v === "string" ? v.replace(/[%\s]/g, "").replace(/[−–]/g, "-").replace(",", ".") : ""; const n = t === "" ? NaN : Number(t.endsWith(".") ? t.slice(0, -1) : t); return n; };
+  const tryId = typeof sp.tid === "string" ? sp.tid : null;
+  const tryFrom = pnum(sp.pf), tryTo = pnum(sp.pt);
+  const tryOk = Number.isFinite(tryFrom) && Number.isFinite(tryTo);
   const { userId } = await requireUser();
+  await lockUserStockPicks(userId); // ล็อกเลขฟันของงวดที่รอผล (รายงานนับเฉพาะเลขล็อก)
   const stock = await prisma.stock.findFirst({
     where: { id, userId },
     include: { records: { orderBy: { date: "asc" } } },
@@ -52,6 +65,9 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
   if (!stock) notFound();
 
   const closed = stock.records.filter(hasClose);
+  const bandKey = pctKeyOf(stock.symbol);
+  const band = tryId && tryOk && bandKey ? await closeBandStats(bandKey, tryFrom, tryTo) : null;
+  const orHist = bandKey ? await openRangeHistory(bandKey) : null; // วิธีของผู้ใช้: เปิด → ช่วง % ปิด → เลขรูด
   const st = summarize(closed);
 
   // ฟันธงของแต่ละวัน: ใช้เฉพาะวันที่ปิดแล้ว "ก่อนหน้า" วันนั้น (สำหรับทิศทาง)
@@ -112,8 +128,26 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
     const win2Hit = closeNums ? (([...closeNums[0]].every((c) => winSetDigits.includes(c)) ? "บน" : null) ?? ([...closeNums[1]].every((c) => winSetDigits.includes(c)) ? "ล่าง" : null)) : null; // วิน 2 ตัว บน/ล่าง (25 เลข)
     const drill = two.drill.sets.map((s) => ({ digit: s.digit, numbers: s.numbers.map((n) => n.number) }));
     const drillHits = closeNums ? drill.flatMap((s) => s.numbers).filter((m) => closeNums.includes(m) || closeNums.includes(m[1] + m[0])) : null;
-    return { r, oTop, oBot, noOpenChange, fromOpen, winSetDigits, win3Hit, win2Hit, winBoth, pWin: two.win.pWin, pBoth: two.win.pBoth, pp, pairBoth, dTwo, cnDoubleLow, pick, pair, star, weak, closeDigits, hit1, hit2, hitStar, drill, drillHits, pDouble: two.pDouble, dblWatch, closeDbl, amWait };
+    // ฟันช่วงท้าย (ทดลอง): ทิศจากราคาที่บันทึกก่อนปิด → ฟันชุดใหม่ เก็บคะแนนคู่กับชุดปกติ
+    const lateTwo = r.liveValue !== null ? latePickFor(stock.symbol, r.openValue, r.openChange, r.liveValue, history, { date: r.date, am }) : null;
+    const late = lateTwo && !lateTwo.amWait ? (() => {
+      const lp = lateTwo.digits.map((x) => x.digit), ld = lateTwo.drill.sets.flatMap((x) => x.numbers.map((n) => n.number));
+      return { up: lateTwo.up, pick: lp, drill: ld, hit: closeDigits ? lp.filter((d) => closeDigits.includes(d)) : null, drillHit: closeNums ? ld.some((m) => closeNums.includes(m) || closeNums.includes(m[1] + m[0])) : null,
+        money: closeNums ? { late: betResult(lp, ld, closeNums[0], closeNums[1]).profit, base: betResult(pair, drill.flatMap((x) => x.numbers), closeNums[0], closeNums[1]).profit } : null };
+    })() : null;
+    // วิธีของผู้ใช้ (ทดลอง): เปิด → คาดช่วง % ปิด → 2 เลขที่ออกบ่อยในช่วงนั้น · เทียบเงินแบบรูดอย่างเดียวกับเลขฟันปกติ
+    // รอบบ่ายไม่ใช้ (ผู้ใช้สั่ง 16 ต.ค. 69) · % ปิดงวดก่อน = แถวที่ปิดแล้วล่าสุดก่อนวันนี้
+    const prevRow = history[history.length - 1];
+    const prevPct = prevRow && hasClose(prevRow) && prevRow.closeValue - prevRow.closeChange ? (prevRow.closeChange / (prevRow.closeValue - prevRow.closeChange)) * 100 : null;
+    const op = orHist && !manualOpen && r.openChange && !amWait ? openRangePick(orHist, r.date.toISOString().slice(0, 10), (r.openChange / (r.openValue - r.openChange)) * 100, r.openValue - r.openChange, prevPct) : null;
+    const opRes = op ? { ...op, hit: closeDigits ? op.pick.filter((d) => closeDigits.includes(d)) : null, money: closeNums ? { mine: betResult(op.pick, [], closeNums[0], closeNums[1]).profit, base: betResult(pair, [], closeNums[0], closeNums[1]).profit } : null } : null;
+    return { opRes, late, r, oTop, oBot, noOpenChange, fromOpen, winSetDigits, win3Hit, win2Hit, winBoth, pWin: two.win.pWin, pBoth: two.win.pBoth, pp, pairBoth, dTwo, cnDoubleLow, pick, pair, star, weak, closeDigits, hit1, hit2, hitStar, drill, drillHits, pDouble: two.pDouble, dblWatch, closeDbl, amWait };
   }).reverse();
+  // คะแนนจริงของฟันช่วงท้าย เทียบกับชุดปกติ (เฉพาะวันที่บันทึกราคาช่วงท้ายไว้และผลออกแล้ว)
+  const opDone = rows.filter((x) => x.opRes?.money);
+  const opScore = opDone.length ? { n: opDone.length, any: opDone.filter((x) => x.opRes!.hit!.length).length, baseAny: opDone.filter((x) => x.hit2?.length).length, money: opDone.reduce((t, x) => t + x.opRes!.money!.mine, 0), baseMoney: opDone.reduce((t, x) => t + x.opRes!.money!.base, 0) } : null;
+  const lateDone = rows.filter((x) => x.late?.money);
+  const lateScore = lateDone.length ? { n: lateDone.length, lateAny: lateDone.filter((x) => x.late!.hit!.length).length, baseAny: lateDone.filter((x) => x.hit2?.length).length, lateMoney: lateDone.reduce((t, x) => t + x.late!.money!.late, 0), baseMoney: lateDone.reduce((t, x) => t + x.late!.money!.base, 0) } : null;
 
   // ราคาสดจาก Yahoo สำหรับวันที่ยังไม่ปิด (ถ้ามี) — ให้ฟันสดได้จากหน้านี้เลย
   // ราคาจาก Yahoo/BSE ของหุ้นตัวนี้ (หน้านี้มีปุ่มดึงเปิดของตัวเอง ไม่ต้องไปหน้าแรก)
@@ -233,6 +267,8 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
             <h2 className="font-medium">ประวัติ + ผลฟันธงรายวัน</h2>
             <p className="text-xs text-slate-500">ฟันจาก D (ทศนิยมปิดวันก่อน) ไล่ทุกกรณี บน 00–99 · เหลือง = เลขที่ฟันแล้วโผล่จริง · เพดานวิธีนี้ ≈ 36%</p>
           </div>
+          {opScore && <p className="mx-5 mb-2 rounded-lg bg-violet-50 px-3 py-2 text-xs text-violet-900">วิธีช่วง % (ปิดงวดก่อน + เปิด → ช่วงปิด → เลขรูด) {opScore.n} วัน: เข้า {opScore.any} วัน · เงินรูด <span className={opScore.money >= 0 ? "text-emerald-700" : "text-red-700"}>{opScore.money >= 0 ? "+" : ""}{opScore.money.toLocaleString()}</span> — เลขฟันปกติวันเดียวกัน: เข้า {opScore.baseAny} วัน · เงินรูด <span className={opScore.baseMoney >= 0 ? "text-emerald-700" : "text-red-700"}>{opScore.baseMoney >= 0 ? "+" : ""}{opScore.baseMoney.toLocaleString()}</span> (รูดอย่างเดียว เลขละ 20 บาท)</p>}
+          {lateScore && <p className="mx-5 mb-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">ฟันช่วงท้าย (ทดลอง) {lateScore.n} วัน: เข้า {lateScore.lateAny} วัน · เงิน <span className={lateScore.lateMoney >= 0 ? "text-emerald-700" : "text-red-700"}>{lateScore.lateMoney >= 0 ? "+" : ""}{lateScore.lateMoney.toLocaleString()}</span> — เทียบชุดปกติวันเดียวกัน: เข้า {lateScore.baseAny} วัน · เงิน <span className={lateScore.baseMoney >= 0 ? "text-emerald-700" : "text-red-700"}>{lateScore.baseMoney >= 0 ? "+" : ""}{lateScore.baseMoney.toLocaleString()}</span> (เลขละ 20 บาท)</p>}
           {rows.length === 0 ? (
             <p className="px-5 py-8 text-center text-sm text-slate-500">ยังไม่มีข้อมูล เริ่มบันทึกเปิดได้จากฟอร์มด้านซ้าย</p>
           ) : (
@@ -251,12 +287,12 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {paged.items.map(({ r, oTop, oBot, noOpenChange, fromOpen, winSetDigits, win3Hit, win2Hit, winBoth, pWin, pBoth, pp, pairBoth, dTwo, cnDoubleLow, pair, star, weak, hit1, hit2, drill, drillHits, pDouble, dblWatch, closeDbl, amWait }) => (
+                  {paged.items.map(({ r, oTop, oBot, noOpenChange, fromOpen, winSetDigits, win3Hit, win2Hit, winBoth, pWin, pBoth, pp, pairBoth, dTwo, cnDoubleLow, pair, star, weak, hit1, hit2, drill, drillHits, pDouble, dblWatch, closeDbl, amWait, late, opRes }) => (
                     <tr key={r.id} className="transition hover:bg-slate-50/60">
                       <td className="px-3 py-2 whitespace-nowrap font-medium text-slate-700">{r.date.toLocaleDateString("th-TH", { weekday: "short", day: "numeric", month: "short", year: "2-digit" })}</td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         <Digits value={oTop} /> <Digits value={oBot} />
-                        <div className="mt-0.5 text-xs tabular-nums text-slate-400">เปิด {fmtNum(r.openValue)} {noOpenChange ? "—" : <Change value={fromOpen ?? r.openChange} className="text-xs" />}</div>
+                        <div className="mt-0.5 text-xs tabular-nums text-slate-400">เปิด {fmtNum(r.openValue)} {noOpenChange ? "—" : <Change value={fromOpen ?? r.openChange} pct={fromOpen !== null ? (r.openValue ? fromOpen / r.openValue : undefined) : r.openValue - r.openChange ? r.openChange / (r.openValue - r.openChange) : undefined} className="text-xs" />}</div>
                         {!hasClose(r) && <OpenInlineEdit id={r.id} open={r.openValue} change={r.openChange} />}
                       </td>
                       {SHOW_DIRECTION && <td className="px-3 py-2 whitespace-nowrap text-xs">
@@ -289,6 +325,35 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                         {/* เลขฟันซ้าย · เลขเจาะขวา (เขียวเมื่อมา ตรงหรือกลับ) */}
                         {amWait ? <span className="text-xs text-amber-700">⏳ รอผลรอบเช้าเข้าระบบ (บ่ายใช้เลขเช้าด้วย)</span>
                           : <PickRow digits={pair} star={star} hit={hit2 ? hit2 : hasClose(r) ? [] : null} drill={drill} isHit={drillHits ? (m) => drillHits.includes(m) : undefined} />}
+                        {!hasClose(r) && <div className="mt-2"><LateCard recordId={r.id} prevClose={r.openValue - r.openChange} saved={r.liveValue !== null && r.liveAt ? { price: r.liveValue, at: r.liveAt.toISOString() } : null} /></div>}
+                        <TryRangeForm recordId={r.id} from={tryId === r.id && Number.isFinite(tryFrom) ? String(tryFrom) : ""} to={tryId === r.id && Number.isFinite(tryTo) ? String(tryTo) : ""} />
+                        {tryId === r.id && !tryOk && <p className="mt-1 rounded bg-amber-50 px-1.5 py-1 text-[11px] text-amber-800"><ScrollHere />พิมพ์ช่วง % ทั้ง 2 ช่องก่อนกดวิเคราะห์ เช่น -0.7 ถึง -0.8</p>}
+                        {tryId === r.id && tryOk && (
+                          <div id={`try-${r.id}`} className="mt-1 scroll-mt-24 rounded bg-blue-50 px-1.5 py-1 text-[11px] text-blue-950 ring-2 ring-blue-300">
+                            <ScrollHere />
+                            <p>ช่วง {Math.min(tryFrom, tryTo).toFixed(2)}% ถึง {Math.max(tryFrom, tryTo).toFixed(2)}% → ดัชนีปิด ≈ {fmtNum((r.openValue - r.openChange) * (1 + Math.min(tryFrom, tryTo) / 100))} – {fmtNum((r.openValue - r.openChange) * (1 + Math.max(tryFrom, tryTo) / 100))} · {tryFrom + tryTo >= 0 ? "ปิดบวก: บน − ล่าง" : "ปิดลบ: บน + ล่าง"} = {String(Math.round((r.openValue - r.openChange) * 100) % 100).padStart(2, "0")}</p>
+                            {band && <p>ในอดีตปิดช่วงนี้ {band.days} วัน · เลขออกบ่อย {band.digit.slice(0, 3).map((x) => `${x.d} (${band.days ? Math.round((100 * x.n) / band.days) : 0}%)`).join(" ")} · ออกน้อย {band.digit.slice(-2).map((x) => x.d).join(" ")} · เลข 2 ตัว {band.nums.map(([m, n]) => `${m}×${n}`).join(" ")}</p>}
+                          </div>
+                        )}
+                        {opRes && (() => {
+                          const sg = (x: number, n = 2) => `${x > 0 ? "+" : ""}${x.toFixed(n)}%`;
+                          const th = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" });
+                          return (
+                            <details className="mt-1 text-[11px] text-violet-900">
+                              <summary className="cursor-pointer">วิธีช่วง %: ปิดน่าจะ {sg(opRes.lo)} ถึง {sg(opRes.hi)} → รูด <span className="font-mono font-semibold">{opRes.pick.join(" ")}</span>{opRes.hit && <span className={opRes.hit.length ? "text-emerald-700" : "text-red-600"}> {opRes.hit.length ? `✓ ${opRes.hit.join(" ")}` : "✗"}</span>}{opRes.money && <span className="text-slate-400"> · {opRes.money.mine >= 0 ? "+" : ""}{opRes.money.mine.toLocaleString()} (ปกติ {opRes.money.base >= 0 ? "+" : ""}{opRes.money.base.toLocaleString()})</span>} <span className="text-violet-500 underline">ดูวิธีคิด</span></summary>
+                              <ol className="mt-1 list-decimal space-y-1 rounded bg-violet-50 py-1.5 pl-6 pr-2 whitespace-normal">
+                                <li>ข้อมูลก่อนปิด: ปิดงวดก่อน <b>{opRes.prevPct === null ? "—" : sg(opRes.prevPct, 4)}</b> · เปิดวันนี้ <b>{sg(opRes.openPct, 4)}</b></li>
+                                <li>วันในอดีตที่ 2 ค่านี้ใกล้ที่สุด 40 วัน (5 วันแรก):
+                                  <table className="mt-0.5 tabular-nums"><tbody>{opRes.similar.map((d) => <tr key={d.date}><td className="pr-2">{th(d.date)}</td><td className="pr-2">ก่อน {d.prevPct === null ? "—" : sg(d.prevPct)}</td><td className="pr-2">เปิด {sg(d.openPct)}</td><td>→ ปิด <b>{sg(d.closePct)}</b></td></tr>)}</tbody></table>
+                                </li>
+                                <li>เรียง % ปิดของ 40 วัน ตัดหัว 10 ท้าย 10 → ช่วงที่คาด <b>{sg(opRes.lo, 6)} ถึง {sg(opRes.hi, 6)}</b>{hasClose(r) && <> · ปิดจริง <b>{sg((r.closeChange / (r.closeValue - r.closeChange)) * 100, 6)}</b> {(() => { const a = (r.closeChange / (r.closeValue - r.closeChange)) * 100; return a >= opRes.lo && a <= opRes.hi ? "✓ อยู่ในช่วง" : "✗ นอกช่วง"; })()}</>}</li>
+                                <li>แปลงเป็นราคาปิด: {fmtNum(r.openValue - r.openChange)} × (1 + %) = <b>{fmtNum(opRes.price.lo)} ถึง {fmtNum(opRes.price.hi)}</b> ({opRes.price.n.toLocaleString()} ราคา ทีละสตางค์) → เลขที่มาในราคาเหล่านี้: {opRes.price.digitRate.map((x) => `${x.d} ${(x.p * 100).toFixed(1)}%`).join(" · ")}</li>
+                                <li>วันในอดีตที่ปิดอยู่ในช่วงนี้ {opRes.days} วัน → เลขที่ออก: {opRes.digitRate.map((x) => `${x.d} ${Math.round(x.p * 100)}%`).join(" · ")} → รูด 2 ตัวแรก <b className="font-mono">{opRes.pick.join(" ")}</b></li>
+                              </ol>
+                            </details>
+                          );
+                        })()}
+                        {late && <div className="mt-1 text-[11px] text-slate-600">ช่วงท้าย ({late.up ? "▲" : "▼"}): <span className="font-mono font-semibold">★{late.pick[0]} {late.pick[1]}</span>{late.hit && <span className={late.hit.length ? "text-emerald-700" : "text-red-600"}> {late.hit.length ? `✓ ${late.hit.join(" ")}` : "✗"}</span>}{late.drillHit !== null && <span className={late.drillHit ? "text-amber-700" : "text-slate-400"}> · เจาะ{late.drillHit ? "เข้า" : "ไม่เข้า"}</span>}{late.money && <span className="text-slate-400"> · {late.money.late >= 0 ? "+" : ""}{late.money.late.toLocaleString()} (ปกติ {late.money.base >= 0 ? "+" : ""}{late.money.base.toLocaleString()})</span>}</div>}
                         {/* คู่ผูก (เฉพาะอียิปต์): ต้องมาครบทั้ง 2 ตัวถึงถูก — ★ วันที่โมเดลให้ ≥23.5% (ของจริง 24.6% เทียบวันอื่น 18.4%) */}
                         {pp && (
                           <span className={`mt-1.5 block text-[11px] ${pairBoth ? "font-semibold text-emerald-700" : pairBoth === false ? "text-slate-400" : "text-slate-500"}`}>
@@ -320,7 +385,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                       <td className="px-3 py-2 whitespace-nowrap">
                         {hasClose(r) ? <>
                           <Digits value={top2(r.closeValue)} hilite={hit2 ?? []} tone="blue" /> <Digits value={bottom2(r.closeChange)} hilite={hit2 ?? []} tone="blue" />
-                          <div className="mt-0.5 text-xs tabular-nums text-slate-400">ปิด {fmtNum(r.closeValue)} <Change value={r.closeChange} className="text-xs" /></div>
+                          <div className="mt-0.5 text-xs tabular-nums text-slate-400">ปิด {fmtNum(r.closeValue)} <Change value={r.closeChange} pct={r.closeValue - r.closeChange ? r.closeChange / (r.closeValue - r.closeChange) : undefined} className="text-xs" /></div>
                         </> : <div className="space-y-1"><CloseYahooButton recordId={r.id} label={`เติมปิดจาก ${srcLabel}`} /><CloseForm recordId={r.id} /></div>}
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap text-xs">

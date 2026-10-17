@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { VIP_MARKETS, isVipMarket, vipMarket, roundLabel, roundCloseThai, vipWaitReason, pastCloseThai, fetchVipToday, vipDigits, type VipMarket } from "@/lib/vip";
 import { formulaFor, hasOwnFormula } from "@/lib/formulas";
-import { gradeFormula, lockedDrill, resultDigits as vipResultDigits, drillHit as vipDrillHit, RANDOM_ONE as VIP_RANDOM_ONE, RANDOM_TWO as VIP_RANDOM_TWO, type VipPick, type VipDraw } from "@/lib/formulas/types";
+import { gradeFormula, lockedDrill, resultDigits as vipResultDigits, drillHit as vipDrillHit, RANDOM_ONE as VIP_RANDOM_ONE, RANDOM_TWO as VIP_RANDOM_TWO, type VipPick, type VipDraw, type VipDrillSet } from "@/lib/formulas/types";
 import cnHistory from "@/data/vip-history/cn.json";
 import hkHistory from "@/data/vip-history/hk.json";
 import krHistory from "@/data/vip-history/kr.json";
@@ -57,6 +57,24 @@ function DigitRankTable({ order, rates, result }: { order: string[]; rates?: num
         })}
       </div>
       <p className="mt-1 text-[10px] text-slate-400">กรอบเหลือง = เลขที่ฟัน (2 อันดับแรก){out ? " · ขีดเส้นใต้เขียว = ออกจริงงวดนี้" : ""} · สุ่มเดา ≈ 33% ต่อเลข</p>
+    </div>
+  );
+}
+
+/** แถบเลข 0–9 ของงวดในตารางผล: เรียงตามอันดับของสูตร · % = อันดับนั้นออกจริงย้อนหลัง · เขียว = ออกงวดนี้ · กรอบเหลือง = เลขที่ฟัน */
+function RankStrip({ order, picked, rates, result }: { order: string[]; picked: string[]; rates?: number[]; result?: { top: string; bottom: string } }) {
+  const out = result ? vipResultDigits(result.top, result.bottom) : [];
+  return (
+    <div className="flex gap-0.5">
+      {order.map((d, k) => {
+        const came = out.includes(d), pk = picked.includes(d);
+        return (
+          <div key={d} className={`w-7 rounded py-0.5 text-center ${came ? "bg-emerald-100" : "bg-slate-50"} ${pk ? "ring-1 ring-amber-400" : ""}`}>
+            <div className={`font-mono text-sm font-bold leading-4 ${came ? "text-emerald-800" : "text-slate-500"}`}>{d}</div>
+            <div className="text-[9px] leading-3 tabular-nums text-slate-500">{rates?.[k] !== undefined ? `${Math.round(rates[k] * 100)}%` : "–"}</div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -131,6 +149,22 @@ export default async function VipPage({ searchParams }: PageProps<"/vip">) {
   const nextDate = feedDone ? (thai > dayAfter ? thai : dayAfter) : feedDate;
   /** ข้อมูลฟีดเป็นของงวดที่กำลังโชว์ไหม (ถ้าโชว์งวดถัดไปแล้ว ราคาในฟีดเป็นของวันก่อน ห้ามใช้ตัดสินว่า "ปิดแล้ว") */
   const feedIsNext = !!today && today.date === nextDate;
+  // งวดที่กำลังจะออก (รอบแรกของวันที่ยังไม่มีผล — เช้าหรือบ่ายก็ได้) → แถวบนสุดของตารางผล พร้อมแถบเลข 0–9 (ผู้ใช้ขอ 14 ต.ค. 69)
+  const upcoming = page !== 1 ? null : (() => {
+    const has = (d: string, rr: number) => rows.some((x) => x.date.toISOString().slice(0, 10) === d && x.round === rr);
+    for (const round of info.rounds) {
+      if (has(nextDate, round)) continue;
+      const lockRow = all.find((x) => x.top === "" && x.date.toISOString().slice(0, 10) === nextDate && x.round === round);
+      const lockedP = lockRow?.pick && lockedByCurrent(lockRow.date) ? lockRow.pick.split("-") : null;
+      const wait = vipWaitReason(market, nextDate, round, has);
+      if (wait && !lockedP) return { round, wait, pick: null, drill: [] as VipDrillSet[] };
+      const c = F.pick(asc, lockRow?.open ?? nextOpen, round);
+      if (!c) return null;
+      const pk = lockedP?.length === 2 ? { ...c, digits: [lockedP[0], lockedP[1]] as [string, string] } : c;
+      return { round, wait: null, pick: pk, drill: (lockedP && lockedDrill(lockRow?.drill)) || F.drill(pk, asc) };
+    }
+    return null;
+  })();
 
   const digits10 = "0123456789".split("");
   const freq = Object.fromEntries(digits10.map((d) => [d, 0])) as Record<string, number>;
@@ -345,11 +379,27 @@ export default async function VipPage({ searchParams }: PageProps<"/vip">) {
                   {F.experimental && <th className="px-3 py-2 text-slate-400">ทดลอง (เก็บคะแนนเทียบ)</th>}
                   {F.experimental2 && <th className="px-3 py-2 text-slate-500">แผน C (จากปกติ)</th>}
                   <th className="px-3 py-2">ผล บน / ล่าง</th>
+                  <th className="px-3 py-2 normal-case" title="เรียงตามอันดับของสูตร · % = อันดับนั้นออกจริงย้อนหลัง 500 งวด · เขียว = ออกงวดนี้ · กรอบเหลือง = เลขที่ฟัน">เลข 0–9 ตามอันดับสูตร (% ออกจริง)</th>
                   <th className="px-3 py-2 text-amber-800">ผลฟัน</th>
                   <th className="px-3 py-2" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
+                {upcoming && (
+                  <tr className="bg-amber-50/70">
+                    <td className="px-3 py-2 whitespace-nowrap font-medium text-slate-700">
+                      {thDate(new Date(`${nextDate}T00:00:00Z`))}{info.rounds.length > 1 && <span className="ml-1 text-xs text-slate-500">{roundLabel(upcoming.round, market)}</span>}
+                      <div><span className="rounded bg-amber-200 px-1.5 py-0.5 text-[10px] font-medium text-amber-900">กำลังจะออก</span></div>
+                    </td>
+                    <td className="px-3 py-2">{upcoming.pick ? <PickBlock pick={upcoming.pick} drill={upcoming.drill} row /> : <span className="text-xs text-amber-800">⏳ {upcoming.wait}</span>}</td>
+                    {F.experimental && <td className="px-3 py-2" />}
+                    {F.experimental2 && <td className="px-3 py-2" />}
+                    <td className="px-3 py-2 text-xs text-slate-400">รอผล</td>
+                    <td className="px-3 py-2">{upcoming.pick?.order ? <RankStrip order={upcoming.pick.order} picked={upcoming.pick.digits} rates={rankRate} /> : <span className="text-xs text-slate-400">–</span>}</td>
+                    <td className="px-3 py-2" />
+                    <td className="px-3 py-2" />
+                  </tr>
+                )}
                 {paged.items.map((r) => {
                   const j = judged.get(r.id)!;
                   const digits = vipResultDigits(r.top, r.bottom);
@@ -369,6 +419,7 @@ export default async function VipPage({ searchParams }: PageProps<"/vip">) {
                         <Digits value={r.top} hilite={[...(hitA ?? []), ...(hitB ?? []), ...(hitC ?? [])]} tone="blue" /> <Digits value={r.bottom} hilite={[...(hitA ?? []), ...(hitB ?? []), ...(hitC ?? [])]} tone="blue" />
                         {r.close !== null && <div className="mt-1 text-xs tabular-nums text-slate-400">ปิด {fmtNum(r.close)} <span className={(r.diff ?? 0) < 0 ? "text-red-600" : "text-emerald-600"}>{fmtChange(r.diff ?? 0)}</span></div>}
                       </td>
+                      <td className="px-3 py-2">{j.a?.pick.order ? <RankStrip order={j.a.pick.order} picked={j.a.pick.digits} rates={rankRate} result={r} /> : <span className="text-xs text-slate-400">–</span>}</td>
                       <td className="px-3 py-2 whitespace-nowrap text-xs">
                         {j.a && <HitBadge pick={j.a.pick.digits} hits={hitA} drillHits={j.a.drill.flatMap((x) => x.numbers).filter((m) => vipDrillHit(m, r.top, r.bottom))} />}
                         {hitC && <div className="mt-1"><span className="text-slate-400">แผน C</span> {hitC.length ? <span className="rounded bg-emerald-100 px-1.5 py-0.5 font-medium text-emerald-800">✓ {hitC.join(" ")}</span> : <span className="rounded bg-red-100 px-1.5 py-0.5 font-medium text-red-800">✗</span>}</div>}

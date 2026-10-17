@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { hasClose } from "@/lib/stats";
 import { top2, bottom2 } from "@/lib/digits";
 import { pickTwoFor, amDigitsFor } from "@/lib/formulas/stocks";
+import { lockStockPicks } from "@/lib/stock-lock";
 import { todayThai } from "@/lib/intraday";
 import { Digits } from "@/components/digit-badges";
 import { PickDigits, HitBadge } from "@/components/pick-view";
@@ -30,6 +31,7 @@ export default async function StocksPage() {
   const { userId } = await requireUser();
   const today = todayThai();
   const stocks = await prisma.stock.findMany({ where: { userId }, include: { records: { orderBy: { date: "asc" } } } });
+  await lockStockPicks(stocks); // ล็อกเลขฟันของงวดที่รอผล (รายงานนับเฉพาะเลขล็อก)
   const bySymbol = new Map(stocks.map((s) => [s.symbol, s]));
   const known = new Set(MARKETS.flatMap((m) => m.rows.map((r) => r.symbol)));
   const others = stocks.filter((s) => !known.has(s.symbol));

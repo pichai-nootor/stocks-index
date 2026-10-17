@@ -50,3 +50,15 @@ export function pickTwoFor(symbol: string, openValue: number, openChange: number
   if (nk) return pickNikkei(openValue, openChange, history, nk, amOfDay);
   return pickSensex(openValue, openChange, history);
 }
+
+/**
+ * ฟันช่วงท้าย (ทดลอง · ผู้ใช้ขอ 14 ต.ค. 69): ใช้ราคาที่บันทึกไว้ก่อนตลาดปิด (~30 นาที) บอกทิศ → ฟันด้วยสูตรเดิมของหุ้นตัวนั้น
+ *   แต่บอกสูตรว่าทิศชัดแล้ว (เปิดจำลองห่าง 3% ทางเดียวกับราคาช่วงท้าย โดย D เท่าเดิม → ตารางคู่เดียวกัน)
+ *   ทดสอบจำลอง 10 ปีแทบไม่ต่างจากเดิม (±0–1 จุด) — เก็บคะแนนจริงคู่กันไว้ตัดสิน
+ */
+export function latePickFor(symbol: string, openValue: number, openChange: number, livePrice: number, history: RecordLike[], ctx?: { date: Date; am: AmDigits }): (TwoPick & { amWait?: boolean; up: boolean }) | null {
+  const prev = Math.round((openValue - openChange) * 100) / 100;
+  if (livePrice === prev) return null;
+  const up = livePrice > prev, big = Math.round(prev * 0.03) * (up ? 1 : -1);
+  return { ...pickTwoFor(symbol, Math.round((prev + big) * 100) / 100, big, history, ctx), up };
+}

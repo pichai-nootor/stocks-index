@@ -23,7 +23,8 @@ const jstHHMM = (t: number) => new Date(t * 1000 + JST).toISOString().slice(11, 
 const AM_CLOSE = "11:30";
 
 type Bar = { t: number; open: number; close: number };
-async function chart(params: string): Promise<{ bars: Bar[]; meta: Record<string, unknown> } | null> {
+/** openOnly = เก็บแท่งที่ยังไม่มีราคาปิดด้วย (close = NaN) — แท่งวันนี้ระหว่างตลาดเปิด Yahoo ส่ง close เป็น null */
+async function chart(params: string, openOnly = false): Promise<{ bars: Bar[]; meta: Record<string, unknown> } | null> {
   try {
     const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/%5EN225?${params}`, { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store", signal: AbortSignal.timeout(10000) });
     if (!res.ok) return null;
@@ -31,7 +32,7 @@ async function chart(params: string): Promise<{ bars: Bar[]; meta: Record<string
     if (!r?.timestamp) return null;
     const q = r.indicators.quote[0];
     const bars: Bar[] = [];
-    for (let i = 0; i < r.timestamp.length; i++) if (q.open?.[i] != null && q.close?.[i] != null) bars.push({ t: r.timestamp[i], open: q.open[i], close: q.close[i] });
+    for (let i = 0; i < r.timestamp.length; i++) if (q.open?.[i] != null && (q.close?.[i] != null || openOnly)) bars.push({ t: r.timestamp[i], open: q.open[i], close: q.close?.[i] ?? NaN });
     return { bars, meta: r.meta ?? {} };
   } catch {
     return null;
@@ -71,9 +72,11 @@ export async function nikkeiAfternoonOpen(date: string): Promise<number | null> 
 
 /** ราคาสำหรับหน้าแรก/ปุ่ม Yahoo — รอบเช้า: ปิดแล้วเมื่อถึง 11:30 JST และ last = แท่ง 11:30; รอบบ่าย: ตามปิดวัน */
 export async function fetchNikkeiQuote(session: NikkeiSession): Promise<Quote | null> {
-  const daily = await chart("range=10d&interval=1d");
+  // แท่งวันนี้ระหว่างตลาดเปิดไม่มีราคาปิด — เดิมถูกตัดทิ้ง ทำให้ได้ปิดของสองวันก่อน (14 ต.ค. 69 รอบเช้า: 69,030.92 แทน 67,777.52)
+  const daily = await chart("range=10d&interval=1d", true);
   if (!daily || daily.bars.length < 2) return null;
-  const today = daily.bars[daily.bars.length - 1], prev = daily.bars[daily.bars.length - 2];
+  const today = daily.bars[daily.bars.length - 1], prev = daily.bars.slice(0, -1).findLast((b) => Number.isFinite(b.close));
+  if (!prev) return null;
   const tradingDate = jstDate(today.t);
   const meta = daily.meta as { regularMarketPrice?: number; regularMarketTime?: number; currentTradingPeriod?: { regular?: { end?: number } } };
   const lastAt = new Date((meta.regularMarketTime ?? today.t) * 1000);
@@ -85,7 +88,7 @@ export async function fetchNikkeiQuote(session: NikkeiSession): Promise<Quote | 
     const lastJst = jstHHMM(Math.floor(base.lastAt.getTime() / 1000));
     const settled = lastJst >= "15:30";
     const closed = settled && (end ? Date.now() / 1000 > end + 60 || jstDate(end) !== tradingDate : true);
-    return { ...base, last: r2(meta.regularMarketPrice ?? today.close), closed };
+    return { ...base, last: r2(meta.regularMarketPrice ?? (Number.isFinite(today.close) ? today.close : today.open)), closed };
   }
   // รอบเช้า
   const intra = await chart("range=5d&interval=5m");

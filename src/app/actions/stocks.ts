@@ -116,7 +116,7 @@ export async function saveOpenAndForecast(_prev: OpenState, formData: FormData):
   const bad = await verifyOpen(stockId, new Date(date), openValue, openChange, formData);
   if (bad) return bad;
   if (existing) {
-    await prisma.record.update({ where: { id: existing.id }, data: { openValue, openChange } });
+    await prisma.record.update({ where: { id: existing.id }, data: { openValue, openChange, pick: null, drill: null } }); // ราคาเปิดเปลี่ยน → เลขล็อกเดิมใช้ไม่ได้ ล็อกใหม่
   } else {
     await prisma.record.create({ data: { stockId, date: new Date(date), openValue, openChange } });
   }
@@ -208,7 +208,7 @@ export async function saveOpenFromYahoo(_prev: ActionState, formData: FormData):
   const openChange = Math.round((q.open - q.prevClose) * 100) / 100;
   const existing = await prisma.record.findFirst({ where: { stockId, date } });
   if (existing?.closeValue !== null && existing?.closeValue !== undefined) return { error: `วันที่ ${q.tradingDate} มีผลปิดแล้ว` };
-  if (existing) await prisma.record.update({ where: { id: existing.id }, data: { openValue: q.open, openChange } });
+  if (existing) await prisma.record.update({ where: { id: existing.id }, data: { openValue: q.open, openChange, pick: null, drill: null } });
   else await prisma.record.create({ data: { stockId, date, openValue: q.open, openChange } });
   revalidatePath("/dashboard"); revalidatePath("/digits"); revalidatePath(`/stocks/${stockId}`);
   redirect(formData.get("redirectTo") === "stock" ? `/stocks/${stockId}` : "/dashboard?saved=1");
@@ -315,8 +315,38 @@ export async function saveManualOpen(prev: ManualOpenState, form: FormData): Pro
   const rec = await prisma.record.findFirst({ where: { stockId, date } });
   if (rec && rec.closeValue !== null) return { error: `วันที่ ${day} มีผลปิดแล้ว — แก้ในตารางแทน` };
   const data = { openValue: Math.round(open * 100) / 100, openChange: Math.round(change * 100) / 100 };
-  if (rec) await prisma.record.update({ where: { id: rec.id }, data });
+  if (rec) await prisma.record.update({ where: { id: rec.id }, data: { ...data, pick: null, drill: null } });
   else await prisma.record.create({ data: { stockId, date, ...data } });
   revalidatePath(`/stocks/${stockId}`); revalidatePath("/dashboard"); revalidatePath("/digits");
   return { ok: true };
+}
+
+/**
+ * ฟันช่วงท้าย (หุ้นปกติทุกตัว): บันทึกราคาตอนนี้ก่อนตลาดปิด → ใช้ทิศช่วงท้ายฟันชุดใหม่ (เก็บใน liveValue/liveAt)
+ *   ตลาดปิดแล้วห้ามบันทึก (ไม่งั้นได้ทิศจากราคาปิดจริง = คะแนนไม่ยุติธรรม)
+ */
+export async function saveLatePrice(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const { userId } = await requireUser();
+  const id = String(formData.get("id") ?? "");
+  const manual = formData.get("mode") === "manual" ? String(formData.get("price") ?? "").trim() : "";
+  if (formData.get("mode") === "manual" && !manual) return { error: "พิมพ์ราคาก่อนกดบันทึก" };
+  const record = await prisma.record.findFirst({ where: { id, stock: { userId } }, include: { stock: true } });
+  if (!record) return { error: "ไม่พบรายการ" };
+  if (record.closeValue !== null) return { error: "วันนี้มีผลปิดแล้ว" };
+  const prev = record.openValue - record.openChange;
+  let price: number, at = new Date();
+  if (manual) {
+    price = Number(manual.replace(/,/g, ""));
+    if (!Number.isFinite(price) || price <= 0) return { error: "ราคาต้องเป็นตัวเลข" };
+    if (Math.abs(price - prev) / prev > 0.1) return { error: `ราคา ${price} ห่างจากปิดวันก่อน ${prev.toFixed(2)} เกิน 10% — พิมพ์ผิดหรือเปล่า` };
+  } else {
+    const q = await fetchQuote(record.stock.symbol);
+    if (!q) return { error: "ดึงราคาไม่ได้ — พิมพ์ราคาเองแทน" };
+    if (q.tradingDate !== record.date.toISOString().slice(0, 10)) return { error: `แหล่งราคายังอยู่ที่วัน ${q.tradingDate}` };
+    if (q.closed) return { error: "ตลาดปิดแล้ว — บันทึกช่วงท้ายไม่ได้" };
+    price = q.last; at = q.lastAt;
+  }
+  await prisma.record.update({ where: { id }, data: { liveValue: Math.round(price * 100) / 100, liveAt: at } });
+  revalidatePath("/dashboard"); revalidatePath(`/stocks/${record.stockId}`);
+  return undefined;
 }
