@@ -46,6 +46,7 @@ function Card({ it }: { it: MonthItem }) {
  *   เข้า = เลขฟัน 2 ตัวมาอย่างน้อย 1 ตัว · สุ่มเดา: เข้า ~59% · ★ ~34% · เจาะ ~41–47%
  */
 export function MonthBoard({ label, items }: { label: string; items: MonthItem[] }) {
+  if (!items.length) return null; // เดือนที่ยังไม่ได้ใช้ระบบ — ไม่มีผลจริงให้แสดง
   const sorted = [...items].sort((a, b) => b.profit - a.profit);
   const groups = [
     { title: "หุ้นปกติ", list: sorted.filter((x) => x.group === "ปกติ") },

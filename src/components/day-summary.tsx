@@ -133,6 +133,8 @@ function P({ v }: { v: number }) {
 function MonthBar({ month }: { month: { label: string; regular: MoneyTotal; vip: MoneyTotal; days: number; stake?: number } }) {
   const stake = month.stake ?? BET.stake;
   const t = { n: month.regular.n + month.vip.n, cost: month.regular.cost + month.vip.cost, win: month.regular.win + month.vip.win, profit: month.regular.profit + month.vip.profit };
+  // เดือนที่ยังไม่ได้ใช้ระบบ (ไม่มีเลขล็อกเลย) → ไม่แสดงเงิน (ผู้ใช้ขอ 17 ต.ค. 69)
+  if (!t.n) return <p className="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-500">เดือน {month.label} ยังไม่ได้ใช้ระบบ — ไม่มีผลจริง</p>;
   return (
     <div className="rounded-md bg-slate-50 px-3 py-2">
       <p className="text-sm">
