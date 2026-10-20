@@ -88,3 +88,37 @@ model IndexDay {
   @@unique([key, date])
   @@index([key, date])
 }
+
+/// แท่ง 1 ชั่วโมงของ BTCUSDT ฟิวเจอร์ (Binance) — เฉพาะแท่งที่ปิดแล้ว · ข้อมูลตลาด ใช้ร่วมทุกผู้ใช้ (ผู้ใช้ขอ 17 ต.ค. 69)
+model BtcBar {
+  openTime DateTime @id
+  open     Float
+  high     Float
+  low      Float
+  close    Float
+}
+
+/// สัญญาณ Long ของ BTC ที่ล็อกไว้ (เริ่มนับผลจริงตั้งแต่วันเปิดเมนู) — drop = เกณฑ์ลง 24 ชม. ที่ใช้ (3 | 5 | 7 %)
+model BtcSignal {
+  id        String   @id @default(cuid())
+  userId    String
+  drop      Int
+  mode      String   @default("close") // close = เข้าที่ราคาปิดแท่ง · limit = limit −1% รอ 2 ชม. ไม่ match = ข้าม · range = limit ใต้จุดต่ำสุด 24 ชม. (drop = ระดับ ×10)
+  entryAt   DateTime // เวลาเข้า = ปิดแท่งที่ลงถึงเกณฑ์ (limit = ปิดแท่งที่ match)
+  entry     Float
+  exitAt    DateTime // เข้า + 12 ชม.
+  exit      Float?   // ราคาออก (ว่าง = ยังถืออยู่)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, drop, mode, entryAt])
+}
+
+/// ข้อมูลฟิวเจอร์รายชั่วโมงที่ Binance เก็บย้อนหลังแค่ 30 วัน — เก็บสะสมไว้หาสัญญาณ Short ภายหลัง (ผู้ใช้ขอ 17 ต.ค. 69) · ยังไม่ใช้คิดสัญญาณ
+model BtcFlow {
+  time       DateTime @id // timestamp ของ Binance (UTC ต้นชั่วโมง)
+  oi         Float?   // open interest (BTC)
+  oiValue    Float?   // open interest (USDT)
+  lsAccount  Float?   // long/short ratio บัญชีทั้งตลาด
+  lsTop      Float?   // long/short ratio ขนาดสถานะของ top trader
+  takerRatio Float?   // taker buy/sell volume ratio
+}

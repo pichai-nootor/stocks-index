@@ -10,6 +10,7 @@ const links = [
   { href: "/digits", label: "วิเคราะห์เลขปิด" },
   { href: "/pct", label: "สถิติ %" },
   { href: "/vip", label: "หุ้น VIP" },
+  { href: "/btc", label: "BTC ฟิวเจอร์" },
   // "ทดลองสูตร" (/lab) และ "วิธีคิด" (/method) ซ่อนจากเมนูตามที่ผู้ใช้สั่ง — หน้ายังอยู่ เข้าทาง URL ได้
 ] as const;
 

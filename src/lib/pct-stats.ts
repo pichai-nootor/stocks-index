@@ -11,6 +11,7 @@ import { nikkeiMorningCloses, nikkeiSession as nikkeiSessionOf } from "@/lib/sto
 import { chinaMorningCloses, chinaSession as chinaSessionOf } from "@/lib/stocks/china";
 import { hangSengResults, hangSengSession as hangSengSessionOf } from "@/lib/stocks/hangseng";
 import { isDowJones } from "@/lib/stocks/dowjones";
+import { isSingapore } from "@/lib/stocks/singapore";
 
 export const PCT_INDEXES = [
   { key: "nk-am", label: "นิเคอิ เช้า", yahoo: "^N225", am: "nk", note: "ปิดภาคเช้า ย้อนหลัง ~2 ปี" },
@@ -22,6 +23,7 @@ export const PCT_INDEXES = [
   { key: "hk-pm16", label: "ฮั่งเส็ง บ่าย", yahoo: "^HSI", am: "hk-pm", note: "ราคา 16:00 (ตามผลหวย) ย้อนหลัง ~2 ปี · ไม่มี % เปิดบ่ายย้อนหลัง" },
   { key: "sx", label: "SENSEX", yahoo: "^BSESN", am: null, note: "10 ปี" },
   { key: "dj", label: "ดาวโจนส์", yahoo: "^DJI", am: null, note: "10 ปี" },
+  { key: "sg", label: "สิงคโปร์", yahoo: "^STI", am: null, note: "10 ปี · ปิดทางการ (ตรงกับ investing)" },
   { key: "eg", label: "อียิปต์", yahoo: null, am: null, note: "10 ปี · ไม่มี % ตอนเปิด (ตลาดประกาศเปิด = ปิดวันก่อน)" },
 ] as const;
 /** รอบบ่ายดูได้แต่ % ปิด (ข้อมูลรายวันไม่มีราคาเปิดภาคบ่าย) · อียิปต์ไม่มีเปิด */
@@ -85,6 +87,7 @@ export function pctKeyOf(symbol: string): PctIndex | null {
   if (cn) return `cn-${cn}`;
   if (hk) return hk === "am" ? "hk-am" : "hk-pm16";
   if (isDowJones(symbol)) return "dj";
+  if (isSingapore(symbol)) return "sg";
   if (isEgypt(symbol)) return "eg";
   if (/SENSEX|BSESN/i.test(symbol)) return "sx";
   return null;

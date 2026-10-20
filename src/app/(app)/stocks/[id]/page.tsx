@@ -10,7 +10,7 @@ import { YahooOpenButton } from "@/components/yahoo-open-button";
 import { CloseYahooButton } from "@/components/close-yahoo-button";
 import { NikkeiSetup } from "../nikkei-setup";
 import { nikkeiSession } from "@/lib/stocks/nikkei";
-import { NIKKEI_PAIR_STRONG, NIKKEI_PAIR_BASE } from "@/lib/formulas/stocks/nikkei";
+import { NIKKEI_PAIR_STRONG, NIKKEI_PAIR_BASE, nikkeiAmAnalysis } from "@/lib/formulas/stocks/nikkei";
 import { chinaSession } from "@/lib/stocks/china";
 import { CHINA_PAIR_STRONG, CHINA_DOUBLE, CHINA_PAIR } from "@/lib/formulas/stocks/china";
 import { SENSEX_PAIR } from "@/lib/formulas/stocks/sensex";
@@ -19,6 +19,9 @@ import { ChinaSetup } from "../china-setup";
 import { HangSengSetup } from "../hangseng-setup";
 import { DowJonesSetup } from "../dowjones-setup";
 import { isDowJones } from "@/lib/stocks/dowjones";
+import { SingaporeSetup } from "../singapore-setup";
+import { isSingapore } from "@/lib/stocks/singapore";
+import { singaporeAnalysis } from "@/lib/formulas/stocks/singapore";
 import { ManualOpenForm } from "@/components/manual-open-form";
 import { OpenInlineEdit } from "@/components/open-inline-edit";
 import { hangSengSession } from "@/lib/stocks/hangseng";
@@ -78,8 +81,9 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
   const hsSession = hangSengSession(stock.symbol);
   const hangseng = !!hsSession; // ฮั่งเส็งใช้สูตรของตัวเอง (formulas/stocks/hangseng.ts) ไม่ใช้ pickTwo กลาง
   const dow = isDowJones(stock.symbol); // ดาวโจนส์ใช้สูตรของตัวเอง (formulas/stocks/dowjones.ts)
+  const sg = isSingapore(stock.symbol); // สิงคโปร์ใช้สูตรของตัวเอง (formulas/stocks/singapore.ts)
   const manualOpen = hsSession === "pm" || (china && pm) || nikkeiSession(stock.symbol) === "pm"; // รอบบ่าย (ฮั่งเส็ง/จีน/นิเคอิ): ผู้ใช้กรอกเปิดเองทั้งหมด แทนปุ่ม Yahoo
-  const sensex = !egypt && !nikkei && !china && !hangseng && !dow; // หลักฐาน 10 ปีในไฟล์กลางเป็นของ SENSEX — ห้ามเอาไปแสดงบนหุ้นตัวอื่น
+  const sensex = !egypt && !nikkei && !china && !hangseng && !dow && !sg; // หลักฐาน 10 ปีในไฟล์กลางเป็นของ SENSEX — ห้ามเอาไปแสดงบนหุ้นตัวอื่น
   // อียิปต์: ปิดป้าย ★ งวดคู่ผูกแข็ง เพราะข้อมูลของอียิปต์เองบอกว่ากลับด้าน (13.6% vs 21.3%)
   const pairStrong = egypt ? 99 : china ? CHINA_PAIR_STRONG : sensex ? SENSEX_PAIR.threshold : NIKKEI_PAIR_STRONG; // เกณฑ์ "งวดคู่ผูกแข็ง" — ค่าเท่ากันเพราะมาจากโครงสร้าง D
   const pairEvidence = egypt ? "อียิปต์: วันแบบนี้ถูกครบ 24.6% เทียบวันอื่น 18.4%"
@@ -106,7 +110,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
     const pairBoth = pp && closeDigits ? pp.pair.every((d) => closeDigits.includes(d)) : null;
     const star = two.standout.digit;
     const hitStar = closeDigits ? closeDigits.includes(star) : null;
-    const weak = !hangseng && !dow && dayStrength(two.digits[0].p).level === "อ่อน"; // ฮั่งเส็ง: วันอ่อนแบบ SENSEX ไม่จริง (บ่าย <34% ถูก 50.5%)
+    const weak = !hangseng && !dow && !sg && dayStrength(two.digits[0].p).level === "อ่อน"; // ฮั่งเส็ง: วันอ่อนแบบ SENSEX ไม่จริง (บ่าย <34% ถูก 50.5%)
     // โอกาสเบิ้ลของวัน: โครงสร้าง 20% (วัน D เบิ้ล 10%) · "จับตา" = เลขเปิด สิบ+หน่วย = 10 (10 ปี ~23–24% แต่ยังเป็นสัญญาณอ่อน)
     const sum10 = (x: string) => Number(x[0]) + Number(x[1]) === 10;
     const dblWatch = sum10(oTop) || sum10(oBot);
@@ -252,13 +256,14 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
         {!egyptNextOpen && openFromQuote && !manualOpen && <YahooOpenButton stockId={stock.id} symbol={stock.symbol} quote={openFromQuote} redirectTo="stock" sourceLabel={srcLabel} />}
         {/* กรอกเปิดเอง — การ์ดแถวเดียวแบบเดียวกันทุกหุ้น (รอบบ่ายฮั่งเส็ง/จีน/นิเคอิใช้การ์ดด้านบนแทน) */}
         {!manualOpen && <RecordForm stockId={stock.id} symbol={stock.symbol} today={todayThai()} />}
-        {(nikkeiSession(stock.symbol) || china || hangseng || dow || isEgypt(stock.symbol)) && (
+        {(nikkeiSession(stock.symbol) || china || hangseng || dow || sg || isEgypt(stock.symbol)) && (
           <details className="card text-sm">
             <summary className="cursor-pointer text-blue-600">ซิงก์ย้อนหลัง</summary>
             {nikkeiSession(stock.symbol) && <NikkeiSetup />}
             {china && <ChinaSetup />}
             {hangseng && <HangSengSetup />}
             {dow && <DowJonesSetup />}
+            {sg && <SingaporeSetup />}
             {isEgypt(stock.symbol) && <EgyptSetup />}
           </details>
         )}
@@ -387,6 +392,24 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                           <Digits value={top2(r.closeValue)} hilite={hit2 ?? []} tone="blue" /> <Digits value={bottom2(r.closeChange)} hilite={hit2 ?? []} tone="blue" />
                           <div className="mt-0.5 text-xs tabular-nums text-slate-400">ปิด {fmtNum(r.closeValue)} <Change value={r.closeChange} pct={r.closeValue - r.closeChange ? r.closeChange / (r.closeValue - r.closeChange) : undefined} className="text-xs" /></div>
                         </> : <div className="space-y-1"><CloseYahooButton recordId={r.id} label={`เติมปิดจาก ${srcLabel}`} /><CloseForm recordId={r.id} /></div>}
+                        {/* นิเคอิเช้า: ขั้นวิเคราะห์ % ของสูตร (formulas/stocks/nikkei.ts pickNikkeiAm) — 40 วันที่คล้าย → โอกาสปิดเช้าบวก */}
+                        {nikkeiSession(stock.symbol) === "am" && r.openChange !== 0 && (() => {
+                          const a = nikkeiAmAnalysis(r.openValue, r.openChange, closed.filter((d) => d.date.getTime() < r.date.getTime()));
+                          const up = hasClose(r) ? r.closeChange > 0 : null;
+                          return <div className="mt-1 text-xs tabular-nums text-violet-700" title="40 วันในอดีตของนิเคอิเช้าที่ % ปิดเช้างวดก่อน + % เปิด ใกล้ที่สุด → สัดส่วนที่ปิดเช้าบวก · ใช้ถ่วงตารางคู่เขียว/แดง">
+                            {a.prevPct !== null && <>ปิดเช้างวดก่อน {a.prevPct > 0 ? "+" : ""}{a.prevPct.toFixed(2)}% · </>}เปิด {a.openPct > 0 ? "+" : ""}{a.openPct.toFixed(2)}% → ปิดบวก {Math.round(a.pUp * 100)}% (ตาราง{a.pUp >= 0.5 ? "เขียว" : "แดง"}เด่น)
+                            {up !== null && <span className={(up === (a.pUp >= 0.5)) ? " text-emerald-700" : " text-slate-500"}> · ปิดจริง{up ? "บวก" : "ลบ"}</span>}
+                          </div>;
+                        })()}
+                        {/* สิงคโปร์: ขั้นวิเคราะห์ % ของสูตร (formulas/stocks/singapore.ts) — 40 วันที่คล้าย → โอกาสปิดบวก + ช่วงราคาปิด เทียบปิดจริง */}
+                        {sg && (() => {
+                          const a = singaporeAnalysis(r.openValue, r.openChange, closed.filter((d) => d.date.getTime() < r.date.getTime()));
+                          const inRange = hasClose(r) ? r.closeValue >= a.lo && r.closeValue <= a.hi : null;
+                          return <div className="mt-1 text-xs tabular-nums text-violet-700" title="40 วันในอดีตที่ % ปิดงวดก่อน + % เปิด ใกล้ที่สุด · ช่วงปิด = ราคาเปิด ± การวิ่งหลังเปิดของวันเหล่านั้น (25%–75%)">
+                            {a.prevPct !== null && <>ปิดเมื่อวาน {a.prevPct > 0 ? "+" : ""}{a.prevPct.toFixed(2)}% · </>}เปิด {a.openPct > 0 ? "+" : ""}{a.openPct.toFixed(2)}% → ปิดบวก {Math.round(a.pUp * 100)}% · ปิดน่าจะ {fmtNum(a.lo)}–{fmtNum(a.hi)}
+                            {inRange !== null && <span className={inRange ? " text-emerald-700" : " text-slate-500"}> · {inRange ? "ปิดในช่วง" : "ปิดนอกช่วง"}</span>}
+                          </div>;
+                        })()}
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap text-xs">
                         <HitBadge pick={[star, ...pair.filter((d) => d !== star)]} hits={hit1 === null ? null : hit2 ?? []} drillHits={drillHits} pending={hasClose(r) ? "–" : "รอผล"} />
