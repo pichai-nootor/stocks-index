@@ -37,6 +37,10 @@ export default async function SummaryPage({ searchParams }: PageProps<"/summary"
   await lockStockPicks(stocks); // หุ้นปกติ: ล็อกเลขของงวดที่รอผล (เหมือน VIP) — รายงานนับเฉพาะเลขล็อก
   await lockFlowSystem(userId, flowDays(stocks), openedSlots(stocks)); // เลขไหลล่วงหน้าของระบบ: ล็อกจากหน้าแรกด้วย กันวันที่ไม่ได้เปิดเมนูเลขไหลก่อน 09:30
   const [regular, vip] = [regularSummary(stocks, day, stake), await vipSummary(userId, day, stake, day === today)];
+  // VIP งวดถัดไป (พรุ่งนี้ · VIP ออกทุกวัน): ผลวันนี้ออกครบแล้ว → ฟัน + ล็อกเลขรอบแรกไว้เลย ให้ก๊อปไปแทงได้ (ผู้ใช้ขอ 25 ต.ค. 69)
+  //   รอบบ่ายของพรุ่งนี้ยังรอผลรอบเช้า (vipWaitReason) → ไม่ล็อก ไม่ก๊อป
+  const nextDay = shift(today, 1);
+  const vipNext = day === today ? await vipSummary(userId, nextDay, stake, true) : [];
   const to = monthEnd(day) < today ? monthEnd(day) : today;
   const m = await monthMoney(userId, stocks, to, stake);
   const month = { label: `${new Date(day).toLocaleDateString("th-TH", { month: "short", year: "2-digit" })} (1–${Number(to.slice(8))})`, regular: m.regular, vip: m.vip, days: m.days, stake };
@@ -60,7 +64,7 @@ export default async function SummaryPage({ searchParams }: PageProps<"/summary"
         ))}
         <span className="text-slate-500">บาท</span>
       </div>
-      <DaySummary dateLabel={`${isToday ? "วันนี้ · " : ""}${new Date(day).toLocaleDateString("th-TH", { weekday: "short", day: "numeric", month: "short", year: "2-digit" })}`} regular={regular} vip={vip} month={month} />
+      <DaySummary dateLabel={`${isToday ? "วันนี้ · " : ""}${new Date(day).toLocaleDateString("th-TH", { weekday: "short", day: "numeric", month: "short", year: "2-digit" })}`} regular={regular} vip={vip} month={month} next={vipNext.some((x) => x.pick) ? { label: new Date(nextDay).toLocaleDateString("th-TH", { weekday: "short", day: "numeric", month: "short", year: "2-digit" }), items: vipNext } : undefined} />
       <MonthBoard label={month.label} items={m.items} />
     </div>
   );
