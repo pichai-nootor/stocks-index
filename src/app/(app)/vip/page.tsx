@@ -157,11 +157,14 @@ export default async function VipPage({ searchParams }: PageProps<"/vip">) {
       const lockRow = all.find((x) => x.top === "" && x.date.toISOString().slice(0, 10) === nextDate && x.round === round);
       const lockedP = lockRow?.pick && lockedByCurrent(lockRow.date) ? lockRow.pick.split("-") : null;
       const wait = vipWaitReason(market, nextDate, round, has);
-      if (wait && !lockedP) return { round, wait, pick: null, drill: [] as VipDrillSet[] };
+      if (wait && !lockedP) return { round, wait, pick: null, drill: [] as VipDrillSet[], b: null, c: null };
       const c = F.pick(asc, lockRow?.open ?? nextOpen, round);
       if (!c) return null;
       const pk = lockedP?.length === 2 ? { ...c, digits: [lockedP[0], lockedP[1]] as [string, string] } : c;
-      return { round, wait: null, pick: pk, drill: (lockedP && lockedDrill(lockRow?.drill)) || F.drill(pk, asc) };
+      // ช่องทดลอง/แผน C ของงวดที่กำลังจะออก (ผู้ใช้ขอ 25 ต.ค. 69) — แค่โชว์ ไม่ล็อก ไม่นับคะแนน
+      const bp = F.experimental && !wait ? F.experimental.pick(lockRow?.open ?? nextOpen, asc) : null;
+      const cp = F.experimental2 && !wait ? F.experimental2.pick(regularByDate.get(nextDate)) : null;
+      return { round, wait: null, pick: pk, drill: (lockedP && lockedDrill(lockRow?.drill)) || F.drill(pk, asc), b: bp ? { pick: bp, drill: F.drill(bp, asc) } : null, c: cp ? { pick: cp, drill: F.drill(cp, asc) } : null };
     }
     return null;
   })();
@@ -392,8 +395,8 @@ export default async function VipPage({ searchParams }: PageProps<"/vip">) {
                       <div><span className="rounded bg-amber-200 px-1.5 py-0.5 text-[10px] font-medium text-amber-900">กำลังจะออก</span></div>
                     </td>
                     <td className="px-3 py-2">{upcoming.pick ? <PickBlock pick={upcoming.pick} drill={upcoming.drill} row /> : <span className="text-xs text-amber-800">⏳ {upcoming.wait}</span>}</td>
-                    {F.experimental && <td className="px-3 py-2" />}
-                    {F.experimental2 && <td className="px-3 py-2" />}
+                    {F.experimental && <td className="px-3 py-2">{upcoming.b ? <PickBlock pick={upcoming.b.pick} drill={upcoming.b.drill} row muted /> : <span className="text-xs text-slate-400">–</span>}</td>}
+                    {F.experimental2 && <td className="px-3 py-2">{upcoming.c ? <PickBlock pick={upcoming.c.pick} drill={upcoming.c.drill} row muted /> : <span className="text-xs text-slate-400">– รอผลหุ้นปกติของวันนี้</span>}</td>}
                     <td className="px-3 py-2 text-xs text-slate-400">รอผล</td>
                     <td className="px-3 py-2">{upcoming.pick?.order ? <RankStrip order={upcoming.pick.order} picked={upcoming.pick.digits} rates={rankRate} /> : <span className="text-xs text-slate-400">–</span>}</td>
                     <td className="px-3 py-2" />

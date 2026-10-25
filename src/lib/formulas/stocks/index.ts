@@ -1,6 +1,6 @@
 /**
  * ทะเบียนสูตรต่อหุ้น (ปกติ) — ไฟล์นี้แค่ "ส่งต่อ" ไปยังไฟล์ของหุ้นแต่ละตัว ไม่มีกฎของหุ้นตัวไหนอยู่ที่นี่
- *   แก้สูตรหุ้นไหน → แก้ formulas/stocks/<หุ้น>.ts ของหุ้นนั้นเท่านั้น (china / nikkei / egypt / sensex / hangseng / dowjones / singapore)
+ *   แก้สูตรหุ้นไหน → แก้ formulas/stocks/<หุ้น>.ts ของหุ้นนั้นเท่านั้น (china / nikkei / egypt / sensex / hangseng / dowjones / singapore / taiwan)
  *   หุ้นใหม่ = เพิ่มไฟล์ของตัวเอง แล้วเพิ่มบรรทัดใน pickTwoFor
  *   ทุกหน้าที่โชว์ผลฟัน (หน้าแรก/รายงาน/ตารางหุ้น/หน้าหุ้น/วิเคราะห์เลข) ต้องเรียกผ่าน pickTwoFor → เลขตรงกันทุกหน้า
  */
@@ -10,18 +10,20 @@ import { chinaSession } from "@/lib/stocks/china";
 import { hangSengSession } from "@/lib/stocks/hangseng";
 import { isDowJones } from "@/lib/stocks/dowjones";
 import { isSingapore } from "@/lib/stocks/singapore";
+import { isTaiwan } from "@/lib/stocks/taiwan";
 import { top2, bottom2, type TwoPick } from "@/lib/digits";
 import type { RecordLike } from "@/lib/stats";
 import { pickHangSeng } from "./hangseng";
 import { pickDowJones } from "./dowjones";
 import { pickSingapore } from "./singapore";
+import { pickTaiwan } from "./taiwan";
 import { pickEgypt } from "./egypt";
 import { pickChina } from "./china";
 import { pickNikkei } from "./nikkei";
 import { pickSensex } from "./sensex";
 
-export type StockFormulaId = "sensex" | "nikkei" | "egypt" | "china" | "hangseng" | "dowjones" | "singapore";
-export const stockFormulaId = (symbol: string): StockFormulaId => (nikkeiSession(symbol) ? "nikkei" : isEgypt(symbol) ? "egypt" : chinaSession(symbol) ? "china" : hangSengSession(symbol) ? "hangseng" : isDowJones(symbol) ? "dowjones" : isSingapore(symbol) ? "singapore" : "sensex");
+export type StockFormulaId = "sensex" | "nikkei" | "egypt" | "china" | "hangseng" | "dowjones" | "singapore" | "taiwan";
+export const stockFormulaId = (symbol: string): StockFormulaId => (nikkeiSession(symbol) ? "nikkei" : isEgypt(symbol) ? "egypt" : chinaSession(symbol) ? "china" : hangSengSession(symbol) ? "hangseng" : isDowJones(symbol) ? "dowjones" : isSingapore(symbol) ? "singapore" : isTaiwan(symbol) ? "taiwan" : "sensex");
 
 const amSessionOf = (symbol: string) => (chinaSession(symbol) === "pm" ? "cn" : nikkeiSession(symbol) === "pm" ? "nk" : null);
 /** หุ้นนี้ใช้เลขรอบเช้าไหม (รอบบ่ายจีน/นิเคอิ — กฎอยู่ใน china.ts / nikkei.ts) */
@@ -48,6 +50,7 @@ export function pickTwoFor(symbol: string, openValue: number, openChange: number
   if (hs) return pickHangSeng(openValue, openChange, history, hs);
   if (isDowJones(symbol)) return pickDowJones(openValue, openChange, history);
   if (isSingapore(symbol)) return pickSingapore(openValue, openChange, history);
+  if (isTaiwan(symbol)) return pickTaiwan(openValue, openChange, history);
   if (isEgypt(symbol)) return pickEgypt(openValue, openChange, history);
   if (cn) return pickChina(openValue, openChange, history, cn, amOfDay);
   if (nk) return pickNikkei(openValue, openChange, history, nk, amOfDay);

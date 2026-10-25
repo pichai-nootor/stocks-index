@@ -5,6 +5,8 @@ import { LateCard } from "@/components/late-card";
 import { hangSengSession } from "@/lib/stocks/hangseng";
 import { isDowJones } from "@/lib/stocks/dowjones";
 import { isSingapore } from "@/lib/stocks/singapore";
+import { isTaiwan } from "@/lib/stocks/taiwan";
+import { nikkeiSession } from "@/lib/stocks/nikkei";
 import { TwoPickCard } from "@/components/two-pick";
 import { CloseYahooButton } from "@/components/close-yahoo-button";
 import { LiveCard } from "@/components/live-card";
@@ -33,7 +35,7 @@ export function TodayCard({ stock, record, priceStats, priceHistory = [], live =
   amDigits?: AmDigits;
 }) {
   const oTop = top2(record.openValue), oBot = bottom2(record.openChange);
-  const pp = hangSengSession(stock.symbol) || isDowJones(stock.symbol) || isSingapore(stock.symbol) ? undefined : pickPair(record.openValue, record.openChange, priceHistory); // ฮั่งเส็ง/ดาวโจนส์/สิงคโปร์ยังไม่มีหลักฐานคู่ผูกของตัวเอง
+  const pp = hangSengSession(stock.symbol) || isDowJones(stock.symbol) || isSingapore(stock.symbol) || isTaiwan(stock.symbol) || nikkeiSession(stock.symbol) ? undefined : pickPair(record.openValue, record.openChange, priceHistory); // ฮั่งเส็ง/ดาวโจนส์/สิงคโปร์ยังไม่มีหลักฐานคู่ผูกของตัวเอง · นิเคอิ: ผู้ใช้สั่งเอาออก 21 ต.ค. 69
   const two = pickTwoFor(stock.symbol, record.openValue, record.openChange, priceHistory, { date: record.date, am: amDigits });
   const late = record.liveValue !== null ? latePickFor(stock.symbol, record.openValue, record.openChange, record.liveValue, priceHistory, { date: record.date, am: amDigits }) : null; // ฟันช่วงท้าย (ทดลอง) — โชว์คู่กับเลขฟันปกติ
   const D = prevCloseCents(record.openValue, record.openChange);

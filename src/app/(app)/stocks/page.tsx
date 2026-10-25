@@ -12,6 +12,8 @@ import { DowJonesSetup } from "./dowjones-setup";
 import { isDowJones } from "@/lib/stocks/dowjones";
 import { SingaporeSetup } from "./singapore-setup";
 import { isSingapore } from "@/lib/stocks/singapore";
+import { TaiwanSetup } from "./taiwan-setup";
+import { isTaiwan } from "@/lib/stocks/taiwan";
 
 /**
  * ตลาดเรียงตามเวลาผลออก (ไทย) — รอบเช้า/บ่ายของตลาดเดียวกันอยู่การ์ดเดียว
@@ -22,6 +24,7 @@ const MARKETS: { title: string; source: string; rows: { symbol: string; round?: 
   { title: "นิเคอิ", source: "Nikkei 225 · Yahoo", rows: [{ symbol: "NIKKEI เช้า", round: "เช้า", time: "09:30 น." }, { symbol: "NIKKEI บ่าย", round: "บ่าย", time: "13:30 น.", manual: true }] },
   { title: "จีน", source: "SZSE Component · Yahoo", rows: [{ symbol: "CHINA เช้า", round: "เช้า", time: "10:30 น." }, { symbol: "CHINA บ่าย", round: "บ่าย", time: "14:00 น.", manual: true }] },
   { title: "ฮั่งเส็ง", source: "Hang Seng Index · Yahoo", rows: [{ symbol: "HSI เช้า", round: "เช้า", time: "11:00 น." }, { symbol: "HSI บ่าย", round: "บ่าย", time: "15:00 น.", manual: true }] },
+  { title: "ไต้หวัน", source: "TAIEX · Yahoo ^TWII", rows: [{ symbol: "TAIWAN", time: "~12:30 น." }] },
   { title: "สิงคโปร์", source: "Straits Times Index · Yahoo ^STI", rows: [{ symbol: "SGX", time: "~16:10 น." }] },
   { title: "อินเดีย", source: "BSE SENSEX · BSE / Yahoo", rows: [{ symbol: "BSE SENSEX", time: "17:00 น." }] },
   { title: "อียิปต์", source: "EGX 30 · mubasher.info", rows: [{ symbol: "EGX30", time: "18:30 น." }] },
@@ -107,6 +110,7 @@ export default async function StocksPage() {
       </div>
       {!stocks.some((s) => isDowJones(s.symbol)) && <div className="card"><DowJonesSetup label="เพิ่มหุ้นดาวโจนส์ + ดึงย้อนหลัง 50 วัน" /></div>}
       {!stocks.some((s) => isSingapore(s.symbol)) && <div className="card"><SingaporeSetup label="เพิ่มหุ้นสิงคโปร์ (STI) + ดึงย้อนหลัง 50 วัน" /></div>}
+      {!stocks.some((s) => isTaiwan(s.symbol)) && <div className="card"><TaiwanSetup label="เพิ่มหุ้นไต้หวัน (TAIEX) + ดึงย้อนหลัง 50 วัน" /></div>}
     </div>
   );
 }

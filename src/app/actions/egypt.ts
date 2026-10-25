@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
-import { EGYPT_STOCK, egyptNextTradingDay, fetchEgyptQuote } from "@/lib/stocks/egypt";
+import { EGYPT_STOCK, egyptNextTradingDay } from "@/lib/stocks/egypt";
 
 export type EgyptOpenState = { error?: string; date?: string } | undefined;
 
@@ -21,11 +21,9 @@ export async function openEgyptNextDay(prev: EgyptOpenState): Promise<EgyptOpenS
   const date = egyptNextTradingDay(last.date.toISOString().slice(0, 10));
   const exists = await prisma.record.findFirst({ where: { stockId: stock.id, date: new Date(`${date}T00:00:00.000Z`) } });
   if (exists) return { error: `วัน ${date} บันทึกไว้แล้ว` };
-  // ใช้ราคาเปิดจริงของวันนั้นถ้าตลาดเปิดแล้ว (แท่งแรกในไฟล์รายนาที) — ไม่งั้นค่าเปลี่ยนแปลงจะเป็น 0 และช่องเปิดจะว่าง
-  const q = await fetchEgyptQuote();
-  const realOpen = q && q.tradingDate === date && q.open > 0 ? q.open : null;
-  const openValue = realOpen ?? last.closeValue;
-  const openChange = realOpen ? r2(realOpen - last.closeValue) : 0;
+  // เปิด = ปิดวันก่อนที่บันทึกไว้ เปลี่ยนแปลง 0 — เท่ากับช่อง "Open" ของ mubasher/investing เสมอ (ผู้ใช้ยืนยัน 21 ต.ค. 69)
+  //   ไม่อ่านจากหน้าเว็บ เพราะช่วงเพิ่งเปิดตลาดหน้าเว็บอาจยังค้างค่าของเมื่อวาน · ไม่ใช้แท่งนาทีแรก (ผู้ใช้แจ้งว่าผิด)
+  const openValue = last.closeValue, openChange = 0;
   await prisma.record.create({ data: { stockId: stock.id, date: new Date(`${date}T00:00:00.000Z`), openValue, openChange } });
   revalidatePath("/dashboard"); revalidatePath(`/stocks/${stock.id}`);
   return { date };

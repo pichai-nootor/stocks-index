@@ -10,13 +10,14 @@ import { chinaSession, fetchChinaQuote } from "@/lib/stocks/china";
 import { hangSengSession, fetchHangSengQuote } from "@/lib/stocks/hangseng";
 import { isDowJones, DOW_YAHOO } from "@/lib/stocks/dowjones";
 import { isSingapore, SINGAPORE_YAHOO, fetchSingaporeQuote } from "@/lib/stocks/singapore";
+import { isTaiwan, TAIWAN_YAHOO } from "@/lib/stocks/taiwan";
 
 /** ชื่อหุ้นในระบบ → สัญลักษณ์ Yahoo (เพิ่มได้ตามต้องการ) */
 const SYMBOLS: Record<string, string> = {
   "BSE SENSEX": "^BSESN", SENSEX: "^BSESN", BSESN: "^BSESN",
   "NIFTY 50": "^NSEI", NIFTY: "^NSEI", NSEI: "^NSEI",
 };
-export const yahooSymbol = (stockSymbol: string) => SYMBOLS[stockSymbol.trim().toUpperCase()] ?? (nikkeiSession(stockSymbol) ? "^N225" : isEgypt(stockSymbol) ? "^CASE30" : chinaSession(stockSymbol) ? "399001.SZ" : hangSengSession(stockSymbol) ? "^HSI" : isDowJones(stockSymbol) ? DOW_YAHOO : isSingapore(stockSymbol) ? SINGAPORE_YAHOO : null);
+export const yahooSymbol = (stockSymbol: string) => SYMBOLS[stockSymbol.trim().toUpperCase()] ?? (nikkeiSession(stockSymbol) ? "^N225" : isEgypt(stockSymbol) ? "^CASE30" : chinaSession(stockSymbol) ? "399001.SZ" : hangSengSession(stockSymbol) ? "^HSI" : isDowJones(stockSymbol) ? DOW_YAHOO : isSingapore(stockSymbol) ? SINGAPORE_YAHOO : isTaiwan(stockSymbol) ? TAIWAN_YAHOO : null);
 
 export type Quote = {
   symbol: string;
