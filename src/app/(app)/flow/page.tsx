@@ -2,11 +2,12 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { todayThai } from "@/lib/intraday";
-import { FLOW_ROUNDS, resultOf, countFlow, flowTwo, walkDay, backtest, RANDOM_TWO, guessLocked, nextGuessDate, scoreGuess, systemGuess, thaiHour, SYS_METHOD, type FlowResult, type FlowSlot } from "@/lib/flow";
+import { FLOW_ROUNDS, resultOf, countFlow, flowTwo, flowDrill, FLOW_DRILL_RANDOM, walkDay, backtest, RANDOM_TWO, guessLocked, nextGuessDate, scoreGuess, systemGuess, thaiHour, SYS_METHOD, type FlowResult, type FlowSlot } from "@/lib/flow";
 import { flowDays, openedSlots, lockFlowSystem } from "@/lib/flow-lock";
 import { deleteFlowGuess } from "@/app/actions/flow";
 import { AnalyzeButton } from "./analyze-button";
 import { GuessForm } from "./guess-form";
+import { CopyPending } from "@/components/copy-pending";
 
 /** วันที่ผลออกเกือบครบ (≥8 รอบ) ถึงนับเข้าสถิติเลขทาย — กันวันที่ผลยังไม่ครบไปถ่วงคะแนน */
 const FULL_DAY = 8;
@@ -39,6 +40,7 @@ export default async function FlowPage({ searchParams }: PageProps<"/flow">) {
   const walk = walkDay(done);
   const counts = countFlow(done);
   const now = flowTwo(done);
+  const nowDrill = now.length ? flowDrill(done) : [];
   // ไม่มีข้อมูลเปิด = วันนั้นปิด (ตัดสินได้เมื่อวันผ่านไปแล้ว หรือหลัง 16:00 ไทย · ดาวโจนส์เปิด 20:30 → รอจนวันผ่าน)
   const openedToday = openedSlots(stocks).get(day) ?? new Set<FlowSlot>();
   const hourNow = thaiHour();
@@ -67,6 +69,9 @@ export default async function FlowPage({ searchParams }: PageProps<"/flow">) {
   const chip = (d: string, on: boolean) => <span key={d} className={on ? "rounded bg-amber-200 px-0.5 font-bold text-amber-900" : ""}>{d}</span>;
   const show = (s: string, mark: string[]) => s.split("").map((c, i) => <span key={i}>{chip(c, mark.includes(c))}</span>);
   const nowDs = now.map((x) => x.d);
+  // copy เลขไหล + เจาะ ของรอบที่ยังไม่ออก (รูปแบบเดียวกับปุ่ม copy หน้า VIP/สรุป)
+  const copyItem = (r: (typeof FLOW_ROUNDS)[number]) => ({ label: `${r.label} ${r.time}`, pick: nowDs.length ? nowDs : null, drill: nowDrill, status: "pending" });
+  const dayLabel = new Date(day).toLocaleDateString("th-TH", { weekday: "short", day: "numeric", month: "short", year: "2-digit" });
 
   // เลขไหลที่ผู้ใช้ทายล่วงหน้า → ให้คะแนนกับผลจริงของวันนั้น
   const guesses = (await prisma.flowGuess.findMany({ where: { userId }, orderBy: [{ date: "desc" }, { method: "asc" }] })).map((g) => {
@@ -123,8 +128,17 @@ export default async function FlowPage({ searchParams }: PageProps<"/flow">) {
           )}
           {now.length > 0 && <span className="text-sm text-slate-500">{now.map((x) => `${x.d} ออก ${x.rounds}/${done.length} รอบ`).join(" · ")}</span>}
         </div>
+        {nowDrill.length > 0 && (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-sm">
+            <span className="font-sans text-xs text-slate-500">เจาะ</span>
+            {nowDrill.map((set, i) => <span key={i}>{set.join(" ")}</span>)}
+          </div>
+        )}
         {now.length > 0 && waiting.length > 0 && (
-          <p className="text-sm text-slate-600">รอบที่ยังไม่ออก: {waiting.map((r) => `${r.label} ${r.time}`).join(" · ")}</p>
+          <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
+            <span>รอบที่ยังไม่ออก: {waiting.map((r) => `${r.label} ${r.time}`).join(" · ")}</span>
+            <CopyPending items={waiting.map(copyItem)} title={`เลขไหล · ${dayLabel}`} />
+          </div>
         )}
         {closed.length > 0 && (
           <p className="text-sm text-slate-400">ปิดวันนี้ (ไม่มีข้อมูลเปิด): {closed.map((r) => r.label).join(" · ")}</p>
@@ -230,7 +244,7 @@ export default async function FlowPage({ searchParams }: PageProps<"/flow">) {
         <h2 className="mb-2 font-medium">ผลวันนี้ตามเวลา</h2>
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-xs text-slate-500">
-            <tr><th className="px-2 py-1.5 text-left">เวลา</th><th className="px-2 py-1.5 text-left">หุ้น</th><th className="px-2 py-1.5 text-center">บน</th><th className="px-2 py-1.5 text-center">ล่าง</th><th className="px-2 py-1.5 text-center">เลขไหลก่อนรอบนี้</th><th className="px-2 py-1.5 text-center">เข้า</th></tr>
+            <tr><th className="px-2 py-1.5 text-left">เวลา</th><th className="px-2 py-1.5 text-left">หุ้น</th><th className="px-2 py-1.5 text-center">บน</th><th className="px-2 py-1.5 text-center">ล่าง</th><th className="px-2 py-1.5 text-center">เลขไหลก่อนรอบนี้ · เจาะ</th><th className="px-2 py-1.5 text-center">เข้า</th><th className="px-2 py-1.5 text-center">เจาะ</th></tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {FLOW_ROUNDS.map((r) => {
@@ -241,14 +255,27 @@ export default async function FlowPage({ searchParams }: PageProps<"/flow">) {
                   <td className="px-2 py-1">{r.label}</td>
                   <td className="px-2 py-1 text-center font-mono">{w ? show(w.r.top, nowDs) : isClosed(r.slot) ? "ปิด" : "—"}</td>
                   <td className="px-2 py-1 text-center font-mono">{w ? show(w.r.bottom, nowDs) : "—"}</td>
-                  <td className="px-2 py-1 text-center font-mono">{w?.two.join(" ") || (w ? "—" : nowDs.join(" "))}</td>
+                  <td className="px-2 py-1 text-center font-mono">
+                    {(() => {
+                      const two = w ? w.two : nowDs, drill = w ? w.drill : nowDrill;
+                      if (!two.length) return "—";
+                      return (
+                        <>
+                          <div>{two.join(" ")}</div>
+                          {drill.map((set, i) => <div key={i} className="text-xs text-slate-500">{set.join(" ")}</div>)}
+                          {!w && !isClosed(r.slot) && <div className="mt-0.5"><CopyPending one items={[copyItem(r)]} /></div>}
+                        </>
+                      );
+                    })()}
+                  </td>
                   <td className="px-2 py-1 text-center">{w?.hit === true ? <span className="text-emerald-600">✓</span> : w?.hit === false ? <span className="text-rose-500">✗</span> : ""}</td>
+                  <td className="px-2 py-1 text-center">{w?.drillHit === true ? <span className="text-emerald-600">✓</span> : w?.drillHit === false ? <span className="text-rose-500">✗</span> : ""}</td>
                 </tr>
               );
             })}
           </tbody>
         </table>
-        <p className="mt-2 text-xs text-slate-500">ไฮไลต์ = เลขไหลตอนนี้ · คอลัมน์ “เลขไหลก่อนรอบนี้” = 2 ตัวที่ไหลมากสุดจากรอบก่อนหน้า (ตอนนั้นยังไม่รู้ผลรอบนี้) · ดาวโจนส์ผลออก ~03:05 คืนถัดไป</p>
+        <p className="mt-2 text-xs text-slate-500">ไฮไลต์ = เลขไหลตอนนี้ · คอลัมน์ “เลขไหลก่อนรอบนี้” = 2 ตัวที่ไหลมากสุดจากรอบก่อนหน้า (ตอนนั้นยังไม่รู้ผลรอบนี้) · เจาะ = เลขไหลแต่ละตัวจับคู่กับเลขที่ไหลรองลงมา ชุดละ 6 (กลับได้ · ทดสอบ 625 วันเข้า 42.7% เท่าสุ่ม {(FLOW_DRILL_RANDOM * 100).toFixed(1)}%) · ดาวโจนส์ผลออก ~03:05 คืนถัดไป</p>
       </section>
 
       <section className="card space-y-3">

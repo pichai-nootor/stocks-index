@@ -8,7 +8,7 @@ import { nikkeiSession } from "@/lib/stocks/nikkei";
 import { chinaSession } from "@/lib/stocks/china";
 import { hangSengSession } from "@/lib/stocks/hangseng";
 import { stockFormulaId } from "@/lib/formulas/stocks";
-import { top2, bottom2 } from "@/lib/digits";
+import { top2, bottom2, DRILL_PER_DIGIT } from "@/lib/digits";
 
 const G = "0123456789".split("");
 
@@ -55,9 +55,35 @@ export const flowTwo = (done: FlowResult[]): DigitFlow[] =>
   done.length < 2 ? [] : countFlow(done).sort((a, b) => b.rounds - a.rounds || b.total - a.total || b.last - a.last).slice(0, 2);
 export const hitsAny = (r: FlowResult, ds: string[]) => ds.some((d) => (r.top + r.bottom).includes(d));
 
-/** ไล่ทั้งวัน: แต่ละรอบ (ตั้งแต่รอบที่ 3) ใช้เลขไหลจากรอบก่อนหน้า แล้วดูว่าเข้าไหม */
+/**
+ * เลขเจาะจากเลขไหล (ผู้ใช้ขอ 28 ต.ค. 69) — 2 ชุด × DRILL_PER_DIGIT: เลขไหลแต่ละตัวจับคู่กับเลขที่ไหลรองลงมาตามอันดับ ตัดเบิ้ล ตัดคู่ซ้ำ (กลับได้)
+ *   ทดสอบ IndexDay 625 วัน (ต.ค. 66–ต.ค. 69 · 5,390 รอบ): เจาะมา (ตรง บน/ล่าง กลับได้) 42.7% · จับคู่ไหลน้อย 43.3% · สุ่มคู่ 43.1% = เท่าสุ่มทุกแบบ
+ */
+export const FLOW_DRILL_RANDOM = 0.431;
+const canon = (m: string) => (m[0] <= m[1] ? m : m[1] + m[0]);
+export function flowDrill(done: FlowResult[]): string[][] {
+  const two = flowTwo(done).map((x) => x.d);
+  const order = countFlow(done).sort((a, b) => b.rounds - a.rounds || b.total - a.total || b.last - a.last).map((x) => x.d);
+  const chosen: string[] = [];
+  return two.map((d) => {
+    const set: string[] = [];
+    for (const x of order) {
+      if (set.length >= DRILL_PER_DIGIT) break;
+      const m = d + x;
+      if (x === d || chosen.some((c) => canon(c) === canon(m))) continue;
+      set.push(m); chosen.push(m);
+    }
+    return set;
+  });
+}
+export const drillHits = (r: FlowResult, sets: string[][]) => sets.flat().some((m) => canon(m) === canon(r.top) || canon(m) === canon(r.bottom));
+
+/** ไล่ทั้งวัน: แต่ละรอบ (ตั้งแต่รอบที่ 3) ใช้เลขไหล + เลขเจาะจากรอบก่อนหน้า แล้วดูว่าเข้าไหม */
 export function walkDay(day: FlowResult[]) {
-  return day.map((r, i) => { const two = flowTwo(day.slice(0, i)).map((x) => x.d); return { r, two, hit: two.length ? hitsAny(r, two) : null }; });
+  return day.map((r, i) => {
+    const done = day.slice(0, i), two = flowTwo(done).map((x) => x.d), drill = two.length ? flowDrill(done) : [];
+    return { r, two, drill, hit: two.length ? hitsAny(r, two) : null, drillHit: two.length ? drillHits(r, drill) : null };
+  });
 }
 
 /** ทดสอบย้อนหลัง: วัน → ผลแต่ละรอบ (เรียงตามเวลาแล้ว) · strong = เลขไหลตัวแรกออกมาแล้ว ≥3 รอบ */
