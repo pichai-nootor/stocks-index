@@ -132,7 +132,7 @@ function P({ v }: { v: number }) {
 }
 
 /** แถบรวมเงินของเดือน (วันที่ 1 ถึงวันนี้) — หุ้นปกติ + VIP */
-function MonthBar({ month }: { month: { label: string; regular: MoneyTotal; vip: MoneyTotal; days: number; stake?: number } }) {
+function MonthBar({ month, vipOnly = false }: { month: { label: string; regular: MoneyTotal; vip: MoneyTotal; days: number; stake?: number }; vipOnly?: boolean }) {
   const stake = month.stake ?? BET.stake;
   const t = { n: month.regular.n + month.vip.n, cost: month.regular.cost + month.vip.cost, win: month.regular.win + month.vip.win, profit: month.regular.profit + month.vip.profit };
   // เดือนที่ยังไม่ได้ใช้ระบบ (ไม่มีเลขล็อกเลย) → ไม่แสดงเงิน (ผู้ใช้ขอ 17 ต.ค. 69)
@@ -141,9 +141,9 @@ function MonthBar({ month }: { month: { label: string; regular: MoneyTotal; vip:
     <div className="rounded-md bg-slate-50 px-3 py-2">
       <p className="text-sm">
         <span className="font-medium">รวมเดือน {month.label}:</span> ลงทุน {baht(t.cost)} · ได้ {baht(t.win)} · {t.profit >= 0 ? "กำไร" : "ขาดทุน"} <P v={t.profit} />
-        <span className="text-slate-400"> ({month.days} วัน · รวม {t.n} งวดจากทุกหุ้นและทุกรอบ)</span>
+        <span className="text-slate-400"> ({month.days} วัน · รวม {t.n} งวด{vipOnly ? "" : "จากทุกหุ้นและทุกรอบ"})</span>
       </p>
-      <p className="text-xs text-slate-600">หุ้นปกติ <P v={month.regular.profit} /> <span className="text-slate-400">({month.regular.n} งวด)</span> · หุ้น VIP <P v={month.vip.profit} /> <span className="text-slate-400">({month.vip.n} งวด)</span> · เฉลี่ยวันละ <P v={month.days ? Math.round(t.profit / month.days) : 0} /></p>
+      <p className="text-xs text-slate-600">{!vipOnly && <>หุ้นปกติ <P v={month.regular.profit} /> <span className="text-slate-400">({month.regular.n} งวด)</span> · หุ้น VIP <P v={month.vip.profit} /> <span className="text-slate-400">({month.vip.n} งวด)</span> · </>}เฉลี่ยวันละ <P v={month.days ? Math.round(t.profit / month.days) : 0} /></p>
       <p className="text-[11px] text-slate-400">วิธีแทง: รูดเลขฟัน 2 ตัว (19 ประตู) เลขละ {stake} บาท บน+ล่าง · เจาะ 12 ตัว ตัวละ {stake} กลับเลข บน+ล่าง · จ่ายบาทละ {BET.payout} → ทุน {baht(betCost(2, 12, stake))} ต่องวด · ถูก 1 ใบ = {baht(stake * BET.payout)} · ตัวเลขของวันที่เลือกอยู่ที่หัวแต่ละฝั่งด้านล่าง</p>
     </div>
   );
@@ -151,12 +151,12 @@ function MonthBar({ month }: { month: { label: string; regular: MoneyTotal; vip:
 
 /** สรุปผลของวัน: หุ้นปกติ + หุ้น VIP เข้ากี่งวด ไม่เข้ากี่งวด (นับ "เข้า" = เลขฟัน 2 ตัว มาอย่างน้อย 1 ตัว) */
 /** VIP งวดถัดไป (พรุ่งนี้) ที่ฟันได้แล้ว — เลขล็อกแล้ว ก๊อปไปแทงได้ · รอบที่ยังรอผลเช้าบอกว่ารออะไร */
-function NextVip({ label, items }: { label: string; items: DaySummaryItem[] }) {
+function NextVip({ label, items, title = "หุ้น VIP" }: { label: string; items: DaySummaryItem[]; title?: string }) {
   return (
     <div className="rounded-md border border-blue-100 bg-blue-50/40 px-3 py-2">
       <div className="flex flex-wrap items-center gap-2">
-        <h3 className="font-medium">หุ้น VIP งวดถัดไป · {label}</h3>
-        <CopyPending title={`หุ้น VIP งวดถัดไป · ${label}`} items={items.map(({ label, pick, drill, status }) => ({ label, pick, drill, status }))} />
+        <h3 className="font-medium">{title} งวดถัดไป · {label}</h3>
+        <CopyPending title={`${title} งวดถัดไป · ${label}`} items={items.map(({ label, pick, drill, status }) => ({ label, pick, drill, status }))} />
         <span className="text-[11px] text-slate-400">ล็อกเลขแล้ว — รายงานพรุ่งนี้ใช้เลขชุดนี้</span>
       </div>
       <ul className="mt-1 grid gap-x-4 gap-y-0.5 text-sm sm:grid-cols-2">
@@ -171,19 +171,23 @@ function NextVip({ label, items }: { label: string; items: DaySummaryItem[] }) {
   );
 }
 
-export function DaySummary({ dateLabel, regular, vip, month, next }: { dateLabel: string; regular: DaySummaryItem[]; vip: DaySummaryItem[]; month: { label: string; regular: MoneyTotal; vip: MoneyTotal; days: number; stake?: number }; next?: { label: string; items: DaySummaryItem[] } }) {
+/** vipTitle = มีค่า → การ์ดของกลุ่ม VIP กลุ่มเดียว (เช่น "หุ้น VIP ยุโรป" ที่แยกจากรายงานหลัก) ไม่มีฝั่งหุ้นปกติ */
+export function DaySummary({ dateLabel, regular, vip, month, next, vipTitle, note }: { dateLabel: string; regular: DaySummaryItem[]; vip: DaySummaryItem[]; month: { label: string; regular: MoneyTotal; vip: MoneyTotal; days: number; stake?: number }; next?: { label: string; items: DaySummaryItem[] }; vipTitle?: string; note?: string }) {
+  const only = !!vipTitle;
   return (
     <section className="card space-y-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-lg font-semibold">สรุปผล · {dateLabel}</h2>
-        <p className="text-xs text-slate-500">เข้า = เลขฟัน 2 ตัวมาอย่างน้อย 1 ตัว (ใน 2 ตัวบนหรือล่าง) · เจาะเข้า = เลขเจาะตรง 2 ตัวบนหรือล่าง กลับได้ (ชี้ที่ป้ายเพื่อดูเลข) · VIP ใช้เลขที่ล็อกไว้ก่อนผลออก · ไม่รวมอินเดีย VIP (เก็บสถิติก่อน)</p>
+        <h2 className="text-lg font-semibold">{only ? vipTitle : "สรุปผล"} · {dateLabel}</h2>
+        <p className="text-xs text-slate-500">{note ?? "เข้า = เลขฟัน 2 ตัวมาอย่างน้อย 1 ตัว (ใน 2 ตัวบนหรือล่าง) · เจาะเข้า = เลขเจาะตรง 2 ตัวบนหรือล่าง กลับได้ (ชี้ที่ป้ายเพื่อดูเลข) · VIP ใช้เลขที่ล็อกไว้ก่อนผลออก · ไม่รวมอินเดีย VIP (เก็บสถิติก่อน)"}</p>
       </div>
-      <MonthBar month={month} />
-      {next && <NextVip {...next} />}
-      <div className="grid gap-5 lg:grid-cols-2">
-        <Group title="หุ้นปกติ" items={regular} dateLabel={dateLabel} />
-        <Group title="หุ้น VIP" items={vip} dateLabel={dateLabel} />
-      </div>
+      <MonthBar month={month} vipOnly={only} />
+      {next && <NextVip {...next} title={vipTitle} />}
+      {only ? <Group title={vipTitle} items={vip} dateLabel={dateLabel} /> : (
+        <div className="grid gap-5 lg:grid-cols-2">
+          <Group title="หุ้นปกติ" items={regular} dateLabel={dateLabel} />
+          <Group title="หุ้น VIP" items={vip} dateLabel={dateLabel} />
+        </div>
+      )}
     </section>
   );
 }

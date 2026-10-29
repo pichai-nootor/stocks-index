@@ -23,6 +23,8 @@ export const VIP_MARKETS = [
   { code: "kr", label: "หุ้นเกาหลี VIP", rounds: [2], closeThai: { 2: "12:35" } },
   { code: "sg", label: "หุ้นสิงคโปร์ VIP", rounds: [2], closeThai: { 2: "17:05" } }, // ฟีดจบ 18:05 (เวลาสิงคโปร์ = ไทย +1 ชม.)
   { code: "uk", label: "หุ้นอังกฤษ VIP", rounds: [2], closeThai: { 2: "21:50" } }, // หน้า /live/ukx ของ stocks-vip.com ดึงผลจาก lottosuperrich (ดู fetchUkHistory)
+  { code: "de", label: "หุ้นเยอรมัน VIP", rounds: [2], closeThai: { 2: "22:50" } }, // /live/dax → lottosuperrich "de" (เพิ่ม 29 ต.ค. 69)
+  { code: "ru", label: "หุ้นรัสเซีย VIP", rounds: [2], closeThai: { 2: "23:50" } }, // /live/rux → lottosuperrich "ru" (เพิ่ม 29 ต.ค. 69)
 ] as const;
 export type VipMarket = (typeof VIP_MARKETS)[number]["code"];
 export const isVipMarket = (s: string): s is VipMarket => VIP_MARKETS.some((m) => m.code === s);
@@ -92,7 +94,7 @@ const parseRounds = (date: string, row: Record<string, unknown>, out: VipHistory
  * บางตลาด (ฮั่งเส็ง) ฟีดราคาวันนี้มีช่อง results ของวันนั้นด้วย ซึ่งมาเร็วกว่าตารางประวัติ → รวมเข้าไปด้วย
  */
 export async function fetchVipHistory(market: VipMarket): Promise<VipHistoryRow[] | null> {
-  if (market === "uk") return fetchUkHistory();
+  if (LSR_CODE[market]) return fetchUkHistory(market);
   try {
     const res = await fetch(`${API}/history/${market}?t=${Date.now()}`, opts());
     if (!res.ok) return null;
@@ -121,20 +123,23 @@ export async function fetchVipHistory(market: VipMarket): Promise<VipHistoryRow[
  *   /history/gb ให้ย้อนหลังแค่ 5 วัน (ไม่รวมวันนี้) · /result/gb = งวดวันนี้ (ใช้เมื่อถึงเวลาประกาศ show_1st ไทยแล้วเท่านั้น)
  */
 const UK_API = "https://gcp.lottosuperrich.com";
+/** ตลาดที่ผลมาจาก lottosuperrich (รูปแบบเดียวกันทุกตัว) → รหัสในเว็บนั้น · เยอรมัน /live/dax · รัสเซีย /live/rux (ตรวจ 29 ต.ค. 69: raakaadee ตรง 10/10) */
+const LSR_CODE: Partial<Record<VipMarket, string>> = { uk: "gb", de: "de", ru: "ru" };
 type UkRow = { lotto_date?: unknown; show_1st?: unknown; results?: { prize_1st?: unknown; prize_2nd?: unknown } | null };
-async function fetchUkHistory(): Promise<VipHistoryRow[] | null> {
+async function fetchUkHistory(market: VipMarket = "uk"): Promise<VipHistoryRow[] | null> {
+  const code = LSR_CODE[market] ?? "gb";
   const toRow = (x: UkRow): VipHistoryRow | null => {
     const d = String(x.lotto_date ?? ""), p1 = String(x.results?.prize_1st ?? ""), p2 = String(x.results?.prize_2nd ?? "");
     return /^\d{4}-\d{2}-\d{2}$/.test(d) && /^\d{5}$/.test(p1) && /^\d{5}$/.test(p2) ? { date: d, round: 2, top: p1.slice(-3), bottom: p2.slice(-2) } : null;
   };
   try {
-    const res = await fetch(`${UK_API}/history/gb?t=${Date.now()}`, opts());
+    const res = await fetch(`${UK_API}/history/${code}?t=${Date.now()}`, opts());
     if (!res.ok) return null;
     const json = await res.json();
     if (json?.status !== "success" || !Array.isArray(json.data)) return null;
     const out = (json.data as UkRow[]).map(toRow).filter((x): x is VipHistoryRow => x !== null);
     try {
-      const today = (await (await fetch(`${UK_API}/result/gb?t=${Date.now()}`, opts())).json())?.data as UkRow | undefined;
+      const today = (await (await fetch(`${UK_API}/result/${code}?t=${Date.now()}`, opts())).json())?.data as UkRow | undefined;
       const nowThai = new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ");
       const row = today && String(today.show_1st ?? "9999") <= nowThai ? toRow(today) : null; // ก่อนเวลาประกาศอาจยังเป็นเลขหมุน
       if (row && !out.some((x) => x.date === row.date)) out.push(row);
@@ -146,9 +151,9 @@ async function fetchUkHistory(): Promise<VipHistoryRow[] | null> {
 }
 
 /** ราคาวันนี้ของอังกฤษ VIP จากกราฟ /chart/gb (รูปแบบใกล้ฟีด stocks-vip: open + prices รายนาที + times) */
-async function fetchUkToday(): Promise<VipToday | null> {
+async function fetchUkToday(market: VipMarket = "uk"): Promise<VipToday | null> {
   try {
-    const res = await fetch(`${UK_API}/chart/gb?t=${Date.now()}`, opts());
+    const res = await fetch(`${UK_API}/chart/${LSR_CODE[market] ?? "gb"}?t=${Date.now()}`, opts());
     if (!res.ok) return null;
     const d = (await res.json())?.data;
     const list: { time?: string; price?: unknown; diff?: unknown; datetime?: string }[] = Array.isArray(d?.prices) ? d.prices : [];
@@ -160,7 +165,7 @@ async function fetchUkToday(): Promise<VipToday | null> {
     const date = String(d.date), endTime = times[times.length - 1], lastTime = String(last.time);
     // ไม่เก็บราคาเปิด (ผู้ใช้สั่ง 13 ต.ค. 69): สูตรไม่ใช้ และผลมาจากราคาแถวสุดท้าย + diff → เก็บแค่ราคาปิด + diff ตอนผลออก
     const feedDone = lastTime >= endTime;
-    return { date, open: null, last: price, diff, rounds: [], lastTime, endTime, closed: feedDone || pastCloseThai("uk", date), feedDone, updatedAt: String(last.datetime ?? "") };
+    return { date, open: null, last: price, diff, rounds: [], lastTime, endTime, closed: feedDone || pastCloseThai(market, date), feedDone, updatedAt: String(last.datetime ?? "") };
   } catch {
     return null;
   }
@@ -184,7 +189,7 @@ export type VipToday = {
 
 /** ราคาวันนี้ (เปิด + ล่าสุด) — ใช้ดู D = ทศนิยมของเปิด ตั้งแต่ตลาดเปิด และเก็บ open/close ตอนปิด */
 export async function fetchVipToday(market: VipMarket): Promise<VipToday | null> {
-  if (market === "uk") return fetchUkToday();
+  if (LSR_CODE[market]) return fetchUkToday(market);
   try {
     const res = await fetch(`${API}/${market}?t=${Date.now()}`, opts());
     if (!res.ok) return null;

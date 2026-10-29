@@ -92,7 +92,8 @@ export async function addVipResult(_prev: ActionState, formData: FormData): Prom
 export async function lockVipPick(userId: string, market: string, date: Date, round: number) {
   if (!isVipMarket(market)) return;
   const row = await prisma.vipResult.findUnique({ where: { userId_market_date_round: { userId, market, date, round } } });
-  if (!row || row.pick) return;
+  // ผลออกแล้ว → ห้ามล็อก (29 ต.ค. 69: เยอรมันงวด 29 ต.ค. ถูกล็อกตอน 23:18 หลังผลออก 22:50 เพราะผลเข้าระบบก่อนเปิดหน้า) — รายงานนับเฉพาะเลขที่ล็อกก่อนผลออก
+  if (!row || row.pick || row.top !== "") return;
   // ห้ามล็อกรอบหลังก่อนที่ผลรอบก่อนของวันเดียวกันจะออก: สูตรใช้ "งวดล่าสุด" เป็นตัวแปรหลัก ถ้าล็อกตอนเช้าจะได้เลขเดียวกับรอบเช้าแล้วแก้ไม่ได้
   // (เห็นในข้อมูลจริง: ฮั่งเส็ง 25–27 ก.ย. 69 ล็อกรอบเช้า/บ่ายเป็นเลขเดียวกันทั้งคู่ · จีน/นิเคอิ 25–26 ก.ย. เช่นกัน) — ปล่อยให้ล็อกรอบนี้ตอนโหลดหน้าครั้งถัดไปหลังผลรอบเช้าเข้าแทน
   const earlier = (vipMarket(market).rounds as readonly number[]).filter((r) => r < round);

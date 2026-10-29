@@ -10,6 +10,8 @@ import krHistory from "@/data/vip-history/kr.json";
 import twHistory from "@/data/vip-history/tw.json";
 import sgHistory from "@/data/vip-history/sg.json";
 import ukHistory from "@/data/vip-history/uk.json";
+import deHistory from "@/data/vip-history/de.json";
+import ruHistory from "@/data/vip-history/ru.json";
 import jpHistory from "@/data/vip-history/jp.json";
 import rankRates from "@/data/vip-history/rank-rates.json";
 import { fmtNum, fmtChange } from "@/lib/stats"; // แค่ฟอร์แมตตัวเลข — การวิเคราะห์ VIP ใช้ src/lib/formulas/vip.ts เท่านั้น
@@ -96,7 +98,7 @@ export default async function VipPage({ searchParams }: PageProps<"/vip">) {
   const F = formulaFor(market); // สูตรของตลาดนี้ (src/lib/formulas/<market>.ts)
   const rates = (rankRates as Record<string, { n: number; rank: number[] }>)[market];
   const rankRate = rates && rates.n >= 100 ? rates.rank : undefined;
-  const bundledCount = market === "cn" ? (cnHistory as unknown[]).length : market === "hk" ? (hkHistory as unknown[]).length : market === "kr" ? (krHistory as unknown[]).length : market === "jp" ? (jpHistory as unknown[]).length : market === "tw" ? (twHistory as unknown[]).length : market === "sg" ? (sgHistory as unknown[]).length : market === "uk" ? (ukHistory as unknown[]).length : 0;
+  const bundledCount = market === "cn" ? (cnHistory as unknown[]).length : market === "hk" ? (hkHistory as unknown[]).length : market === "kr" ? (krHistory as unknown[]).length : market === "jp" ? (jpHistory as unknown[]).length : market === "tw" ? (twHistory as unknown[]).length : market === "sg" ? (sgHistory as unknown[]).length : market === "uk" ? (ukHistory as unknown[]).length : market === "de" ? (deHistory as unknown[]).length : market === "ru" ? (ruHistory as unknown[]).length : 0;
 
   const today = await fetchVipToday(market);
   if (today) await rememberVipOpen(userId, market, today); // เก็บราคาเปิดวันนี้อัตโนมัติ (แถวรอผล)
@@ -184,6 +186,7 @@ export default async function VipPage({ searchParams }: PageProps<"/vip">) {
             <h1 className="text-2xl font-semibold">{info.label}</h1>
             <p className="text-sm text-slate-500">ผลจาก <a href="https://stocks-vip.com/" target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">stocks-vip.com</a> · บน 3 หลัก / ล่าง 2 หลัก · ออกผล {info.rounds.map((r) => roundCloseThai(market, r)).join(" / ")} น. ไทย</p>
           </div>
+          <Link href="/vip/year" className="btn-ghost border border-slate-200">📊 สรุปทั้งปี</Link>
         </div>
         {/* แท็บตลาด — เลื่อนซ้ายขวาได้บนมือถือ */}
         <nav className="-mx-1 flex gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1 shadow-sm">

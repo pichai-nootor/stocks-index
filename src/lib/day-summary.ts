@@ -20,8 +20,14 @@ import { betCost, betResult } from "@/lib/bet";
  * ตลาด VIP ที่ยังไม่นับในหน้าสรุป (ผู้ใช้สั่ง 12 ต.ค. 69): อินเดีย VIP ยังไม่น่าลงทุน — เก็บสถิติทุกวันในหน้า VIP ต่อไปจนครบ ~100 งวดก่อน
  *   เอารหัสออกจากลิสต์นี้เมื่อจะกลับมานับ
  */
-export const REPORT_SKIP_VIP: readonly string[] = ["in", "uk"]; // uk: ผู้ใช้ให้เอาออกจากรายงานก่อน 14 ต.ค. 69 (ยังเก็บผลในหน้า VIP)
+export const REPORT_SKIP_VIP: readonly string[] = ["in", "uk", "de", "ru"]; // uk: ผู้ใช้ให้เอาออกจากรายงานก่อน 14 ต.ค. 69 (ยังเก็บผลในหน้า VIP) · de/ru: เพิ่ม 29 ต.ค. 69 ยังไม่ได้เล่นจริง — ผู้ใช้สั่งเมื่อไหร่ค่อยเอาออก
 const REPORT_VIP = VIP_MARKETS.filter((m) => !REPORT_SKIP_VIP.includes(m.code));
+/**
+ * รายงานแยก "หุ้น VIP ยุโรป" (ผู้ใช้ขอ 29 ต.ค. 69: ดู report อังกฤษ เยอรมัน รัสเซีย "โดยไม่เอาไปปนกับตัวอื่น")
+ *   ยอดของกลุ่มนี้คิดแยก ไม่บวกเข้ารายงานหลัก (ทั้งสามยังอยู่ใน REPORT_SKIP_VIP) · กติกาเดียวกัน: นับเฉพาะเลขที่ล็อกไว้ก่อนผลออก
+ */
+export const EURO_VIP = VIP_MARKETS.filter((m) => (["uk", "de", "ru"] as string[]).includes(m.code));
+type VipMarketRow = (typeof VIP_MARKETS)[number];
 
 
 const status = (pick: string[] | null, digits: string[] | null): DaySummaryItem["status"] =>
@@ -54,11 +60,11 @@ export function regularSummary(stocks: (Stock & { records: Row[] })[], today: st
  *   lock = true (ดูวันนี้): งวดที่ยังรอผลและยังไม่มีเลขล็อก → ล็อกเลขที่แสดงไว้ทันที (กติกาเดียวกับหน้า VIP: ล็อกครั้งเดียว ไม่เขียนทับ)
  *   เพื่อให้เลขที่ผู้ใช้เห็นใน report = เลขที่ใช้ตัดสินหลังผลออก แม้ไม่ได้เปิดหน้า VIP และแม้สูตรถูกแก้ทีหลัง (ผู้ใช้ย้ำ 13 ต.ค. 69)
  */
-export async function vipSummary(userId: string, today: string, stake?: number, lock = false): Promise<DaySummaryItem[]> {
+export async function vipSummary(userId: string, today: string, stake?: number, lock = false, markets: readonly VipMarketRow[] = REPORT_VIP): Promise<DaySummaryItem[]> {
   const date = new Date(`${today}T00:00:00.000Z`);
   const rows = await prisma.vipResult.findMany({ where: { userId, date } });
   const out: DaySummaryItem[] = [];
-  for (const m of REPORT_VIP) {
+  for (const m of markets) {
     for (const round of m.rounds) {
       const row = rows.find((r) => r.market === m.code && r.round === round);
       const label = m.rounds.length > 1 ? `${m.label} ${round === 1 ? "เช้า" : "บ่าย"}` : m.label;
@@ -120,7 +126,7 @@ export type MonthItem = MoneyTotal & {
  * ผลรวมเงินของเดือน (วันที่ 1 ถึง `to`) — ทุกงวดที่ผลออกแล้ว · เลขฟัน/เจาะคิดแบบเดียวกับการ์ดรายวัน
  *   VIP โหลดประวัติตลาดละครั้งแล้วตัดตามงวด (ไม่ query ซ้ำทีละงวด) · คืนผลรายตัวด้วย (items)
  */
-export async function monthMoney(userId: string, stocks: (Stock & { records: Row[] })[], to: string, stake?: number) {
+export async function monthMoney(userId: string, stocks: (Stock & { records: Row[] })[], to: string, stake?: number, vipMarkets: readonly VipMarketRow[] = REPORT_VIP) {
   const from = `${to.slice(0, 7)}-01`;
   const inMonth = (d: Date) => { const s = d.toISOString().slice(0, 10); return s >= from && s <= to; };
   const regular: MoneyTotal = { n: 0, cost: 0, win: 0, profit: 0 }, vip: MoneyTotal = { n: 0, cost: 0, win: 0, profit: 0 };
@@ -150,7 +156,7 @@ export async function monthMoney(userId: string, stocks: (Stock & { records: Row
     });
     if (it.n) items.push(it);
   }
-  for (const m of REPORT_VIP) {
+  for (const m of vipMarkets) {
     const F = formulaFor(m.code);
     const all = await prisma.vipResult.findMany({ where: { userId, market: m.code, NOT: { top: "" } }, orderBy: [{ date: "asc" }, { round: "asc" }] });
     const per = new Map(m.rounds.map((r) => [r, item(`${m.code}-${r}`, m.rounds.length > 1 ? `${m.label} ${r === 1 ? "เช้า" : "บ่าย"}` : m.label, `/vip?market=${m.code}`, "VIP")]));

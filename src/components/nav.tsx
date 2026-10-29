@@ -11,6 +11,7 @@ const links = [
   { href: "/pct", label: "สถิติ %" },
   { href: "/flow", label: "เลขไหล" },
   { href: "/vip", label: "หุ้น VIP" },
+  { href: "/europe", label: "VIP ยุโรป" }, // รายงานแยก อังกฤษ · เยอรมัน · รัสเซีย (ผู้ใช้ขอ 29 ต.ค. 69)
   { href: "/btc", label: "BTC ฟิวเจอร์" },
   // "ทดลองสูตร" (/lab) และ "วิธีคิด" (/method) ซ่อนจากเมนูตามที่ผู้ใช้สั่ง — หน้ายังอยู่ เข้าทาง URL ได้
 ] as const;

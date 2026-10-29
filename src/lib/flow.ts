@@ -9,6 +9,7 @@ import { chinaSession } from "@/lib/stocks/china";
 import { hangSengSession } from "@/lib/stocks/hangseng";
 import { stockFormulaId } from "@/lib/formulas/stocks";
 import { top2, bottom2, DRILL_PER_DIGIT } from "@/lib/digits";
+import { betResult } from "@/lib/bet";
 
 const G = "0123456789".split("");
 
@@ -82,8 +83,116 @@ export const drillHits = (r: FlowResult, sets: string[][]) => sets.flat().some((
 export function walkDay(day: FlowResult[]) {
   return day.map((r, i) => {
     const done = day.slice(0, i), two = flowTwo(done).map((x) => x.d), drill = two.length ? flowDrill(done) : [];
-    return { r, two, drill, hit: two.length ? hitsAny(r, two) : null, drillHit: two.length ? drillHits(r, drill) : null };
+    return { r, i, two, drill, hit: two.length ? hitsAny(r, two) : null, drillHit: two.length ? drillHits(r, drill) : null };
   });
+}
+
+/**
+ * ถ้าแทงเลขไหลทุกรอบ (ผู้ใช้ถาม 28 ต.ค. 69) — รูดเลขไหล 2 ตัว + เจาะ 12 ตัว ตามวิธีแทงใน bet.ts (ทุน 2,480 ต่อรอบที่เลขละ 20)
+ *   วัน = [วันที่, ผลแต่ละรอบเรียงตามเวลา] · คิดตั้งแต่รอบที่ 3 (มีเลขไหลแล้ว) · ทรุดลึกสุด = กำไรสะสมลดลงจากจุดสูงสุดมากสุด
+ *   อัตราจ่าย 100 = เกมเสมอตัวถ้าสุ่ม (คืน 1.00 ต่อบาท) — กำไร/ขาดทุนที่เห็นจึงเป็นความผันผวนเป็นหลัก
+ */
+export function flowMoney(days: (readonly [string, FlowResult[]])[], stake: number, only?: (w: ReturnType<typeof walkDay>[number], date: string, day: FlowResult[]) => boolean) {
+  const rows = days.map(([d, day]) => {
+    const w = walkDay(day).filter((x) => x.two.length && (!only || only(x, d, day)));
+    const b = w.map((x) => betResult(x.two, x.drill.flat(), x.r.top, x.r.bottom, stake));
+    // แต่ละรอบที่ซื้อ: หุ้น · เลขไหลเข้าไหม (บน/ล่างมีเลขไหล) · ได้/เสีย
+    const items = w.map((x, i) => ({ slot: x.r.slot, hit: !!x.hit, profit: b[i].profit }));
+    return { d, rounds: b.length, hits: items.filter((x) => x.hit).length, items, cost: b.reduce((a, x) => a + x.cost, 0), win: b.reduce((a, x) => a + x.win, 0), tickets: b.reduce((a, x) => a + x.tickets, 0) };
+  }).filter((r) => r.rounds);
+  let cum = 0, peak = 0, drawdown = 0;
+  for (const r of [...rows].sort((a, b) => a.d.localeCompare(b.d))) { cum += r.win - r.cost; peak = Math.max(peak, cum); drawdown = Math.max(drawdown, peak - cum); }
+  const sum = (l: typeof rows) => ({ days: l.length, rounds: l.reduce((a, r) => a + r.rounds, 0), hits: l.reduce((a, r) => a + r.hits, 0), cost: l.reduce((a, r) => a + r.cost, 0), win: l.reduce((a, r) => a + r.win, 0) });
+  const years = [...new Set(rows.map((r) => r.d.slice(0, 4)))].sort().map((y) => ({ y, ...sum(rows.filter((r) => r.d.startsWith(y))) }));
+  const months = [...new Set(rows.map((r) => r.d.slice(0, 7)))].sort().map((m) => ({ m, ...sum(rows.filter((r) => r.d.startsWith(m))) }));
+  const profits = rows.map((r) => r.win - r.cost);
+  return { rows, total: sum(rows), years, months, drawdown, plusDays: profits.filter((x) => x > 0).length, worstDay: Math.min(0, ...profits), bestDay: Math.max(0, ...profits) };
+}
+
+/**
+ * หุ้นที่เล่นเลขไหล (ผู้ใช้ 29 ต.ค. 69: "เอาที่ดีที่สุดกลับมา") — ฮั่งเส็งเช้า · นิเคอิบ่าย · ฮั่งเส็งบ่าย ทุกวันที่ตลาดเปิด
+ *   ผลจริงที่ผู้ใช้บันทึก (ส.ค.–ต.ค. 69 · เลขละ 20 · 97 รอบ): ซื้อ 100 คืน 107.2 (+17,440) — ดีที่สุดในทุกวิธีที่ลอง
+ *   ย้อนหลังดัชนีทางการ 625 วัน: คืน 107.9 (สองครึ่ง 108.0 / 107.7) · คัด 3 จากครึ่งแรก ครึ่งหลังยังคืน 107.7
+ *   ลองแล้วผลจริงแย่กว่า (29 ต.ค. 69): ดูตลาดวันนี้ทีละรอบ (ไหลแรง/นำ) 101.6 · + พักตอนไหลขาด 102.2 · 3 หุ้น + ไหลขาด 105.5 · 4 หุ้น (+ดาวโจนส์) 103.1 · ทุกรอบ 100.9
+ *   ข้อควรรู้: คัดหลังเห็นข้อมูล ยังอาจบังเอิญ — อย่าปรับบ่อย รอผลจริงตัดสิน · หุ้นอื่นเพิ่มรายวันได้ (flowModel)
+ */
+export const FLOW_PLAY: FlowSlot[] = ["hk-am", "nk-pm", "hk-pm"];
+/**
+ * หุ้นเพิ่มรายวัน (ผู้ใช้ 29 ต.ค. 69: "3 หุ้นหลัก + วันไหนหุ้นอื่นน่าไหลไปก็แนะนำเพิ่ม") — ดูเลขไหลของวันนั้นก่อนรอบนั้น:
+ *   ไหลแรงแค่ไหน = เลขไหลตัวแรกออกแล้วกี่ % ของรอบ (อ่อน <60% · กลาง 60–75% · แรง ≥75%) · ตัวแรกนำตัวที่สองหรือเสมอ
+ *   ประเมิน = ในอดีต หุ้นนี้ตอนเลขไหลเป็นแบบนี้ ซื้อ 1 ได้คืนเท่าไร (หดเข้าหาค่าทั้งหมดของหุ้น K2 รอบ · ค่าหุ้นหดเข้าหา 1.00 K1 รอบ)
+ *   หุ้นหลักเล่นเสมอ · หุ้นอื่นเล่นเมื่อประเมิน > PLAY_EXTRA
+ *   ผลจริง (ส.ค.–ต.ค. 69 เลขละ 50): ต.ค. +76,400 · รวม +54,400 (3 หุ้นอย่างเดียว +55,000 / +43,600)
+ *   ย้อนหลังเดินหน้า (ใช้แค่ข้อมูลก่อนแต่ละวัน): คืน 106.5 สองครึ่ง 106.5 / 106.5 (3 หุ้นอย่างเดียว 106.3) · เกณฑ์ 1.05 / 1.08 แย่กว่า
+ * + ตามไหล (ผู้ใช้ 29 ต.ค. 69: "a ออก b ออก c ออก ควรตามเลขไหลตัวต่อไปไหม"): เลขไหลเข้าติดกัน ≥ FOLLOW_STREAK รอบ → ตามไปทุกหุ้นรอบถัดไป
+ *   ย้อนหลัง 3 ปี รอบหลังเข้าติด 4+: ซื้อ 100 คืน 112 (3 ช่วง 108 / 123 / 106) · ผลจริง 157 (19 รอบ) · เข้าติด 3 รอบกลับคืนแค่ 92 จึงเริ่มที่ 4
+ *   รวมกับข้างบน (เลขละ 50): ผลจริง ต.ค. +120,800 รวม +119,000 · ย้อนหลังเดินหน้า คืน 106.7 (107.7 / 105.6) กำไร +620,200 (เดิม +521,000)
+ *   ลองแล้วไม่ใช้: ไม่เข้าติด 3+ รอบให้หยุด (ย้อนหลังดีขึ้นนิด แต่ผลจริงแย่ลง)
+ */
+export const FOLLOW_STREAK = 4;
+/** เลขไหลเข้าติดกันกี่รอบล่าสุด (นับเฉพาะรอบที่มีเลขไหลแล้ว) */
+export const flowStreak = (done: FlowResult[]) => { const wd = walkDay(done); let n = 0; for (let k = wd.length - 1; k >= 0 && wd[k].hit === true; k--) n++; return n; };
+export const PLAY_K1 = 150;
+export const PLAY_K2 = 300;
+export const PLAY_EXTRA = 1.06;
+/**
+ * ราคาปิดเมื่อวาน (ผู้ใช้ 29 ต.ค. 69: "ดูดัชนีแต่ละตัวว่าสมเหตุสมผลจะเล่นเลขไหลไหม") — รู้ก่อนผลออก (= เปิด − เปลี่ยนตอนเปิด)
+ *   บน = สตางค์ปิดเมื่อวาน ± ล่าง → คิดได้เลยว่าเลขไหล 2 ตัวมีทางโผล่ใน 4 หลักกี่ % (ทุกล่าง 00–99 × ขึ้น/ลง)
+ *   ย้อนหลัง 5,419 รอบ: ทาง ≥62% เข้าจริง 65% · ≤56% เข้าแค่ 53% (สองครึ่งตรงกัน) · ดัชนีขึ้น/ลง/วิ่งแรง ไม่ช่วย (สลับไปมา)
+ *   ไม่เล่นรอบที่ทาง ≤ FLOW_PREV_TIGHT: ย้อนหลัง 37 เดือน กำไรเท่าเดิม (+442k vs +434k เลขละ 20) ทุนลด 24% ทรุด 41k (เดิม 61k)
+ *   ผลจริง ส.ค.–ต.ค. 69: +47,520 vs +45,680 ทุนลด 25% บวกครบ 3 เดือน
+ */
+export const FLOW_PREV_TIGHT = 0.56;
+export function prevFit(prevClose: number, two: string[]) {
+  const p = Math.round(Math.abs(prevClose) * 100) % 100;
+  let h = 0;
+  for (let c = 0; c < 100; c++) for (const s of [1, -1]) {
+    const t = String((((p + s * c) % 100) + 100) % 100).padStart(2, "0");
+    if ((t + String(c).padStart(2, "0")).split("").some((x) => two.includes(x))) h++;
+  }
+  return h / 200;
+}
+export type FlowMood = { ratio: number; strength: "อ่อน" | "กลาง" | "แรง"; lead: boolean };
+export function flowMood(done: FlowResult[]): FlowMood | null {
+  const t = flowTwo(done);
+  if (!t.length) return null;
+  const ratio = t[0].rounds / done.length;
+  return { ratio, strength: ratio >= 0.75 ? "แรง" : ratio >= 0.6 ? "กลาง" : "อ่อน", lead: t[0].rounds > t[1].rounds };
+}
+export type RoundEst = { slot: FlowSlot; mood: FlowMood; est: number; slotRet: number; slotN: number; cellRet: number | null; cellN: number; base: boolean; streak: number; follow: boolean; tight: boolean; play: boolean };
+type Acc = { n: number; c: number; w: number };
+const cellKey = (slot: FlowSlot, m: FlowMood) => `${slot}|${m.strength}|${m.lead ? "L" : "T"}`;
+/** days = วันที่ผลครบ → (date) => ประเมินรอบ (slot, ผลที่ออกแล้ววันนั้น) จากสถิติก่อน date */
+export function flowModel(days: (readonly [string, FlowResult[]])[]) {
+  const sorted = [...days].sort((a, b) => a[0].localeCompare(b[0]));
+  const acc = new Map<string, Acc>();
+  const add = (k: string, c: number, w: number) => { const a = acc.get(k) ?? { n: 0, c: 0, w: 0 }; acc.set(k, { n: a.n + 1, c: a.c + c, w: a.w + w }); };
+  const snaps: { d: string; acc: Map<string, Acc> }[] = [];
+  for (const [d, day] of sorted) {
+    snaps.push({ d, acc: new Map(acc) }); // ก่อนวันนี้ (add สร้างอ็อบเจกต์ใหม่ ค่าเดิมใน snapshot ไม่ถูกแก้)
+    walkDay(day).forEach((w, i) => {
+      const m = flowMood(day.slice(0, i));
+      if (!m) return;
+      const b = betResult(w.two, w.drill.flat(), w.r.top, w.r.bottom, 1);
+      add(w.r.slot, b.cost, b.win);
+      add(cellKey(w.r.slot, m), b.cost, b.win);
+    });
+  }
+  return (date: string) => {
+    const snap = snaps.find((x) => x.d >= date)?.acc ?? acc;
+    /** prevClose = ราคาปิดเมื่อวานของหุ้นนี้ (ไม่รู้ = ไม่ตัด) */
+    return (slot: FlowSlot, done: FlowResult[], prevClose?: number): RoundEst | null => {
+      const mood = flowMood(done);
+      if (!mood) return null;
+      const s = snap.get(slot), c = snap.get(cellKey(slot, mood));
+      const slotScore = s ? ((s.w / s.c) * s.n + PLAY_K1) / (s.n + PLAY_K1) : 1;
+      const est = c ? ((c.w / c.c) * c.n + slotScore * PLAY_K2) / (c.n + PLAY_K2) : slotScore;
+      const base = FLOW_PLAY.includes(slot);
+      const streak = flowStreak(done), follow = streak >= FOLLOW_STREAK;
+      const tight = prevClose !== undefined && prevFit(prevClose, flowTwo(done).map((x) => x.d)) <= FLOW_PREV_TIGHT;
+      return { slot, mood, est, slotRet: s ? s.w / s.c : 1, slotN: s?.n ?? 0, cellRet: c ? c.w / c.c : null, cellN: c?.n ?? 0, base, streak, follow, tight, play: (base || est > PLAY_EXTRA || follow) && !tight };
+    };
+  };
 }
 
 /** ทดสอบย้อนหลัง: วัน → ผลแต่ละรอบ (เรียงตามเวลาแล้ว) · strong = เลขไหลตัวแรกออกมาแล้ว ≥3 รอบ */
@@ -169,3 +278,5 @@ export function systemGuess(prev: FlowResult[]): { method: string; digits: strin
 
 /** ชั่วโมงตอนนี้ (เวลาไทย) */
 export const thaiHour = (d = new Date()) => new Date(d.getTime() + 7 * 3600 * 1000).getUTCHours();
+/** เวลาตอนนี้ (เวลาไทย) "HH:MM" — เทียบกับ FLOW_ROUNDS[].time ได้ตรง ๆ */
+export const thaiHHMM = (d = new Date()) => new Date(d.getTime() + 7 * 3600 * 1000).toISOString().slice(11, 16);

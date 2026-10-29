@@ -12,6 +12,8 @@ import { jpFormula } from "./jp";
 import { twFormula } from "./tw";
 import { sgFormula } from "./sg";
 import { ukFormula } from "./uk";
+import { deFormula } from "./de";
+import { ruFormula } from "./ru";
 
 const registry: Record<string, MarketFormula> = {
   in: inFormula,
@@ -22,6 +24,8 @@ const registry: Record<string, MarketFormula> = {
   tw: twFormula,
   sg: sgFormula,
   uk: ukFormula,
+  de: deFormula,
+  ru: ruFormula,
 };
 
 export const formulaFor = (market: string): MarketFormula => registry[market] ?? genericFormula;

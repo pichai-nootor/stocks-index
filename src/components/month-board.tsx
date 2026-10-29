@@ -45,17 +45,18 @@ function Card({ it }: { it: MonthItem }) {
  * Dashboard รายตัวของเดือน — การ์ดละหุ้น/ตลาด×รอบ เรียงกำไรมาก→น้อย
  *   เข้า = เลขฟัน 2 ตัวมาอย่างน้อย 1 ตัว · สุ่มเดา: เข้า ~59% · ★ ~34% · เจาะ ~41–47%
  */
-export function MonthBoard({ label, items }: { label: string; items: MonthItem[] }) {
+/** vipTitle = มีค่า → แสดงกลุ่ม VIP กลุ่มเดียวด้วยชื่อนี้ (รายงานแยก เช่น VIP ยุโรป) */
+export function MonthBoard({ label, items, vipTitle }: { label: string; items: MonthItem[]; vipTitle?: string }) {
   if (!items.length) return null; // เดือนที่ยังไม่ได้ใช้ระบบ — ไม่มีผลจริงให้แสดง
   const sorted = [...items].sort((a, b) => b.profit - a.profit);
-  const groups = [
+  const groups = vipTitle ? [{ title: vipTitle, list: sorted }] : [
     { title: "หุ้นปกติ", list: sorted.filter((x) => x.group === "ปกติ") },
     { title: "หุ้น VIP", list: sorted.filter((x) => x.group === "VIP") },
   ];
   return (
     <section className="card space-y-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-lg font-semibold">ผลรายตัว · เดือน {label}</h2>
+        <h2 className="text-lg font-semibold">ผลรายตัว{vipTitle ? ` · ${vipTitle}` : ""} · เดือน {label}</h2>
         <p className="text-xs text-slate-500">เรียงตามกำไร · กราฟ = กำไรสะสมทีละงวด (เส้นประ = เท่าทุน) · สุ่มเดา: เข้า ~59% · ★ ~34% · กดการ์ดเพื่อดูรายละเอียด</p>
       </div>
       {groups.map((g) => (
