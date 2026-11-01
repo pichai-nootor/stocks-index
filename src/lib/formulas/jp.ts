@@ -27,6 +27,8 @@ export const JP_MIN_HISTORY = 200;
 export const JP_DRILL_PER_DIGIT = 6;
 /** ฝึกจากกี่งวดล่าสุด · ฝึกใหม่ทุกกี่งวด · กฎถ่วงดุลนับย้อนกี่งวด */
 const JP_TRAIN_WINDOW = 1000, JP_RETRAIN_EVERY = 100, JP_FREQ_WINDOW = 100;
+/** รอบบ่าย: นับเลขออกน้อยจากผลรอบบ่ายกี่งวดล่าสุด (ปรับ 1 พ.ย. 69) */
+const JP_PM_FREQ_WINDOW = 50;
 /** ตัวเลขจากการทดสอบนอกตัวอย่าง (ฝึกใหม่ทุก fold, ประวัติถึง 10 ต.ค. 69) — ดูหัวไฟล์ */
 export const JP_BASE = { star: 0.375, any: 0.633, amStar: 0.360, amAny: 0.608, pmStar: 0.389, pmAny: 0.657, randomStar: 0.330, randomAny: 0.573 } as const;
 
@@ -108,10 +110,19 @@ export function jpScores(history: VipDraw[], round = 2, weekday = 1): { digit: s
     .sort((a, c) => c.p - a.p || a.digit.localeCompare(c.digit));
 }
 
-/** กฎถ่วงดุล: ตัดเลขที่ออกงวดก่อน แล้วเรียงเลขที่ออกน้อยสุดใน JP_FREQ_WINDOW งวด */
-function balanceRanking(history: VipDraw[]): { digit: string; inPrev: boolean; count: number }[] {
+/**
+ * กฎถ่วงดุล: ตัดเลขที่ออกงวดก่อน แล้วเรียงเลขที่ออกน้อยสุดใน JP_FREQ_WINDOW งวด
+ * **รอบบ่าย (ปรับ 1 พ.ย. 69)**: นับเฉพาะผลรอบบ่าย JP_PM_FREQ_WINDOW งวดล่าสุด (ยังตัดเลขของรอบเช้าวันเดียวกัน) — รอบเช้าไม่เปลี่ยน
+ *   ตุลาคมรอบบ่ายฟันเข้า 11/21 ขาดทุน · ทดสอบ walk-forward 1,299 งวดบ่าย (2 ตัว): เดิม ครึ่งแรก 64.4 / ครึ่งหลัง 61.7 → ใหม่ 63.5 / 63.4
+ *   (เฉลี่ยดีขึ้น ~0.4 จุดและนิ่งกว่า แต่ครึ่งแรกต่ำกว่าเดิม 0.9 — ผู้ใช้เลือกใช้ 1 พ.ย. 69) · 12 ต.ค.–1 พ.ย.: เดิม 11/21 −8,080 → ใหม่ 12/21 −2,080
+ *   ที่ลองแล้วไม่ดีกว่า: ฟันอันดับ 2+3 (59.9 / 65.7), ปรับน้ำหนักโมเดล/กฎ, ช่วงนับ 30–300, ใช้ผลเช้าแบบอื่น (ตำแหน่ง ผลรวม ±1 เงา มาร์คอฟ = สุ่ม),
+ *   ให้ระบบเลือกสูตรเองจากผลล่าสุด (แย่กว่า), ฝึกโมเดลถี่ขึ้น/ช่วงอื่น
+ */
+function balanceRanking(history: VipDraw[], round?: number): { digit: string; inPrev: boolean; count: number }[] {
   const prev = new Set(resultDigits(history[history.length - 1].top, history[history.length - 1].bottom));
-  const recent = history.slice(-JP_FREQ_WINDOW).map((h) => new Set(resultDigits(h.top, h.bottom)));
+  const pmOnly = round === 2 && history.some((h) => (h as Draw).round === 2);
+  const pool = pmOnly ? history.filter((h) => (h as Draw).round === 2).slice(-JP_PM_FREQ_WINDOW) : history.slice(-JP_FREQ_WINDOW);
+  const recent = pool.map((h) => new Set(resultDigits(h.top, h.bottom)));
   return DIGITS10.map((d) => ({ digit: d, inPrev: prev.has(d), count: recent.filter((s) => s.has(d)).length }))
     .sort((a, c) => (+a.inPrev - +c.inPrev) || a.count - c.count || a.digit.localeCompare(c.digit));
 }
@@ -142,16 +153,16 @@ function pickJp(history: VipDraw[], _open?: number | null, forRound?: number): V
   const round = forRound ?? guess.round;
   const weekday = forRound && forRound !== guess.round ? weekdayOf(history[history.length - 1] as Draw) : guess.weekday;
   const model = jpScores(history, round, weekday);
-  const rule = balanceRanking(history);
+  const rule = balanceRanking(history, round);
   // รวมอันดับ: อันดับในโมเดล + อันดับในกฎถ่วงดุล (น้อย = ดี) · เสมอกันเอาเลขน้อยก่อน
   const rank: Record<string, number> = {};
   model.forEach((x, k) => (rank[x.digit] = k));
   rule.forEach((x, k) => (rank[x.digit] += k));
   const s = [...DIGITS10].sort((a, c) => rank[a] - rank[c] || a.localeCompare(c));
+  const am = round === 1;
   const pOf = (d: string) => model.find((x) => x.digit === d)!.p;
   const ruleOf = (d: string) => rule.find((x) => x.digit === d)!;
-  const why = (d: string) => `${d} (โมเดล ${(100 * pOf(d)).toFixed(0)}% · ออก ${ruleOf(d).count}/${JP_FREQ_WINDOW} งวด${ruleOf(d).inPrev ? " · เพิ่งออกงวดก่อน" : ""})`;
-  const am = round === 1;
+  const why = (d: string) => `${d} (โมเดล ${(100 * pOf(d)).toFixed(0)}% · ออก ${ruleOf(d).count}/${am ? `${JP_FREQ_WINDOW} งวด` : `${JP_PM_FREQ_WINDOW} งวดบ่าย`}${ruleOf(d).inPrev ? " · เพิ่งออกงวดก่อน" : ""})`;
   const expected = ` · รอบ${am ? "เช้า" : "บ่าย"}ทดสอบนอกตัวอย่างปี 69 ได้ ★ ${(100 * (am ? JP_BASE.amStar : JP_BASE.pmStar)).toFixed(1)}% · 2 ตัว ${(100 * (am ? JP_BASE.amAny : JP_BASE.pmAny)).toFixed(1)}% (สุ่ม ${(100 * JP_BASE.randomStar).toFixed(1)} / ${(100 * JP_BASE.randomAny).toFixed(1)}%)${am ? " — รอบเช้าอ่อนกว่ารอบบ่าย" : ""}`;
   return { order: s, formula: "jp-ens", label: "สูตรนิเคอิ VIP", digits: [s[0], s[1]], note: `รวมอันดับโมเดล (ฝึกใหม่ ${JP_TRAIN_WINDOW} งวดล่าสุด) + กฎถ่วงดุล: ${why(s[0])}, ${why(s[1])} · อันดับถัดไป ${s.slice(2, 5).join(", ")}${expected}` };
 }

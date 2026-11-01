@@ -99,11 +99,11 @@ export default async function EuropePage({ searchParams }: PageProps<"/europe">)
 
       <section id="back" className="card scroll-mt-4 space-y-3">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-lg font-semibold">ย้อนหลัง · ถ้าใช้สูตรปัจจุบันมาตลอด</h2>
+          <h2 className="text-lg font-semibold">ย้อนหลัง · ผลจริง + สูตรปัจจุบันก่อนเริ่มล็อก</h2>
           <RangePicker from={bFrom} to={bTo} min={firstBack} max={today} base={`/europe?${baseQ}`} dayProfit={dayProfit} anchor="back" />
           <span className="text-xs text-slate-500">{rangeName}</span>
         </div>
-        <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900">⚠️ ไม่ใช่ผลจริง — แต่ละงวดระบบฟันด้วยสูตรปัจจุบันจากผลก่อนหน้างวดนั้นเท่านั้น แต่สูตรถูกเลือกโดยดูข้อมูลชุดนี้มาก่อน ตัวเลขจึงอาจสูงกว่าที่จะได้จริง · ใช้ดูว่าระยะยาวได้หรือเสีย และช่วงแย่ ๆ ลึกแค่ไหน · เลขละ {stake} · สุ่มเดา ★ ~38% · 2 ตัว ~64%</p>
+        <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900">⚠️ งวดที่ล็อกเลขไว้ใช้เลขจริงที่ล็อก (ตรงกับผลจริงด้านบน) · งวดก่อนเริ่มล็อกไม่ใช่ผลจริง — ระบบฟันด้วยสูตรปัจจุบันจากผลก่อนหน้างวดนั้นเท่านั้น แต่สูตรถูกเลือกโดยดูข้อมูลชุดนี้มาก่อน ตัวเลขจึงอาจสูงกว่าที่จะได้จริง · ใช้ดูว่าระยะยาวได้หรือเสีย และช่วงแย่ ๆ ลึกแค่ไหน · เลขละ {stake} · สุ่มเดา ★ ~38% · 2 ตัว ~64%</p>
         <div className="grid gap-3 sm:grid-cols-3">
           {bm.map((x) => (
             <div key={x.code} className="rounded-lg border border-slate-200 p-3 text-sm">

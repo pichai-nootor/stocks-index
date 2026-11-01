@@ -2,10 +2,11 @@
  * ย้อนหลังของหุ้น VIP ยุโรป (ผู้ใช้ขอ 29 ต.ค. 69: "3 หุ้นนี้ขอดูย้อนหลังด้วย") — แยกจากรายงานผลจริง
  *   แต่ละงวดฟันด้วยสูตรปัจจุบันของตลาดนั้นจากงวดก่อนหน้าเท่านั้น (walk-forward) · สูตรถูกเลือกจากข้อมูลชุดนี้ ผลจึงสูงเกินจริงได้
  *   ซื้อแบบเดียวกับรายงาน: รูดเลขฟัน 2 ตัว + เจาะ 12 ตัว (bet.ts)
+ *   งวดที่ล็อกเลขไว้แล้ว → ใช้เลขฟัน/เลขเจาะที่ล็อก (ผลจริง) ไม่คิดใหม่ด้วยสูตรที่แก้ทีหลัง (ผู้ใช้ 1 พ.ย. 69: "ที่ออกแล้วอย่าไปแก้")
  */
 import { prisma } from "@/lib/prisma";
 import { formulaFor } from "@/lib/formulas";
-import { resultDigits, drillHit } from "@/lib/formulas/types";
+import { resultDigits, drillHit, lockedDrill } from "@/lib/formulas/types";
 import { betResult } from "@/lib/bet";
 import type { VIP_MARKETS } from "@/lib/vip";
 
@@ -27,11 +28,16 @@ export async function europeBack(userId: string, markets: readonly (typeof VIP_M
     all.forEach((row, i) => {
       const d = row.date.toISOString().slice(0, 10);
       if (d < from || d > to) return;
-      const hist = all.slice(0, i), p = F.pick(hist, row.open, row.round);
-      if (!p) return;
-      const drill = F.drill(p, hist).map((x) => x.numbers), top = row.top.slice(-2), dg = resultDigits(row.top, row.bottom);
-      const b = betResult(p.digits, drill.flat(), top, row.bottom, stake);
-      draws.push({ d, top: row.top, bottom: row.bottom, pick: p.digits, drill, star: dg.includes(p.digits[0]), any: p.digits.some((x) => dg.includes(x)), drillHits: drill.flat().filter((x) => drillHit(x, row.top, row.bottom)), cost: b.cost, win: b.win, profit: b.profit });
+      const hist = all.slice(0, i);
+      // ล็อกไว้แล้ว = เลขที่แทงจริง · ไม่ได้ล็อก = คิดย้อนหลังด้วยสูตรปัจจุบัน
+      const lp = row.pick?.split("-"), ld = lockedDrill(row.drill);
+      const locked = lp?.length === 2 && ld ? { digits: [lp[0], lp[1]] as [string, string], drill: ld.map((x) => x.numbers) } : null;
+      const p = locked ? null : F.pick(hist, row.open, row.round);
+      if (!locked && !p) return;
+      const pick = locked?.digits ?? p!.digits;
+      const drill = locked?.drill ?? F.drill(p!, hist).map((x) => x.numbers), top = row.top.slice(-2), dg = resultDigits(row.top, row.bottom);
+      const b = betResult(pick, drill.flat(), top, row.bottom, stake);
+      draws.push({ d, top: row.top, bottom: row.bottom, pick, drill, star: dg.includes(pick[0]), any: pick.some((x) => dg.includes(x)), drillHits: drill.flat().filter((x) => drillHit(x, row.top, row.bottom)), cost: b.cost, win: b.win, profit: b.profit });
       cum += b.profit; peak = Math.max(peak, cum); drawdown = Math.max(drawdown, peak - cum);
     });
     const months = [...new Set(draws.map((x) => x.d.slice(0, 7)))].map((mk) => { const l = draws.filter((x) => x.d.startsWith(mk)); return { m: mk, n: l.length, profit: l.reduce((a, x) => a + x.profit, 0) }; });
