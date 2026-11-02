@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
-import { VIP_MARKETS, isVipMarket, vipMarket, roundLabel, roundCloseThai, vipWaitReason, pastCloseThai, fetchVipToday, vipDigits, type VipMarket } from "@/lib/vip";
+import { VIP_MARKETS, isVipMarket, vipMarket, roundCloseThai, vipWaitReason, pastCloseThai, fetchVipToday, vipDigits, type VipMarket } from "@/lib/vip";
 import { formulaFor, hasOwnFormula } from "@/lib/formulas";
 import { gradeFormula, lockedDrill, resultDigits as vipResultDigits, drillHit as vipDrillHit, RANDOM_ONE as VIP_RANDOM_ONE, RANDOM_TWO as VIP_RANDOM_TWO, type VipPick, type VipDraw, type VipDrillSet } from "@/lib/formulas/types";
 import cnHistory from "@/data/vip-history/cn.json";
@@ -81,6 +81,12 @@ function RankStrip({ order, picked, rates, result }: { order: string[]; picked: 
   );
 }
 
+/** ป้ายรอบในตารางประวัติ — เช้าสีฟ้า บ่ายสีม่วง ให้แยกออกด้วยตาเวลาดูแบบรวม 2 รอบ */
+function RoundTag({ round, show }: { round: number; show: boolean }) {
+  if (!show) return null;
+  return <span className={`ml-1 rounded px-1.5 py-0.5 text-[10px] font-medium ${round === 1 ? "bg-sky-100 text-sky-800" : "bg-violet-100 text-violet-800"}`}>{round === 1 ? "เช้า" : "บ่าย"}</span>;
+}
+
 /** ชื่อสั้นในแท็บ: "หุ้นอินเดีย VIP" → "อินเดีย" */
 const shortLabel = (label: string) => label.replace(/^หุ้น/, "").replace(/ VIP$/, "");
 
@@ -119,16 +125,6 @@ export default async function VipPage({ searchParams }: PageProps<"/vip">) {
   const asc: VipDraw[] = [...rows].reverse();
   // เลขที่ล็อกก่อน F.lockedFrom มาจากสูตรเก่า → ใช้เลขของสูตรปัจจุบันแทน (เก็บเลขเก่าไว้โชว์เป็นหมายเหตุ)
   const lockedByCurrent = (date: Date) => !F.lockedFrom || date.toISOString().slice(0, 10) >= F.lockedFrom;
-  const paged = paginate(rows, page);
-  const judged = new Map(paged.items.map((r) => {
-    const i = asc.length - 1 - rows.indexOf(r); const hist = asc.slice(0, i);
-    const computedA = F.pick(hist, r.open);
-    const lockedA = lockedByCurrent(r.date) ? r.pick?.split("-") : undefined;
-    const a = computedA && lockedA?.length === 2 ? { ...computedA, digits: [lockedA[0], lockedA[1]] as [string, string] } : computedA;
-    const b = F.experimental ? F.experimental.pick(r.open, hist) : null;
-    const c = F.experimental2 ? F.experimental2.pick(regularByDate.get(r.date.toISOString().slice(0, 10))) : null;
-    return [r.id, { a: a ? { pick: a, drill: (lockedA?.length === 2 && lockedDrill(r.drill)) || F.drill(a, hist) } : null, b: b ? { pick: b, drill: F.drill(b, hist) } : null, c: c ? { pick: c, drill: F.drill(c, hist) } : null }] as const;
-  }));
   const g = gradeFormula(F, asc);
   // คะแนนของ "เลขที่ล็อกไว้จริง" — นับเฉพาะงวดที่ระบบฟันไว้ก่อนหวยออกแล้วเก็บเลขนั้นไว้ (เชื่อถือได้ 100% ไม่ถูกคำนวณใหม่)
   const lockedRows = rows.filter((r) => r.pick && r.top !== "" && lockedByCurrent(r.date));
@@ -151,10 +147,26 @@ export default async function VipPage({ searchParams }: PageProps<"/vip">) {
   const nextDate = feedDone ? (thai > dayAfter ? thai : dayAfter) : feedDate;
   /** ข้อมูลฟีดเป็นของงวดที่กำลังโชว์ไหม (ถ้าโชว์งวดถัดไปแล้ว ราคาในฟีดเป็นของวันก่อน ห้ามใช้ตัดสินว่า "ปิดแล้ว") */
   const feedIsNext = !!today && today.date === nextDate;
+  // ตลาดที่มีเช้า+บ่าย: ตารางประวัติแยกแท็บรอบ (ผู้ใช้ขอ 2 พ.ย. 69 — แถวเช้า/บ่ายสลับกันแล้วงง) · ค่าเริ่มต้น = รอบที่กำลังจะออก
+  const multiRound = info.rounds.length > 1;
+  const nextRound = info.rounds.find((rr) => !rows.some((x) => x.date.toISOString().slice(0, 10) === nextDate && x.round === rr)) ?? info.rounds[0];
+  const viewRound: number | "all" = !multiRound || sp.round === "all" ? "all" : (info.rounds as readonly number[]).includes(Number(sp.round)) ? Number(sp.round) : nextRound;
+  const shown = viewRound === "all" ? rows : rows.filter((r) => r.round === viewRound);
+  const tabHref = (rr: number | "all", n = 1) => `/vip?market=${market}${multiRound ? `&round=${rr}` : ""}${n > 1 ? `&page=${n}` : ""}`;
+  const paged = paginate(shown, page);
+  const judged = new Map(paged.items.map((r) => {
+    const i = asc.length - 1 - rows.indexOf(r); const hist = asc.slice(0, i);
+    const computedA = F.pick(hist, r.open);
+    const lockedA = lockedByCurrent(r.date) ? r.pick?.split("-") : undefined;
+    const a = computedA && lockedA?.length === 2 ? { ...computedA, digits: [lockedA[0], lockedA[1]] as [string, string] } : computedA;
+    const b = F.experimental ? F.experimental.pick(r.open, hist) : null;
+    const c = F.experimental2 ? F.experimental2.pick(regularByDate.get(r.date.toISOString().slice(0, 10))) : null;
+    return [r.id, { a: a ? { pick: a, drill: (lockedA?.length === 2 && lockedDrill(r.drill)) || F.drill(a, hist) } : null, b: b ? { pick: b, drill: F.drill(b, hist) } : null, c: c ? { pick: c, drill: F.drill(c, hist) } : null }] as const;
+  }));
   // งวดที่กำลังจะออก (รอบแรกของวันที่ยังไม่มีผล — เช้าหรือบ่ายก็ได้) → แถวบนสุดของตารางผล พร้อมแถบเลข 0–9 (ผู้ใช้ขอ 14 ต.ค. 69)
   const upcoming = page !== 1 ? null : (() => {
     const has = (d: string, rr: number) => rows.some((x) => x.date.toISOString().slice(0, 10) === d && x.round === rr);
-    for (const round of info.rounds) {
+    for (const round of info.rounds.filter((rr) => viewRound === "all" || rr === viewRound)) {
       if (has(nextDate, round)) continue;
       const lockRow = all.find((x) => x.top === "" && x.date.toISOString().slice(0, 10) === nextDate && x.round === round);
       const lockedP = lockRow?.pick && lockedByCurrent(lockRow.date) ? lockRow.pick.split("-") : null;
@@ -370,7 +382,18 @@ export default async function VipPage({ searchParams }: PageProps<"/vip">) {
 
       <section className="card p-0">
         <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-200 px-5 py-3">
-          <h2 className="font-medium">ประวัติ + ผลฟันรายงวด ({rows.length})</h2>
+          <div className="flex flex-wrap items-center gap-3">
+            <h2 className="font-medium">ประวัติ + ผลฟันรายงวด ({shown.length})</h2>
+            {multiRound && (
+              <nav className="flex gap-1 rounded-lg bg-slate-100 p-0.5 text-sm">
+                {[...info.rounds, "all" as const].map((rr) => (
+                  <Link key={rr} href={tabHref(rr)} scroll={false} className={`rounded-md px-3 py-1 transition ${viewRound === rr ? "bg-white font-medium text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>
+                    {rr === "all" ? "รวม 2 รอบ" : `รอบ${rr === 1 ? "เช้า" : "บ่าย"} ${roundCloseThai(market, rr)}`}
+                  </Link>
+                ))}
+              </nav>
+            )}
+          </div>
           <span className="text-xs text-slate-500">★ = ตัวเด่น · เหลือง = เลขที่ฟันแล้วออก · ขีดฆ่า = ไม่ออก · เขียว = เลขเจาะที่มา (ตรงหรือกลับ)</span>
         </div>
         {rows.length === 0 ? (
@@ -394,7 +417,7 @@ export default async function VipPage({ searchParams }: PageProps<"/vip">) {
                 {upcoming && (
                   <tr className="bg-amber-50/70">
                     <td className="px-3 py-2 whitespace-nowrap font-medium text-slate-700">
-                      {thDate(new Date(`${nextDate}T00:00:00Z`))}{info.rounds.length > 1 && <span className="ml-1 text-xs text-slate-500">{roundLabel(upcoming.round, market)}</span>}
+                      {thDate(new Date(`${nextDate}T00:00:00Z`))}<RoundTag round={upcoming.round} show={multiRound} />
                       <div><span className="rounded bg-amber-200 px-1.5 py-0.5 text-[10px] font-medium text-amber-900">กำลังจะออก</span></div>
                     </td>
                     <td className="px-3 py-2">{upcoming.pick ? <PickBlock pick={upcoming.pick} drill={upcoming.drill} row /> : <span className="text-xs text-amber-800">⏳ {upcoming.wait}</span>}</td>
@@ -415,7 +438,7 @@ export default async function VipPage({ searchParams }: PageProps<"/vip">) {
                   return (
                     <tr key={r.id} className="transition hover:bg-slate-50/60">
                       <td className="px-3 py-2 whitespace-nowrap font-medium text-slate-700">
-                        {thDate(r.date)}{info.rounds.length > 1 && <span className="ml-1 text-xs text-slate-500">{roundLabel(r.round, market)}</span>}
+                        {thDate(r.date)}<RoundTag round={r.round} show={multiRound} />
                         <div className="text-xs tabular-nums text-slate-400">{r.open !== null ? <>เปิด {fmtNum(r.open)} </> : null}{!F.noManualOpen && <VipOpenForm id={r.id} open={r.open} />}</div>
                       </td>
                       <td className="px-3 py-2">{j.a ? <><PickBlock pick={j.a.pick} drill={j.a.drill} result={r} row />{r.pick && !lockedByCurrent(r.date) && <div className="mt-1 text-[10px] text-slate-400">สูตรเดิมล็อกไว้ {r.pick}</div>}</> : <span className="text-xs text-slate-400">ยังไม่พอ {F.minHistory} งวด</span>}</td>
@@ -437,7 +460,7 @@ export default async function VipPage({ searchParams }: PageProps<"/vip">) {
                 })}
               </tbody>
             </table>
-            <Pagination {...paged} href={(n) => `/vip?market=${market}&page=${n}`} />
+            <Pagination {...paged} href={(n) => tabHref(viewRound, n)} />
           </div>
         )}
       </section>

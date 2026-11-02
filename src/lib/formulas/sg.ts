@@ -25,6 +25,13 @@
  * **ปรับ 1 พ.ย. 69 (ทบทวนสิ้นเดือน ผู้ใช้อนุมัติ)** — ตุลาคมเจาะมาแค่ 30% · ทดสอบใหม่ด้วยเลขฟันของสูตรปัจจุบัน 1,338 งวด (ครึ่งแรก / ครึ่งหลัง / 365 งวดล่าสุด):
  *     คู่ออกบ่อย 300 งวด 45.4 / 45.3 / 45.2 · **100 งวด 45.3 / 48.6 / 50.7** · 70–150 งวดไปทางเดียวกัน (47.2–48.6 ครึ่งหลัง) · สุ่มคู่ 44.7 / 46.2 / 47.4
  *     → ใช้คู่ที่ออกบ่อยใน SG_DRILL_WINDOW (100) งวด — ครึ่งแรกเท่าเดิม ครึ่งหลังดีขึ้น ~3 จุด · เลขเจาะที่ล็อกไว้แล้วไม่เปลี่ยน
+ * **ปรับ 2 พ.ย. 69 (ผู้ใช้ขอให้หาสูตรที่ดีกว่า — ล็อกจริง 22 งวด ฟันเข้า 64% แต่เจาะเข้าแค่ 27% เงิน −6,560)** · ทดสอบ 1,099 งวด ตัดสินด้วยเงิน:
+ *   เพิ่ม "เลขเย็นแบบให้น้ำหนักงวดล่าสุดมากกว่า" (ครึ่งชีวิต SG_DECAY_HL 25 งวด · ลดอันดับเลขที่หายเกิน 5) แล้วรวมอันดับกับสูตรเดิม (อันดับเฉลี่ย)
+ *     เดิม          2 ตัว ครึ่งแรก 58.8 / ครึ่งหลัง 62.7 · 365 งวด 64.4 · เงิน +274 / +342 ต่องวด · ลึกสุด −51,200 · หลุดติด 6
+ *     รวม (ใช้)     60.5 / 65.3 · 66.3 · +343 / +429 · −42,320 · 6 — ดีกว่าทุกช่วงสามส่วน/สี่ส่วน
+ *     ครึ่งชีวิต 20/22/28/30 งวด ดีกว่าเดิมทั้งสองครึ่งเหมือนกัน (ไม่ใช่ค่าบังเอิญ)
+ *   ลองแล้วไม่ดีกว่า: โมเดลเรียนรู้เอง (logistic ฝึกใหม่ 15–100 งวด: ครึ่งแรกดี ครึ่งหลังแย่) · เลือกสูตรเองตามกำไรช่วงหลัง ·
+ *     ช่วงเดียว 30 งวด (25/35 พัง) · เลือกคู่ที่ไม่ออกพร้อมกัน · เจาะแบบคู่เย็น/จับคู่ตามอันดับ/รวมเบิ้ล/นับ 50–300 งวด
  */
 import { DIGITS10, resultDigits, canon2, type MarketFormula, type VipDraw, type VipPick, type VipDrillSet } from "./types";
 
@@ -33,9 +40,11 @@ export const SG_MIN_HISTORY = 60;
 const SG_MAX_GAP = 6;
 const SG_WINDOWS = [30, 40, 50, 60] as const;
 const SG_DRILL_PER_DIGIT = 6;
+/** ครึ่งชีวิตของน้ำหนักงวด (เลขที่ออกเมื่อ 25 งวดก่อนมีน้ำหนักครึ่งหนึ่งของงวดล่าสุด) และเกณฑ์หายนานของส่วนนี้ (ปรับ 2 พ.ย. 69) */
+const SG_DECAY_HL = 25, SG_DECAY_MAX_GAP = 5;
 /** นับคู่ที่ออกบ่อยย้อนกี่งวด (ปรับจาก 300 → 100 เมื่อ 1 พ.ย. 69) */
 const SG_DRILL_WINDOW = 100;
-export const SG_BASE = { starA: 0.368, anyA: 0.597, starB: 0.386, anyB: 0.625, starYear: 0.419, anyYear: 0.641, randomStar: 0.33, randomAny: 0.572 } as const;
+export const SG_BASE = { anyA: 0.605, anyB: 0.653, anyYear: 0.663, randomAny: 0.572 } as const;
 
 /** คะแนนเย็น: ความถี่ต่องวดรวมทุกช่วง (น้อย = เย็น = มาก่อน) */
 function coldScores(history: VipDraw[], windows: readonly number[]) {
@@ -44,19 +53,32 @@ function coldScores(history: VipDraw[], windows: readonly number[]) {
   return Object.fromEntries(DIGITS10.map((d) => [d, { score: windows.reduce((s, w) => s + per(d, w) / w, 0), counts: windows.map((w) => per(d, w)) }])) as Record<string, { score: number; counts: number[] }>;
 }
 
+/** อันดับเลขเย็นแบบให้น้ำหนักงวดล่าสุดมากกว่า (น้อย = เย็น = มาก่อน) · เลขที่หายเกิน SG_DECAY_MAX_GAP งวดไปท้าย */
+function decayOrder(sets: Set<string>[], gap: (d: string) => number): string[] {
+  const n = sets.length;
+  const score = (d: string) => { let s = 0; for (let j = 1; j <= Math.min(n, 6 * SG_DECAY_HL); j++) if (sets[n - j].has(d)) s += Math.pow(0.5, (j - 1) / SG_DECAY_HL); return s; };
+  const sc = Object.fromEntries(DIGITS10.map((d) => [d, score(d)])) as Record<string, number>;
+  const away = (d: string) => (gap(d) > SG_DECAY_MAX_GAP ? 1 : 0);
+  return [...DIGITS10].sort((a, b) => away(a) - away(b) || sc[a] - sc[b] || Number(b) - Number(a));
+}
+
 function pickSg(history: VipDraw[], windows: readonly number[] = SG_WINDOWS, label = "สูตรสิงคโปร์ VIP"): VipPick | null {
   if (history.length < SG_MIN_HISTORY) return null;
   const c = coldScores(history, windows);
   const sets = history.map((h) => new Set(resultDigits(h.top, h.bottom)));
   const gap = (d: string) => { let k = 0; for (let i = sets.length - 1; i >= 0 && !sets[i].has(d); i--) k++; return k; };
   const away = (d: string) => (gap(d) > SG_MAX_GAP ? 1 : 0); // หายนานเกิน → ไปท้ายอันดับ
-  const order = [...DIGITS10].sort((a, b) => away(a) - away(b) || c[a].score - c[b].score || Number(b) - Number(a));
-  const skipped = DIGITS10.filter((d) => away(d)).map((d) => `${d} (หาย ${gap(d)} งวด)`);
-  const why = (d: string) => `${d} (ออก ${windows.map((w, k) => `${c[d].counts[k]}/${w}`).join(" · ")})`;
+  const base = [...DIGITS10].sort((a, b) => away(a) - away(b) || c[a].score - c[b].score || Number(b) - Number(a));
+  // รวมอันดับ: สูตรเดิม + แบบให้น้ำหนักงวดล่าสุด (ปรับ 2 พ.ย. 69) · เสมอกันใช้อันดับสูตรเดิม
+  const recent = decayOrder(sets, gap);
+  const rank = (d: string) => base.indexOf(d) + recent.indexOf(d);
+  const order = [...DIGITS10].sort((a, b) => rank(a) - rank(b) || base.indexOf(a) - base.indexOf(b));
+  const skipped = DIGITS10.filter((d) => gap(d) > SG_DECAY_MAX_GAP).map((d) => `${d} (หาย ${gap(d)} งวด)`);
+  const why = (d: string) => `${d} (ออก ${windows.map((w, k) => `${c[d].counts[k]}/${w}`).join(" · ")} · อันดับเดิม ${base.indexOf(d) + 1} · ช่วงหลัง ${recent.indexOf(d) + 1})`;
   const pct = (x: number) => `${(100 * x).toFixed(1)}%`;
   return {
-    order, formula: windows.length > 1 ? "sg-cold-ens" : `sg-cold${windows[0]}`, label, digits: [order[0], order[1]],
-    note: `เลขที่ออกน้อยช่วงหลัง (รวม ${windows.join("/")} งวด): ${why(order[0])}, ${why(order[1])} · อันดับถัดไป ${order.slice(2, 5).join(", ")}${skipped.length ? ` · ลดอันดับเลขที่หายเกิน ${SG_MAX_GAP} งวด: ${skipped.join(", ")}` : ""} · ทดสอบ 1,278 งวด ★ ${pct(SG_BASE.starA)} / ${pct(SG_BASE.starB)} ทั้งสองครึ่ง · ปีล่าสุด ★ ${pct(SG_BASE.starYear)} · 2 ตัว ${pct(SG_BASE.anyYear)} (สุ่ม ${pct(SG_BASE.randomStar)} / ${pct(SG_BASE.randomAny)})`,
+    order, formula: "sg-cold-mix", label, digits: [order[0], order[1]],
+    note: `เลขที่ออกน้อยช่วงหลัง (รวม ${windows.join("/")} งวด + ถ่วงน้ำหนักงวดล่าสุด): ${why(order[0])}, ${why(order[1])} · อันดับถัดไป ${order.slice(2, 5).join(", ")}${skipped.length ? ` · ลดอันดับเลขที่หายนาน: ${skipped.join(", ")}` : ""} · ทดสอบ 1,099 งวด 2 ตัว ${pct(SG_BASE.anyA)} / ${pct(SG_BASE.anyB)} ทั้งสองครึ่ง · 365 งวดล่าสุด ${pct(SG_BASE.anyYear)} (สุ่ม ${pct(SG_BASE.randomAny)})`,
   };
 }
 
@@ -76,12 +98,12 @@ function drillSg(pick: VipPick, history: VipDraw[]): VipDrillSet[] {
 }
 
 export const sgFormula: MarketFormula = {
-  name: "สูตรสิงคโปร์ VIP — เลขที่ออกน้อยช่วงหลัง (รวม 30/40/50/60 งวด) + กันติดเลขที่หายนาน",
-  evidence: "**วิเคราะห์จากเลขที่ออกของสิงคโปร์ VIP เองเท่านั้น** (1,377 งวด 25 พ.ย. 65–11 ต.ค. 69 จาก raakaadee + exphuay ทับกัน 95 งวดตรงทุกงวด) · เครื่องของสิงคโปร์ถ่วงดุล: เลขที่ออกน้อยในช่วง 30–75 งวดมีโอกาสมากกว่า ชนะสุ่มทั้งสองครึ่งทุกช่วงนับ จึงรวม 4 ช่วงกันการเลือกช่วงที่บังเอิญดี · ทดสอบ walk-forward: ครึ่งแรก ★ 36.8% / 2 ตัว 59.7% · ครึ่งหลัง 38.6% / 62.5% · ปีล่าสุด 41.9% / 64.1% (สุ่ม 33.0 / 57.2) · (13 ต.ค. 69) เพิ่มกฎลดอันดับเลขที่หายเกิน 6 งวด หลังเห็นฟัน 0-4 ซ้ำ 5 วัน — หลุดติดยาวสุดจาก 12 เหลือ 6 งวด · เลขร้อน เลขเมื่อวาน หายนานสุด มาร์คอฟ ไม่ชนะสุ่ม · เลขเจาะ (ปรับ 1 พ.ย. 69): คู่ที่ออกบ่อยใน 100 งวด — ครึ่งแรก 45.3% · ครึ่งหลัง 48.6% · 365 งวดล่าสุด 50.7% (เดิม 300 งวด 45.4 / 45.3 / 45.2 · สุ่มคู่ ~46%) · ได้เปรียบสุ่มราว 3–4 จุด ผลรายวันยังแกว่ง",
+  name: "สูตรสิงคโปร์ VIP — เลขที่ออกน้อยช่วงหลัง (รวม 30/40/50/60 งวด + ถ่วงน้ำหนักงวดล่าสุด) + กันติดเลขที่หายนาน",
+  evidence: "**วิเคราะห์จากเลขที่ออกของสิงคโปร์ VIP เองเท่านั้น** (1,377 งวด 25 พ.ย. 65–11 ต.ค. 69 จาก raakaadee + exphuay ทับกัน 95 งวดตรงทุกงวด) · เครื่องของสิงคโปร์ถ่วงดุล: เลขที่ออกน้อยในช่วง 30–75 งวดมีโอกาสมากกว่า ชนะสุ่มทั้งสองครึ่งทุกช่วงนับ จึงรวม 4 ช่วงกันการเลือกช่วงที่บังเอิญดี · ทดสอบ walk-forward: ครึ่งแรก ★ 36.8% / 2 ตัว 59.7% · ครึ่งหลัง 38.6% / 62.5% · ปีล่าสุด 41.9% / 64.1% (สุ่ม 33.0 / 57.2) · (13 ต.ค. 69) เพิ่มกฎลดอันดับเลขที่หายเกิน 6 งวด หลังเห็นฟัน 0-4 ซ้ำ 5 วัน — หลุดติดยาวสุดจาก 12 เหลือ 6 งวด · เลขร้อน เลขเมื่อวาน หายนานสุด มาร์คอฟ ไม่ชนะสุ่ม · (2 พ.ย. 69) รวมอันดับกับเลขเย็นแบบให้น้ำหนักงวดล่าสุดมากกว่า (ครึ่งชีวิต 25 งวด): 2 ตัว 60.5% / 65.3% (เดิม 58.8 / 62.7) · เงิน +343 / +429 ต่องวด (เดิม +274 / +342) · ขาดทุนสะสมลึกสุด −42,320 (เดิม −51,200) · เลขเจาะ (ปรับ 1 พ.ย. 69): คู่ที่ออกบ่อยใน 100 งวด — ครึ่งแรก 45.3% · ครึ่งหลัง 48.6% · 365 งวดล่าสุด 50.7% (เดิม 300 งวด 45.4 / 45.3 / 45.2 · สุ่มคู่ ~46%) · ได้เปรียบสุ่มราว 3–4 จุด ผลรายวันยังแกว่ง",
   pick: (history) => pickSg(history),
   drill: drillSg,
   noManualOpen: true, // สูตรไม่ใช้ราคาเปิด — ระบบเก็บเองจากฟีดถ้าทัน ไม่ต้องกรอก
   minHistory: SG_MIN_HISTORY,
-  since: "2026-10-13", // วันที่สูตรปัจจุบันเริ่มใช้ (ปรับ 13 ต.ค. 69) — ไว้บอกในหมายเหตุของงวดที่ไม่มีเลขล็อก
+  since: "2026-11-03", // วันที่สูตรปัจจุบันเริ่มใช้ (ปรับ 2 พ.ย. 69 มีผลงวด 3 พ.ย.) — ไว้บอกในหมายเหตุของงวดที่ไม่มีเลขล็อก
   drillRandom: 0.452,
 };
