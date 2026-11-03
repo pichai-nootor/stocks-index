@@ -152,6 +152,34 @@ export function prevFit(prevClose: number, two: string[]) {
   }
   return h / 200;
 }
+/**
+ * โอกาสเข้าเลขไหลของ "วันนั้น" ทีละหุ้น (ผู้ใช้ 3 พ.ย. 69: "วิเคราะห์หุ้นไหนก็ได้ที่มีโอกาสเข้าเลขไหลในวันนั้น") — แทนกติกาหุ้นหลักเล่นทุกวัน
+ *   ใช้แค่ข้อมูลของวันนั้น: ราคาปิดเมื่อวาน (= เปิด − เปลี่ยนตอนเปิด) + ทิศของตัวเปิด
+ *   สตางค์ปิดเดาไม่ได้ (00–99 เท่ากัน) แต่ ล่าง = ±(บน − สตางค์ปิดเมื่อวาน) → ไล่บน 100 แบบต่อทิศ นับว่าเลขไหลโผล่ใน 4 หลักกี่แบบ
+ *   โอกาส = q × ทางถ้าปิดตามทิศเปิด + (1−q) × ทางถ้าปิดสวน · q = ทิศเปิดตรงทิศปิดกี่ % ของหุ้นนั้น (ไม่รู้ทิศ = 0.5)
+ *   วัด 3 พ.ย. 69: ผลจริง 390 รอบ ≥62% เข้า 65% (147 รอบ) · <57% เข้า 53% · ย้อนหลังดัชนี 5,443 รอบ (q=0.5) ≥62% เข้า 65% · <57% 53%
+ *   เพดาน: ต่อให้รู้ทิศปิดจริงก็ได้ ~65% เท่าเดิม (แค่เจอรอบดีมากขึ้น) → ตัวเปิดช่วยหารอบ ไม่ได้ทำให้แม่นกว่า 65%
+ */
+export const OPEN_DIR_Q: Partial<Record<FlowSlot, number>> = { "hk-am": 0.75, tw: 0.91, "nk-pm": 0.85, "cn-pm": 0.7, "hk-pm": 0.69, sg: 0.62, sx: 0.68, dj: 0.69 };
+export const DAY_PLAY = 0.62;
+export const DAY_LOW = 0.57;
+export type DayChance = { p: number; up: number; down: number; q: number; dir: 1 | -1 | 0; prevCents: string };
+export function dayChance(slot: FlowSlot, two: string[], prevClose: number, openChange?: number): DayChance {
+  const p = Math.round(Math.abs(prevClose) * 100) % 100;
+  const way = (s: 1 | -1) => {
+    let h = 0;
+    for (let t = 0; t < 100; t++) {
+      const b = (((s * (t - p)) % 100) + 100) % 100;
+      if ((String(t).padStart(2, "0") + String(b).padStart(2, "0")).split("").some((c) => two.includes(c))) h++;
+    }
+    return h / 100;
+  };
+  const up = way(1), down = way(-1);
+  const dir = !openChange ? 0 : openChange > 0 ? 1 : -1;
+  const q = dir ? OPEN_DIR_Q[slot] ?? 0.5 : 0.5;
+  const pr = dir === 1 ? q * up + (1 - q) * down : dir === -1 ? q * down + (1 - q) * up : (up + down) / 2;
+  return { p: pr, up, down, q, dir, prevCents: String(p).padStart(2, "0") };
+}
 export type FlowMood = { ratio: number; strength: "อ่อน" | "กลาง" | "แรง"; lead: boolean };
 export function flowMood(done: FlowResult[]): FlowMood | null {
   const t = flowTwo(done);

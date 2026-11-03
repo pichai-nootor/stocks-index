@@ -2,7 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { todayThai } from "@/lib/intraday";
-import { FLOW_ROUNDS, resultOf, countFlow, flowTwo, flowDrill, walkDay, flowMoney, flowSlotOf, flowModel, flowStreak, FOLLOW_STREAK, type RoundEst, backtest, RANDOM_TWO, guessLocked, nextGuessDate, scoreGuess, systemGuess, thaiHour, thaiHHMM, SYS_METHOD, type FlowResult, type FlowSlot } from "@/lib/flow";
+import { FLOW_ROUNDS, resultOf, countFlow, flowTwo, flowDrill, walkDay, flowMoney, flowSlotOf, flowModel, flowStreak, type RoundEst, dayChance, DAY_PLAY, DAY_LOW, type DayChance, backtest, RANDOM_TWO, guessLocked, nextGuessDate, scoreGuess, systemGuess, thaiHHMM, SYS_METHOD, type FlowResult, type FlowSlot } from "@/lib/flow";
 import { flowDays, openedSlots, lockFlowSystem } from "@/lib/flow-lock";
 import { deleteFlowGuess } from "@/app/actions/flow";
 import { AnalyzeButton } from "./analyze-button";
@@ -51,10 +51,10 @@ export default async function FlowPage({ searchParams }: PageProps<"/flow">) {
   const counts = countFlow(done);
   const now = flowTwo(done);
   const nowDrill = now.length ? flowDrill(done) : [];
-  // ไม่มีข้อมูลเปิด = วันนั้นปิด (ตัดสินได้เมื่อวันผ่านไปแล้ว หรือหลัง 16:00 ไทย · ดาวโจนส์เปิด 20:30 → รอจนวันผ่าน)
+  // ยังไม่ได้กรอกตัวเปิดของหุ้นนั้นในวันนั้น = ถือว่าปิด (ผู้ใช้ 3 พ.ย. 69: ไม่ใช้ปฏิทินวันหยุด เพราะอาจคลาดเคลื่อน · ดูจากที่กรอกเท่านั้น)
+  //   มีผลออกแล้วแต่ไม่มีตัวเปิด = ยังนับว่าเปิด
   const openedToday = openedSlots(stocks).get(day) ?? new Set<FlowSlot>();
-  const hourNow = thaiHour();
-  const isClosed = (slot: FlowSlot) => !openedToday.has(slot) && (day < today || (hourNow >= 16 && slot !== "dj"));
+  const isClosed = (slot: FlowSlot) => !openedToday.has(slot) && !doneSlots.has(slot);
 
   // ผลจริงทุกวันที่มีในระบบ (ใหม่ → เก่า)
   const realDays = [...byDay].filter(([, l]) => l.length >= 3).sort((a, b) => b[0].localeCompare(a[0]));
@@ -80,9 +80,21 @@ export default async function FlowPage({ searchParams }: PageProps<"/flow">) {
   // หุ้นแนะนำรายวัน: คะแนนจากผลครบวัน (ราคารายวัน) ก่อนวันนั้นเท่านั้น
   const histFull = [...hist.entries()].filter(([, l]) => l.length >= 10).map(([d, l]) => [d, sortDay(l)] as const);
   const model = flowModel(histFull);
-  /** วิเคราะห์รอบ: เลขไหลของวันนั้นก่อนรอบนี้ + สถิติก่อนวันนั้น */
-  const estOf = (d: string, slot: FlowSlot, done: FlowResult[]) => model(d)(slot, done, prevClose.get(`${d}|${slot}`));
-  // การเข้าซื้อเลขไหล = 3 หุ้นหลัก + หุ้นอื่นในวันที่เลขไหลน่าไปหุ้นนั้น
+  // เปลี่ยนตอนเปิดของผู้ใช้ วัน|หุ้น → ทิศของตัวเปิด (ย้อนหลังดัชนีไม่มีตัวเปิด = ไม่รู้ทิศ)
+  const openChg = new Map<string, number>();
+  for (const st of stocks) { const slot = flowSlotOf(st.symbol); if (slot) for (const r of st.records) openChg.set(`${r.date.toISOString().slice(0, 10)}|${slot}`, r.openChange); }
+  /**
+   * วิเคราะห์รอบ: เลขไหลของวันนั้นก่อนรอบนี้ → โอกาสเข้าของหุ้นนี้วันนี้ (dayChance · ราคาปิดเมื่อวาน + ทิศตัวเปิด)
+   *   แนะนำเมื่อโอกาส ≥ DAY_PLAY — หุ้นไหนก็ได้ ไม่มีหุ้นหลัก (ผู้ใช้ 3 พ.ย. 69)
+   */
+  const estOf = (d: string, slot: FlowSlot, done: FlowResult[]) => {
+    const e = model(d)(slot, done, prevClose.get(`${d}|${slot}`));
+    const pc = prevClose.get(`${d}|${slot}`), two = flowTwo(done).map((x) => x.d);
+    if (!e) return null;
+    const chance: DayChance | null = pc !== undefined && two.length >= 2 ? dayChance(slot, two, pc, openChg.get(`${d}|${slot}`)) : null;
+    return { ...e, chance, play: !!chance && chance.p >= DAY_PLAY };
+  };
+  // การเข้าซื้อเลขไหล = ทุกหุ้นที่โอกาสวันนั้น ≥ DAY_PLAY
   const moneyReal = flowMoney(realDays, stake, (w, d, l) => !!estOf(d, w.r.slot, l.slice(0, w.i))?.play);
   // ทุกเดือนย้อนหลัง (ผู้ใช้ 29 ต.ค. 69: "อยากเห็นทุกเดือน ว่ามันโอเคไหม") — วิธีเดียวกัน แต่ผลจากราคาปิดรายวัน (IndexDay ต.ค. 66 →) · แต่ละวันใช้สถิติก่อนวันนั้นเท่านั้น
   const moneyHist = flowMoney(histFull, stake, (w, d, l) => !!estOf(d, w.r.slot, l.slice(0, w.i))?.play);
@@ -160,7 +172,7 @@ export default async function FlowPage({ searchParams }: PageProps<"/flow">) {
   const nowDs = now.map((x) => x.d);
   // copy เลขไหล + เจาะ ของรอบที่ยังไม่ออก (รูปแบบเดียวกับปุ่ม copy หน้า VIP/สรุป)
   const copyItem = (r: (typeof FLOW_ROUNDS)[number]) => ({ label: `${r.label} ${r.time}`, pick: nowDs.length ? nowDs : null, drill: nowDrill, status: "pending" });
-  // สัญญาณเล่น: ทุกหุ้นที่ยังเปิด · หุ้นหลัก + หุ้นที่เลขไหลวันนี้น่าไป (รอบก่อนหน้ายังไม่ครบ = อาจเปลี่ยน)
+  // สัญญาณเล่น: ทุกหุ้นที่ยังเปิด · หุ้นที่โอกาสวันนี้ ≥ DAY_PLAY (รอบก่อนหน้ายังไม่ครบ = อาจเปลี่ยน)
   const hhmm = thaiHHMM();
   const labelOf = (slot: FlowSlot) => FLOW_ROUNDS.find((x) => x.slot === slot)!.label;
   const rounds = FLOW_ROUNDS.filter((r) => !isClosed(r.slot)).map((r) => {
@@ -183,8 +195,15 @@ export default async function FlowPage({ searchParams }: PageProps<"/flow">) {
   const nowStreak = flowStreak(done);
   /** เหตุผลจากตลาดวันนั้น */
   const why = (x: { t: ReturnType<typeof flowTwo>; n: number; est: RoundEst | null }) => (x.t.length && x.est ? `วันนี้ออกแล้ว ${x.n} รอบ: เลข ${x.t[0].d} ออก ${x.t[0].rounds} รอบ (${Math.round(x.est.mood.ratio * 100)}% ไหล${x.est.mood.strength}) · เลข ${x.t[1].d} ออก ${x.t[1].rounds} รอบ` : "");
-  /** เลขไหลแบบวันนี้ เคยไหลไปหุ้นนี้แล้วได้ไหม */
-  const past = (e: RoundEst | null) => e ? `ในอดีตตอนเลขไหล${e.mood.strength}${e.mood.lead ? "และตัวแรกนำ" : "และเสมอกัน"} หุ้นนี้ ${e.cellN} รอบ ซื้อ 100 ได้คืน ${e.cellRet === null ? "—" : (e.cellRet * 100).toFixed(0)}` : "";
+  /** ที่มาของโอกาสวันนี้: ราคาปิดเมื่อวาน + ทิศตัวเปิด → ไล่บน 00–99 */
+  const pc0 = (x: number) => Math.round(x * 100);
+  const chanceWhy = (c: DayChance | null, two: string[]) => {
+    if (!c) return "ยังคิดโอกาสไม่ได้ (ไม่มีราคาปิดเมื่อวาน)";
+    const ds = two.join("/"), U = pc0(c.up), D = pc0(c.down);
+    const dirTxt = c.dir === 0 ? "ไม่รู้ทิศ (คิดขึ้น/ลงเท่ากัน)" : `ตัวเปิด${c.dir > 0 ? "ขึ้น" : "ลง"} (หุ้นนี้ทิศเปิดตรงทิศปิด ${pc0(c.q)}%)`;
+    const calc = c.dir === 0 ? `(${U} + ${D}) / 2` : c.dir > 0 ? `${c.q.toFixed(2)}×${U} + ${(1 - c.q).toFixed(2)}×${D}` : `${c.q.toFixed(2)}×${D} + ${(1 - c.q).toFixed(2)}×${U}`;
+    return `สตางค์ปิดเมื่อวาน ${c.prevCents} · ${dirTxt} → ไล่บน 00–99: ถ้าปิดขึ้น ${ds} โผล่ ${U} แบบ · ถ้าปิดลง ${D} แบบ → โอกาส ${calc} = ${pc0(c.p)}% (สุ่ม 59% · แนะนำเมื่อ ≥${pc0(DAY_PLAY)}%)`;
+  };
   // ประวัติสัญญาณ: วันที่มีผลจริง (ใหม่ → เก่า) · รอบที่แนะนำ ณ ตอนนั้น = เลขไหลที่จะเล่น ผล เข้าไหม กำไร
   const signalHistory = realDays.slice(0, 30).map(([d, l]) => {
     const cells = walkDay(l).filter((w) => w.two.length && estOf(d, w.r.slot, l.slice(0, w.i))?.play).map((w) => ({ slot: w.r.slot, w, b: betOf(w)! }));
@@ -256,14 +275,14 @@ export default async function FlowPage({ searchParams }: PageProps<"/flow">) {
                 <>
                   <div className="font-mono text-5xl font-bold tracking-widest text-amber-600">{nowDs.join(" ")}</div>
                   <div className="text-sm text-slate-600">เลข {now[0].d} ออก {now[0].rounds}/{done.length} รอบ · เลข {now[1].d} ออก {now[1].rounds} รอบ</div>
-                  {nowStreak > 0 && <div className={`text-sm ${nowStreak >= FOLLOW_STREAK ? "font-medium text-emerald-700" : "text-slate-600"}`}>🔥 เลขไหลเข้าติดกัน {nowStreak} รอบ{nowStreak >= FOLLOW_STREAK && " → ตามต่อทุกหุ้น"}</div>}
+                  {nowStreak > 0 && <div className="text-sm text-slate-600">🔥 เลขไหลเข้าติดกัน {nowStreak} รอบ</div>}
                   <div className="rounded-lg bg-slate-50 px-3 py-2 font-mono text-sm">
                     <span className="mr-2 font-sans text-xs text-slate-500">เจาะ</span>
                     {nowDrill.map((set, i) => <div key={i}>{set.join(" ")}</div>)}
                   </div>
                   {rounds.some((x) => !x.w) && (
                     <div className="flex items-center gap-2 text-sm text-slate-600">
-                      copy ทุกหุ้นที่ยังไม่ออก <CopyPending items={rounds.filter((x) => !x.w).map((x) => copyItem(x.r))} title={`เลขไหล · ${dayLabel}`} />
+                      copy ทุกหุ้นที่ยังไม่ออก <CopyPending stake={stake} items={rounds.filter((x) => !x.w).map((x) => copyItem(x.r))} title={`เลขไหล · ${dayLabel}`} />
                     </div>
                   )}
                 </>
@@ -290,7 +309,7 @@ export default async function FlowPage({ searchParams }: PageProps<"/flow">) {
                         <span className="text-xl font-semibold">{x.r.label}</span>
                         <span className="text-sm text-slate-600">แทงก่อน {x.r.time}</span>
                         <span className="font-mono text-xl font-bold text-amber-600">{nowDs.join(" ")}</span>
-                        <CopyPending one items={[copyItem(x.r)]} />
+                        <CopyPending stake={stake} one items={[copyItem(x.r)]} />
                       </div>
                     ))}
                     <div className="mt-1 text-xs text-slate-600">เลขนิ่งแล้ว (รอบก่อนหน้าออกครบ)</div>
@@ -316,7 +335,7 @@ export default async function FlowPage({ searchParams }: PageProps<"/flow">) {
               </div>
               {rounds.some((x) => x.state === "play" || x.state === "wait") && (
                 <div className="flex items-center gap-2 text-sm text-slate-600">
-                  copy ทุกหุ้นที่แนะนำ <CopyPending items={rounds.filter((x) => x.state === "play" || x.state === "wait").map((x) => copyItem(x.r))} title={`เลขไหล · ${dayLabel}`} />
+                  copy ทุกหุ้นที่แนะนำ <CopyPending stake={stake} items={rounds.filter((x) => x.state === "play" || x.state === "wait").map((x) => copyItem(x.r))} title={`เลขไหล · ${dayLabel}`} />
                 </div>
               )}
             </section>
@@ -347,7 +366,7 @@ export default async function FlowPage({ searchParams }: PageProps<"/flow">) {
                       : st === "late" ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">รอผล</span>
                       : <span className="rounded-full bg-rose-50 px-2 py-0.5 text-xs text-rose-600">✕ ข้าม</span>;
                     const e = x?.est;
-                    const short = !e ? "" : e.play ? (e.base ? "หุ้นหลัก" : e.follow ? `ตามไหล ${e.streak} รอบติด` : "เลขไหลน่าไปหุ้นนี้") : e.tight ? "ราคาปิดเมื่อวานไม่เอื้อ" : "ไม่น่าไหลไป";
+                    const short = !e || !e.chance ? "" : `โอกาส ${pc0(e.chance.p)}%${e.play ? "" : e.chance.p < DAY_LOW ? " ต่ำกว่าสุ่ม" : " เท่าสุ่ม"}`;
                     const two = w ? w.two : x?.hasFlow ? nowDs : [], drill = w ? w.drill : x?.hasFlow ? nowDrill : [];
                     return (
                       <tr key={r.slot} className={st === "play" ? "bg-emerald-50" : played ? "bg-emerald-50/40" : !x ? "text-slate-300" : ""}>
@@ -359,7 +378,7 @@ export default async function FlowPage({ searchParams }: PageProps<"/flow">) {
                           {e && (
                             <details className="text-xs text-slate-500">
                               <summary className="cursor-pointer text-blue-700">ทำไม</summary>
-                              <div className="mt-1 max-w-sm">{why(x!)}{e.streak > 0 && ` · เข้าติดกัน ${e.streak} รอบ`}<br />{past(e)}</div>
+                              <div className="mt-1 max-w-sm">{why(x!)}<br />{chanceWhy(e.chance, x!.t.map((y) => y.d))}</div>
                             </details>
                           )}
                         </td>
@@ -368,7 +387,7 @@ export default async function FlowPage({ searchParams }: PageProps<"/flow">) {
                             <>
                               <div className="font-semibold">{two.join(" ")}</div>
                               <div className="text-[11px] leading-tight text-slate-400">{drill.map((set, i) => <div key={i}>{set.join(" ")}</div>)}</div>
-                              {x && !w && <div className="mt-0.5"><CopyPending one items={[copyItem(r)]} /></div>}
+                              {x && !w && <div className="mt-0.5"><CopyPending stake={stake} one items={[copyItem(r)]} /></div>}
                             </>
                           ) : "—"}
                         </td>
@@ -399,8 +418,8 @@ export default async function FlowPage({ searchParams }: PageProps<"/flow">) {
               <summary className="cursor-pointer">วิธีเลือกหุ้น และวิธีซื้อ</summary>
               <ul className="mt-1 list-disc space-y-0.5 pl-5">
                 <li>เลขไหล = 2 ตัวที่ออกมาแล้วหลายรอบที่สุดของวัน · เจาะ = เลขไหลจับคู่กับเลขที่ไหลรองลงมา ชุดละ 6</li>
-                <li>หุ้นหลัก (ฮั่งเส็งเช้า · นิเคอิบ่าย · ฮั่งเส็งบ่าย) เล่นทุกวัน · หุ้นอื่นเพิ่มเมื่อเลขไหลวันนั้นน่าไป · เลขไหลเข้าติดกัน {FOLLOW_STREAK} รอบขึ้นไป = ตามต่อทุกหุ้น</li>
-                <li>ข้ามหุ้นที่ราคาปิดเมื่อวานไม่เอื้อเลขไหล (เลขบนผูกกับเลขล่างด้วยราคาปิดเมื่อวาน)</li>
+                <li>ทุกหุ้นคิด "โอกาสวันนี้" หลังตัวเปิดเข้า: บน = สตางค์ปิด (เดาไม่ได้ ไล่ 00–99) · ล่าง = ±(บน − สตางค์ปิดเมื่อวาน) → นับว่าเลขไหลโผล่กี่แบบ · ถ่วงด้วยทิศตัวเปิด</li>
+                <li>แนะนำเมื่อโอกาส ≥{pc0(DAY_PLAY)}% (วัดแล้วเข้าจริง ~65% · สุ่ม 59%) · ต่ำกว่า {pc0(DAY_LOW)}% = ต่ำกว่าสุ่ม · เพดานของวิธีนี้ ~65% เพราะสตางค์ปิดเดาไม่ได้</li>
                 <li>▶ เล่นได้เลย = รอบก่อนหน้าออกครบ เลขไม่เปลี่ยนแล้ว · ⏳ รอ = ยังมีรอบก่อนหน้าไม่ออก เลขอาจเปลี่ยน</li>
                 <li>ซื้อ: รูด 2 ตัว + เจาะ 12 ตัว ทั้งบนและล่าง {betCost(2, 12, stake).toLocaleString("th-TH")} บาทต่อรอบ (เลขละ {stake}) · ได้เปรียบน้อย เริ่มเงินน้อยก่อน · ดาวโจนส์ผลออก ~03:05 คืนถัดไป</li>
               </ul>
@@ -434,7 +453,7 @@ export default async function FlowPage({ searchParams }: PageProps<"/flow">) {
           return (
             <div className="rounded-lg bg-slate-50 p-3 text-sm">
               <div className="text-xs text-slate-500">
-                {rangeName} · หุ้นหลัก + หุ้นที่เลขไหลน่าไป เลขละ {stake}
+                {rangeName} · หุ้นที่โอกาสวันนั้น ≥{pc0(DAY_PLAY)}% เลขละ {stake}
                 {rangeHasHist && <span className="ml-1 rounded bg-amber-100 px-1 text-amber-800">ก่อน {thDate(firstReal)} ใช้ย้อนหลังจากราคาปิด — ยังไม่มีผลจริงในระบบ</span>}
               </div>
               {mm.days ? (
@@ -490,7 +509,7 @@ export default async function FlowPage({ searchParams }: PageProps<"/flow">) {
           );
         })()}
         <p className="text-xs text-slate-500">
-          ซื้อหุ้นหลัก 3 ตัว + หุ้นที่เลขไหลวันนั้นน่าไป: รูดเลขไหล 2 ตัว (19 ประตู) + เจาะ 12 ตัว (กลับ) ทั้งบนและล่าง · {betCost(2, 12, stake).toLocaleString("th-TH")} บาทต่อรอบ · จ่ายบาทละ {BET.payout} ·
+          ซื้อทุกหุ้นที่โอกาสวันนั้น ≥{pc0(DAY_PLAY)}%: รูดเลขไหล 2 ตัว (19 ประตู) + เจาะ 12 ตัว (กลับ) ทั้งบนและล่าง · {betCost(2, 12, stake).toLocaleString("th-TH")} บาทต่อรอบ · จ่ายบาทละ {BET.payout} ·
           คิดจากผลที่บันทึกในระบบ (ยังไม่ได้ล็อกเลขไว้ก่อนผลออก)
         </p>
         {moneyHist.years.length > 0 && (() => {

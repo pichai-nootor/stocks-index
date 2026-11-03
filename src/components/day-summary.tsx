@@ -77,7 +77,7 @@ function DrillTip({ drill, hits }: { drill: string[][]; hits?: string[] }) {
   );
 }
 
-function Group({ title, items, dateLabel }: { title: string; items: DaySummaryItem[]; dateLabel: string }) {
+function Group({ title, items, dateLabel, stake }: { title: string; items: DaySummaryItem[]; dateLabel: string; stake?: number }) {
   const hit = items.filter((x) => x.status === "star" || x.status === "second").length;
   const star = items.filter((x) => x.status === "star").length;
   const miss = items.filter((x) => x.status === "miss").length;
@@ -86,7 +86,7 @@ function Group({ title, items, dateLabel }: { title: string; items: DaySummaryIt
   return (
     <div className="min-w-0">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="flex items-center gap-2 font-medium">{title}<CopyPending title={`${title} · ${dateLabel}`} items={items.map(({ label, pick, drill, status }) => ({ label, pick, drill, status }))} /></h3>
+        <h3 className="flex items-center gap-2 font-medium">{title}<CopyPending stake={stake} title={`${title} · ${dateLabel}`} items={items.map(({ label, pick, drill, status }) => ({ label, pick, drill, status }))} /></h3>
         <p className="text-sm">
           <span className="font-semibold text-emerald-700">เข้า {hit}</span>
           <span className="text-slate-400"> (★ {star})</span>
@@ -114,7 +114,7 @@ function Group({ title, items, dateLabel }: { title: string; items: DaySummaryIt
                 {x.profit !== undefined ? (
                   <span title={`ลงทุน ${baht(x.cost!)} · ถูก ${x.tickets} ใบ ได้ ${baht(x.win!)}`} className={`w-16 text-right text-xs font-semibold tabular-nums ${x.profit >= 0 ? "text-emerald-700" : "text-red-700"}`}>{signed(x.profit)}</span>
                 ) : x.cost ? <span className="w-16 text-right text-xs tabular-nums text-slate-400">ทุน {baht(x.cost)}</span> : null}
-                <CopyPending one items={[x]} />
+                <CopyPending one stake={stake} items={[x]} />
                 {x.drill && <DrillTip drill={x.drill} hits={x.drillHits} />}
                 <span className={`rounded px-2 py-0.5 text-xs font-medium ${BADGE[x.status].cls}`}>{BADGE[x.status].text}</span>
               </span>
@@ -151,19 +151,19 @@ function MonthBar({ month, vipOnly = false }: { month: { label: string; regular:
 
 /** สรุปผลของวัน: หุ้นปกติ + หุ้น VIP เข้ากี่งวด ไม่เข้ากี่งวด (นับ "เข้า" = เลขฟัน 2 ตัว มาอย่างน้อย 1 ตัว) */
 /** VIP งวดถัดไป (พรุ่งนี้) ที่ฟันได้แล้ว — เลขล็อกแล้ว ก๊อปไปแทงได้ · รอบที่ยังรอผลเช้าบอกว่ารออะไร */
-function NextVip({ label, items, title = "หุ้น VIP" }: { label: string; items: DaySummaryItem[]; title?: string }) {
+function NextVip({ label, items, title = "หุ้น VIP", stake }: { label: string; items: DaySummaryItem[]; title?: string; stake?: number }) {
   return (
     <div className="rounded-md border border-blue-100 bg-blue-50/40 px-3 py-2">
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="font-medium">{title} งวดถัดไป · {label}</h3>
-        <CopyPending title={`${title} งวดถัดไป · ${label}`} items={items.map(({ label, pick, drill, status }) => ({ label, pick, drill, status }))} />
+        <CopyPending stake={stake} title={`${title} งวดถัดไป · ${label}`} items={items.map(({ label, pick, drill, status }) => ({ label, pick, drill, status }))} />
         <span className="text-[11px] text-slate-400">ล็อกเลขแล้ว — รายงานพรุ่งนี้ใช้เลขชุดนี้</span>
       </div>
       <ul className="mt-1 grid gap-x-4 gap-y-0.5 text-sm sm:grid-cols-2">
         {items.map((x) => (
           <li key={x.key} className="flex items-center gap-2">
             <Link href={x.href} className="w-28 shrink-0 truncate text-blue-700 hover:underline">{x.label}</Link>
-            {x.pick ? <><span className="font-mono text-xs text-slate-700">★{x.pick[0]} {x.pick[1]}</span><CopyPending one items={[x]} /></> : <span className="truncate text-xs text-amber-700" title={x.wait}>⏳ {x.wait ?? "ยังฟันไม่ได้"}</span>}
+            {x.pick ? <><span className="font-mono text-xs text-slate-700">★{x.pick[0]} {x.pick[1]}</span><CopyPending one stake={stake} items={[x]} /></> : <span className="truncate text-xs text-amber-700" title={x.wait}>⏳ {x.wait ?? "ยังฟันไม่ได้"}</span>}
           </li>
         ))}
       </ul>
@@ -181,11 +181,11 @@ export function DaySummary({ dateLabel, regular, vip, month, next, vipTitle, not
         <p className="text-xs text-slate-500">{note ?? "เข้า = เลขฟัน 2 ตัวมาอย่างน้อย 1 ตัว (ใน 2 ตัวบนหรือล่าง) · เจาะเข้า = เลขเจาะตรง 2 ตัวบนหรือล่าง กลับได้ (ชี้ที่ป้ายเพื่อดูเลข) · VIP ใช้เลขที่ล็อกไว้ก่อนผลออก · ไม่รวมอินเดีย VIP (เก็บสถิติก่อน)"}</p>
       </div>
       <MonthBar month={month} vipOnly={only} />
-      {next && <NextVip {...next} title={vipTitle} />}
-      {only ? <Group title={vipTitle} items={vip} dateLabel={dateLabel} /> : (
+      {next && <NextVip {...next} title={vipTitle} stake={month.stake} />}
+      {only ? <Group title={vipTitle} items={vip} dateLabel={dateLabel} stake={month.stake} /> : (
         <div className="grid gap-5 lg:grid-cols-2">
-          <Group title="หุ้นปกติ" items={regular} dateLabel={dateLabel} />
-          <Group title="หุ้น VIP" items={vip} dateLabel={dateLabel} />
+          <Group title="หุ้นปกติ" items={regular} dateLabel={dateLabel} stake={month.stake} />
+          <Group title="หุ้น VIP" items={vip} dateLabel={dateLabel} stake={month.stake} />
         </div>
       )}
     </section>
