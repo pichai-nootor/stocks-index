@@ -10,6 +10,7 @@ import { GuessForm } from "./guess-form";
 import { AutoRefresh } from "./auto-refresh";
 import { RangePicker } from "@/components/range-picker";
 import { CopyPending } from "@/components/copy-pending";
+import { DateJump } from "@/components/date-jump";
 import { BET, STAKES, parseStake, betCost, betResult } from "@/lib/bet";
 
 const BET_STAKE = BET.stake;
@@ -162,6 +163,16 @@ export default async function FlowPage({ searchParams }: PageProps<"/flow">) {
   const firstDay = moneyAll.rows.map((r) => r.d).sort()[0] ?? rFrom;
 
   const nav = (d: string, st = stake, t: string = tab) => `/flow?date=${d}${st !== BET_STAKE ? `&stake=${st}` : ""}${t !== "today" ? `&tab=${t}` : ""}${picked ? `&from=${picked.from}&to=${picked.to}` : ""}`;
+  /** เลือกเงินต่อเลข — อยู่แท็บเดิม (ผู้ใช้ 4 พ.ย. 69: ให้เลือกในแท็บวันนี้ได้เลย) · ใช้กับ copy / กำไรวันนี้ / ผลการเข้าซื้อ */
+  const stakePicker = (
+    <div className="ml-auto flex flex-wrap items-center gap-1 text-sm">
+      <span className="text-slate-500">เลขละ</span>
+      {STAKES.map((st) => (
+        <Link key={st} href={nav(day, st)} scroll={false} className={`rounded-md border px-2 py-0.5 tabular-nums ${st === stake ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 text-slate-600 hover:border-blue-300"}`}>{st}</Link>
+      ))}
+      <span className="text-slate-500">บาท</span>
+    </div>
+  );
   /** เปลี่ยนช่วงในส่วนการเข้าซื้อ — วันที่และสัญญาณด้านบนคงเดิม */
   const navBase = `/flow?date=${day}${stake !== BET_STAKE ? `&stake=${stake}` : ""}&tab=buy`;
   const navM = (m: string) => `${navBase}&from=${m}-01&to=${shift(`${shift(`${m}-01`, 31).slice(0, 7)}-01`, -1)}#buy`; // ทั้งเดือน (+31 วัน = เดือนถัดไปเสมอ → ถอย 1 วัน)
@@ -250,7 +261,7 @@ export default async function FlowPage({ searchParams }: PageProps<"/flow">) {
         <h1 className="text-xl font-semibold">เลขไหล</h1>
         <div className="ml-auto flex items-center gap-1 text-sm">
           <Link href={nav(shift(day, -1))} className="btn-ghost border border-slate-200 px-2">‹</Link>
-          <span className="min-w-28 text-center font-medium tabular-nums">{dayLabel}</span>
+          <DateJump label={dayLabel} value={day} max={today} hrefTemplate={nav("__DATE__")} />
           {day < today ? <Link href={nav(shift(day, 1))} className="btn-ghost border border-slate-200 px-2">›</Link> : <span className="btn-ghost border border-slate-100 px-2 text-slate-300">›</span>}
           {day !== today && <Link href={nav(today)} className="btn-ghost text-blue-700">วันนี้</Link>}
         </div>
@@ -264,6 +275,7 @@ export default async function FlowPage({ searchParams }: PageProps<"/flow">) {
       {tab === "today" && (
         <>
           {day === today && <AutoRefresh />}
+          <div className="flex">{stakePicker}</div>
           {/* 1) เลขไหลตอนนี้ + ทำอะไรต่อ */}
           <div className="grid gap-3 lg:grid-cols-5">
             <section className="card space-y-2 lg:col-span-2">
@@ -418,7 +430,7 @@ export default async function FlowPage({ searchParams }: PageProps<"/flow">) {
               <summary className="cursor-pointer">วิธีเลือกหุ้น และวิธีซื้อ</summary>
               <ul className="mt-1 list-disc space-y-0.5 pl-5">
                 <li>เลขไหล = 2 ตัวที่ออกมาแล้วหลายรอบที่สุดของวัน · เจาะ = เลขไหลจับคู่กับเลขที่ไหลรองลงมา ชุดละ 6</li>
-                <li>ทุกหุ้นคิด "โอกาสวันนี้" หลังตัวเปิดเข้า: บน = สตางค์ปิด (เดาไม่ได้ ไล่ 00–99) · ล่าง = ±(บน − สตางค์ปิดเมื่อวาน) → นับว่าเลขไหลโผล่กี่แบบ · ถ่วงด้วยทิศตัวเปิด</li>
+                <li>ทุกหุ้นคิด “โอกาสวันนี้” หลังตัวเปิดเข้า: บน = สตางค์ปิด (เดาไม่ได้ ไล่ 00–99) · ล่าง = ±(บน − สตางค์ปิดเมื่อวาน) → นับว่าเลขไหลโผล่กี่แบบ · ถ่วงด้วยทิศตัวเปิด</li>
                 <li>แนะนำเมื่อโอกาส ≥{pc0(DAY_PLAY)}% (วัดแล้วเข้าจริง ~65% · สุ่ม 59%) · ต่ำกว่า {pc0(DAY_LOW)}% = ต่ำกว่าสุ่ม · เพดานของวิธีนี้ ~65% เพราะสตางค์ปิดเดาไม่ได้</li>
                 <li>▶ เล่นได้เลย = รอบก่อนหน้าออกครบ เลขไม่เปลี่ยนแล้ว · ⏳ รอ = ยังมีรอบก่อนหน้าไม่ออก เลขอาจเปลี่ยน</li>
                 <li>ซื้อ: รูด 2 ตัว + เจาะ 12 ตัว ทั้งบนและล่าง {betCost(2, 12, stake).toLocaleString("th-TH")} บาทต่อรอบ (เลขละ {stake}) · ได้เปรียบน้อย เริ่มเงินน้อยก่อน · ดาวโจนส์ผลออก ~03:05 คืนถัดไป</li>
@@ -440,13 +452,7 @@ export default async function FlowPage({ searchParams }: PageProps<"/flow">) {
             base={navBase}
             dayProfit={Object.fromEntries(moneyAll.rows.map((r) => [r.d, r.win - r.cost]))}
           />
-          <div className="ml-auto flex flex-wrap items-center gap-1 text-sm">
-            <span className="text-slate-500">เลขละ</span>
-            {STAKES.map((st) => (
-              <Link key={st} href={nav(day, st)} className={`rounded-md border px-2 py-0.5 tabular-nums ${st === stake ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 text-slate-600 hover:border-blue-300"}`}>{st}</Link>
-            ))}
-            <span className="text-slate-500">บาท</span>
-          </div>
+          {stakePicker}
         </div>
         {(() => {
           const ms = monthStatOf(moneyReal), mm = rangeStat(moneyAll);
