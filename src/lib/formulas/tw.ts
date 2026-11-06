@@ -36,6 +36,7 @@
  *   ⚠ ได้เปรียบแค่ ~1 จุด — เลขเจาะของไต้หวันขึ้นกับเลขฟันเป็นหลัก ไม่มีพฤติกรรมระดับคู่ที่แรง
  */
 import { DIGITS10, canon2, resultDigits, type MarketFormula, type VipDraw, type VipPick, type VipDrillSet } from "./types";
+import { betResult } from "@/lib/bet";
 
 export const TW_MIN_HISTORY = 250;
 export const TW_DRILL_PER_DIGIT = 6;
@@ -138,20 +139,26 @@ function advance(history: VipDraw[], nextWeekday: number): Engine {
   return e;
 }
 
-/** ฝึก logistic (L2 0.01) ที่ "ชั่งน้ำหนักทุกสูตร" จาก TW_TRAIN_WINDOW งวดล่าสุดก่อน cutoff */
+/**
+ * ฝึก logistic (L2 0.01) ที่ "ชั่งน้ำหนักทุกสูตร" จาก `win` งวดล่าสุดก่อน cutoff
+ *   target: all = เลขออกในผล (บน 2 + ล่าง 2) · top = ออกใน 2 ตัวบน · bot = ออกใน 2 ตัวล่าง (โมเดลแยกฝั่ง — ปรับ 7 พ.ย. 69)
+ */
+type Target = "all" | "top" | "bot";
 const modelCache = new Map<string, { w: Float64Array; b: number }>();
-function trainedModel(e: Engine, cutoff: number) {
-  const key = `${cutoff}|${e.sigs[cutoff - 1]}`;
+function trainedModel(e: Engine, cutoff: number, win = TW_TRAIN_WINDOW, target: Target = "all") {
+  const key = `${target}|${win}|${cutoff}|${e.sigs[cutoff - 1]}`;
   const hit = modelCache.get(key);
   if (hit) return hit;
-  const lo = Math.max(TW_START, cutoff - TW_TRAIN_WINDOW), nf = e.feats[lo][0].length;
+  const lo = Math.max(TW_START, cutoff - win), nf = e.feats[lo][0].length;
+  const y = (i: number, di: number) => target === "all" ? +e.sets[i].has(DIGITS10[di])
+    : target === "top" ? +(e.pos[i][1] === di || e.pos[i][2] === di) : +(e.pos[i][3] === di || e.pos[i][4] === di);
   const w = new Float64Array(nf); let b = 0;
   for (let it = 0; it < 400; it++) {
     const g = new Float64Array(nf); let gb = 0, n = 0;
     for (let i = lo; i < cutoff; i++) for (let di = 0; di < 10; di++) {
       const x = e.feats[i][di]; let z = b;
       for (let j = 0; j < nf; j++) z += w[j] * x[j];
-      const err = 1 / (1 + Math.exp(-z)) - +e.sets[i].has(DIGITS10[di]);
+      const err = 1 / (1 + Math.exp(-z)) - y(i, di);
       gb += err; n++;
       for (let j = 0; j < nf; j++) g[j] += err * x[j];
     }
@@ -159,29 +166,78 @@ function trainedModel(e: Engine, cutoff: number) {
     b -= 0.3 * gb / n;
   }
   const m = { w, b };
-  if (modelCache.size > 200) modelCache.clear();
+  if (modelCache.size > 1000) modelCache.clear(); // 3 โมเดลต่อรอบฝึก (เดิม 1) — เผื่อหน้าที่ไล่ทุกงวดย้อนหลัง ไม่ให้ล้างแคชแล้วฝึกซ้ำ
   modelCache.set(key, m);
   return m;
+}
+
+/**
+ * **ปรับ 7 พ.ย. 69 (ผู้ใช้: "เรียนรู้พฤติกรรมการออก" — แพ้ 3 งวดติด 4–6 พ.ย. ฟัน 0 ซ้ำ 24/26 งวด)**
+ * สลับมุมมองตามผลจริงช่วงล่าสุด: 3 มุมมอง (ทุกตัว + เลขเย็น 100 งวด แบบเดิม)
+ *   [0] โมเดล 800 งวด (สูตรเดิม) · [1] โมเดล 400 งวด (ตามการเปลี่ยนเร็วกว่า) · [2] โมเดลแยกฝั่ง บน + ล่าง (เงินจ่ายแยกฝั่ง)
+ *   ทุกงวด: ดูว่ามุมมองไหนทำเงิน (เลขฟัน + เลขเจาะ เลขละ 20) ได้มากสุดใน TW_SWITCH_WINDOW งวดล่าสุด → ใช้มุมมองนั้น (เสมอ → ลำดับก่อน)
+ * ทดสอบ walk-forward 1,150 งวด เงินต่องวด (ช่วงค้น 400 / 400 · 350 งวดที่ไม่ได้ใช้เลือก · 100 ล่าสุด):
+ *   เดิม +290 / +335 · +640 · +920 → สลับ 30 งวด +355 / +450 · +754 · +840 (20 งวด +305 / +370 · +720 · +980 · 45 งวด +405 / +345 · +686 · +940)
+ *   ที่ลองแล้วแพ้ (6 พ.ย. 69): ตัด/พักเลข 0, เลขเย็น 10–200 งวด, เลขร้อน, มาร์คอฟ, ช่วงในอดีตที่คล้ายกัน, สูตรหวยหุ้น, ฝึกทุกงวด,
+ *     รวมโมเดลหลายช่วง, เลือกคู่ฟัน+เจาะให้เงินสูงสุด, สุ่มน้ำหนัก 18,664 แบบ (50 อันดับแรกไม่ชนะเดิมในงวดที่ไม่ได้ใช้เลือกเลย)
+ */
+export const TW_SWITCH_WINDOW = 30;
+const TW_VIEWS = [
+  { name: "โมเดล 800 งวด", win: 800, side: false },
+  { name: "โมเดล 400 งวด", win: 400, side: false },
+  { name: "โมเดลแยกบน/ล่าง", win: 800, side: true },
+] as const;
+
+/** อันดับเลข 0–9 ของแต่ละมุมมอง ณ งวด n (คุณสมบัติของงวด n ใช้เฉพาะงวดก่อน n) + ความน่าจะเป็น + จำนวนครั้งที่ออกใน 100 งวด */
+function viewOrders(e: Engine, n: number) {
+  const cut = n - (n % TW_RETRAIN_EVERY);
+  const prob = (m: { w: Float64Array; b: number }) => DIGITS10.map((_, di) => 1 / (1 + Math.exp(-e.feats[n][di].reduce((s, v, j) => s + v * m.w[j], m.b))));
+  const count = Object.fromEntries(DIGITS10.map((d) => [d, e.sets.slice(n - TW_COLD_WINDOW, n).filter((s) => s.has(d)).length])) as Record<string, number>;
+  const cold = [...DIGITS10].sort((a, c) => count[a] - count[c] || a.localeCompare(c));
+  const views = TW_VIEWS.map((v) => {
+    const p = v.side
+      ? (() => { const t = prob(trainedModel(e, cut, v.win, "top")), b = prob(trainedModel(e, cut, v.win, "bot")); return t.map((x, i) => x + b[i]); })()
+      : prob(trainedModel(e, cut, v.win));
+    const model = [...DIGITS10].sort((a, c) => p[+c] - p[+a] || a.localeCompare(c));
+    const rank: Record<string, number> = {};
+    model.forEach((d, k) => (rank[d] = k));
+    cold.forEach((d, k) => (rank[d] += k));
+    return { order: [...DIGITS10].sort((a, c) => rank[a] - rank[c] || a.localeCompare(c)), p };
+  });
+  return { views, count };
+}
+
+/** เงินของแต่ละมุมมองในงวด i ที่ออกแล้ว (เลขละ 20) — แคชตามงวด+ผล */
+const viewMoneyCache = new Map<string, number[]>();
+function viewMoney(e: Engine, history: VipDraw[], i: number): number[] {
+  const key = `${i}|${e.sigs[i]}|${e.sigs[i - 1]}`;
+  const hit = viewMoneyCache.get(key);
+  if (hit) return hit;
+  const h = history[i], before = history.slice(0, i);
+  const out = viewOrders(e, i).views.map(({ order }) => {
+    const pick = { order, digits: [order[0], order[1]] } as VipPick;
+    return betResult(pick.digits, drillTw(pick, before).flatMap((x) => x.numbers), h.top.slice(-2), h.bottom, 20).profit;
+  });
+  if (viewMoneyCache.size > 20000) viewMoneyCache.clear();
+  viewMoneyCache.set(key, out);
+  return out;
 }
 
 function pickTw(history: VipDraw[]): VipPick | null {
   if (history.length < TW_MIN_HISTORY) return null;
   const n = history.length;
   const e = advance(history, (weekdayOf(history[n - 1] as Draw) + 1) % 7); // วันละงวด → งวดถัดไป = พรุ่งนี้
-  const { w, b } = trainedModel(e, n - (n % TW_RETRAIN_EVERY));
-  const model = DIGITS10.map((d, di) => { const z = e.feats[n][di].reduce((s, v, j) => s + v * w[j], b); return { digit: d, p: 1 / (1 + Math.exp(-z)) }; })
-    .sort((a, c) => c.p - a.p || a.digit.localeCompare(c.digit));
-  const count = Object.fromEntries(DIGITS10.map((d) => [d, e.sets.slice(n - TW_COLD_WINDOW, n).filter((s) => s.has(d)).length])) as Record<string, number>;
-  const cold = [...DIGITS10].sort((a, c) => count[a] - count[c] || a.localeCompare(c));
-  const rank: Record<string, number> = {};
-  model.forEach((x, k) => (rank[x.digit] = k));
-  cold.forEach((d, k) => (rank[d] += k));
-  const s = [...DIGITS10].sort((a, c) => rank[a] - rank[c] || a.localeCompare(c));
-  const pct = (x: number) => `${(100 * x).toFixed(1)}%`;
-  const why = (d: string) => `${d} (รวมสูตร ${(100 * model.find((x) => x.digit === d)!.p).toFixed(0)}% · ออก ${count[d]}/${TW_COLD_WINDOW} งวด)`;
+  const sums = TW_VIEWS.map(() => 0);
+  for (let i = n - TW_SWITCH_WINDOW; i < n; i++) viewMoney(e, history, i).forEach((m, k) => (sums[k] += m));
+  let best = 0;
+  sums.forEach((s, k) => { if (s > sums[best]) best = k; });
+  const { views, count } = viewOrders(e, n);
+  const s = views[best].order, p = views[best].p;
+  const baht = (x: number) => `${x >= 0 ? "+" : "−"}${Math.abs(x).toLocaleString("th-TH")}`;
+  const why = (d: string) => `${d} (${TW_VIEWS[best].side ? "บน+ล่าง" : "รวมสูตร"} ${(100 * p[+d]).toFixed(0)}% · ออก ${count[d]}/${TW_COLD_WINDOW} งวด)`;
   return {
-    order: s, formula: "tw-mega", label: "สูตรไต้หวัน VIP", digits: [s[0], s[1]],
-    note: `รวมสูตรความน่าจะเป็น 37 ตัวแปร (ความถี่ · ระยะหาย · มาติด · มาร์คอฟ · มาร์คอฟรายตำแหน่ง · วัน · โหวตสูตรหวยหุ้น 89 สูตร) ชั่งน้ำหนักจาก ${TW_TRAIN_WINDOW} งวดล่าสุด + เลขเย็น ${TW_COLD_WINDOW} งวด: ${why(s[0])}, ${why(s[1])} · อันดับถัดไป ${s.slice(2, 5).join(", ")} · ทดสอบ 878 งวด ★ ${pct(TW_BASE.star)} · 2 ตัว ${pct(TW_BASE.any)} · ปี 69 ★ ${pct(TW_BASE.star2026)} · 2 ตัว ${pct(TW_BASE.any2026)} (สุ่ม ${pct(TW_BASE.randomStar)} / ${pct(TW_BASE.randomAny)})`,
+    order: s, formula: "tw-switch", label: "สูตรไต้หวัน VIP", digits: [s[0], s[1]],
+    note: `สลับมุมมองตามผลจริง ${TW_SWITCH_WINDOW} งวดล่าสุด (ปรับ 7 พ.ย. 69) — ใช้ "${TW_VIEWS[best].name}" + เลขเย็น ${TW_COLD_WINDOW} งวด · เงิน ${TW_SWITCH_WINDOW} งวดล่าสุด: ${TW_VIEWS.map((v, k) => `${v.name} ${baht(sums[k])}`).join(" · ")} · ${why(s[0])}, ${why(s[1])} · อันดับถัดไป ${s.slice(2, 5).join(", ")} · ทดสอบ 1,150 งวด: 350 งวดที่ไม่ได้ใช้เลือก +754/งวด (สูตรเดิม +640)`,
   };
 }
 
@@ -201,13 +257,13 @@ function drillTw(pick: VipPick, history: VipDraw[]): VipDrillSet[] {
 }
 
 export const twFormula: MarketFormula = {
-  name: "สูตรไต้หวัน VIP — รวมสูตรความน่าจะเป็น 37 ตัวแปร (MEGA, ฝึก 800 งวดทุก 15 งวด) + เลขเย็น 100 งวด (ปรับ 2 พ.ย. 69)",
-  evidence: "**วิเคราะห์จากเลขที่ออกของไต้หวัน VIP เองเท่านั้น** · MEGA (11 ต.ค. 69): รวมสูตรความน่าจะเป็น 37 ตัวแปร — ความถี่ 10/30/100/300/ตลอดกาล, โอกาสตามระยะหาย, โอกาสตามการมาติด, มาร์คอฟ 'เมื่อวานออก x → วันนี้ออก d', มาร์คอฟรายตำแหน่ง, วันในสัปดาห์, โหวตจากสูตรหวยหุ้น 89 สูตร — ชั่งน้ำหนักจาก 800 งวดล่าสุด (ฝึกใหม่ทุก 15 งวด — ปรับ 2 พ.ย. 69: ทดสอบ 1,150 งวด 2 ตัว 62.1 / 64.5 vs เดิม 61.4 / 63.8) + เลขเย็น 100 งวด · ทดสอบ walk-forward 878 งวด: ★ 38.5% · 2 ตัว 62.2% · ปี 69 ★ 41.5% · 2 ตัว 64.4% · 60 งวดล่าสุด 43.3% / 68.3% (สุ่ม 33.3 / 57.7) · สูตรก่อนหน้าระยะยาวพอ ๆ กัน (39.3 / 62.6) แต่ช่วงล่าสุดแพ้ (38.3 / 60.0) · ราคาเปิด/ปิดช่วยไม่ได้ (ราคาวิ่งเฉลี่ย 57 จุด/วัน ผลต้องแม่นระดับสตางค์ และเว็บขยับ diff แถวผล) · เลขเจาะ: คู่ที่ออกบ่อยใน 300 งวด ตัดเบิ้ล ตัดคู่ของเมื่อวาน 46.8% (สุ่มคู่ 45.7%) · ได้เปรียบสุ่มราว 5–8 จุด ผลรายวันยังแกว่ง พลาด 3 วันติดเกิดได้ราว 1 ครั้งต่อ 40 วัน",
+  name: "สูตรไต้หวัน VIP — สลับมุมมองตามผลจริง 30 งวดล่าสุด (โมเดล 800 / 400 งวด / แยกบน-ล่าง) + เลขเย็น 100 งวด (ปรับ 7 พ.ย. 69)",
+  evidence: "**วิเคราะห์จากเลขที่ออกของไต้หวัน VIP เองเท่านั้น** · ปรับ 7 พ.ย. 69: ทุกงวดเลือกมุมมองที่ทำเงินได้มากสุดใน 30 งวดล่าสุด จาก 3 มุมมอง (โมเดล 800 งวด = สูตรเดิม · โมเดล 400 งวด · โมเดลแยกบน/ล่าง) — ทดสอบ 350 งวดที่ไม่ได้ใช้เลือก +754/งวด vs เดิม +640 · MEGA (11 ต.ค. 69): รวมสูตรความน่าจะเป็น 37 ตัวแปร — ความถี่ 10/30/100/300/ตลอดกาล, โอกาสตามระยะหาย, โอกาสตามการมาติด, มาร์คอฟ 'เมื่อวานออก x → วันนี้ออก d', มาร์คอฟรายตำแหน่ง, วันในสัปดาห์, โหวตจากสูตรหวยหุ้น 89 สูตร — ชั่งน้ำหนักจาก 800 งวดล่าสุด (ฝึกใหม่ทุก 15 งวด — ปรับ 2 พ.ย. 69: ทดสอบ 1,150 งวด 2 ตัว 62.1 / 64.5 vs เดิม 61.4 / 63.8) + เลขเย็น 100 งวด · ทดสอบ walk-forward 878 งวด: ★ 38.5% · 2 ตัว 62.2% · ปี 69 ★ 41.5% · 2 ตัว 64.4% · 60 งวดล่าสุด 43.3% / 68.3% (สุ่ม 33.3 / 57.7) · สูตรก่อนหน้าระยะยาวพอ ๆ กัน (39.3 / 62.6) แต่ช่วงล่าสุดแพ้ (38.3 / 60.0) · ราคาเปิด/ปิดช่วยไม่ได้ (ราคาวิ่งเฉลี่ย 57 จุด/วัน ผลต้องแม่นระดับสตางค์ และเว็บขยับ diff แถวผล) · เลขเจาะ: คู่ที่ออกบ่อยใน 300 งวด ตัดเบิ้ล ตัดคู่ของเมื่อวาน 46.8% (สุ่มคู่ 45.7%) · ได้เปรียบสุ่มราว 5–8 จุด ผลรายวันยังแกว่ง พลาด 3 วันติดเกิดได้ราว 1 ครั้งต่อ 40 วัน",
   pick: (history) => pickTw(history),
   drill: drillTw,
   noManualOpen: true, // ถอดสูตรทดลอง B (จากทศนิยมราคาเปิด) 13 ต.ค. 69 — แพ้สูตรหลัก และผล VIP ไม่ผูกกับราคาเปิด · ระบบยังเก็บราคาเปิดเองจากฟีด
   minHistory: TW_MIN_HISTORY,
-  since: "2026-11-02", // วันที่สูตรปัจจุบันเริ่มใช้ (ปรับ 2 พ.ย. 69) — ไว้บอกในหมายเหตุของงวดที่ไม่มีเลขล็อก
+  since: "2026-11-07", // วันที่สูตรปัจจุบันเริ่มใช้ (ปรับ 7 พ.ย. 69 — สลับมุมมอง) — ไว้บอกในหมายเหตุของงวดที่ไม่มีเลขล็อก
   lockedFrom: "2026-10-12", // เลขที่ล็อกก่อน 12 ต.ค. 69 ฟันจากประวัติแค่ 16–33 งวด
   drillRandom: 0.457, // เจาะ 12 ตัวแบบสุ่มคู่ จากเลขฟัน MEGA ชุดเดียวกัน 878 งวด
 };

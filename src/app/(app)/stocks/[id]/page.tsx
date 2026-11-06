@@ -10,10 +10,9 @@ import { YahooOpenButton } from "@/components/yahoo-open-button";
 import { CloseYahooButton } from "@/components/close-yahoo-button";
 import { NikkeiSetup } from "../nikkei-setup";
 import { nikkeiSession } from "@/lib/stocks/nikkei";
-import { NIKKEI_PAIR_STRONG, NIKKEI_PAIR_BASE, nikkeiAmAnalysis } from "@/lib/formulas/stocks/nikkei";
+import { nikkeiAmAnalysis } from "@/lib/formulas/stocks/nikkei";
 import { chinaSession } from "@/lib/stocks/china";
-import { CHINA_PAIR_STRONG, CHINA_DOUBLE, CHINA_PAIR } from "@/lib/formulas/stocks/china";
-import { SENSEX_PAIR } from "@/lib/formulas/stocks/sensex";
+import { CHINA_DOUBLE } from "@/lib/formulas/stocks/china";
 import { EgyptSetup, EgyptOpenNextButton, EgyptOpenPasteForm } from "../egypt-setup";
 import { ChinaSetup } from "../china-setup";
 import { HangSengSetup } from "../hangseng-setup";
@@ -89,11 +88,15 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
   const manualOpen = hsSession === "pm" || (china && pm) || nikkeiSession(stock.symbol) === "pm"; // รอบบ่าย (ฮั่งเส็ง/จีน/นิเคอิ): ผู้ใช้กรอกเปิดเองทั้งหมด แทนปุ่ม Yahoo
   const sensex = !egypt && !nikkei && !china && !hangseng && !dow && !sg && !tw; // หลักฐาน 10 ปีในไฟล์กลางเป็นของ SENSEX — ห้ามเอาไปแสดงบนหุ้นตัวอื่น
   // อียิปต์: ปิดป้าย ★ งวดคู่ผูกแข็ง เพราะข้อมูลของอียิปต์เองบอกว่ากลับด้าน (13.6% vs 21.3%)
-  const pairStrong = egypt ? 99 : china ? CHINA_PAIR_STRONG : sensex ? SENSEX_PAIR.threshold : NIKKEI_PAIR_STRONG; // เกณฑ์ "งวดคู่ผูกแข็ง" — ค่าเท่ากันเพราะมาจากโครงสร้าง D
-  const pairEvidence = egypt ? "อียิปต์: วันแบบนี้ถูกครบ 24.6% เทียบวันอื่น 18.4%"
-    : china ? `สถิติจีน${pm ? "บ่าย 10 ปี" : "เช้า 2 ปี"}: งวดแบบนี้ถูกครบ ${Math.round((pm ? CHINA_PAIR.pm.strong : CHINA_PAIR.am.strong) * 100)}% เทียบงวดอื่น ${Math.round((pm ? CHINA_PAIR.pm.other : CHINA_PAIR.am.other) * 100)}%`
-    : sensex ? `SENSEX 10 ปี: งวดแบบนี้ถูกครบ ${Math.round(SENSEX_PAIR.strong * 100)}% เทียบงวดอื่น ${Math.round(SENSEX_PAIR.other * 100)}%`
-    : `นิเคอิบ่าย: ${Math.round(NIKKEI_PAIR_BASE.pm.strong * 100)}% เทียบปกติ ${Math.round(NIKKEI_PAIR_BASE.pm.both * 100)}%`;
+  /**
+   * คู่ผูก — โชว์เฉพาะวันที่แข็งจริง (โอกาสมาครบ ≥23.5%) ทุกหุ้น (ผู้ใช้ 4 พ.ย. 69: "ถ้าวันนั้นวิเคราะห์แล้วดีจริง ๆ ก็เอาคู่ผูกมาฟัน · ไม่ต้องแสดงให้มันเยอะ")
+   *   ย้อนหลังของแต่ละหุ้นเอง: วันแข็งมาครบ 23–30% เทียบทุกวัน 17–20% (~1–2 วัน/เดือน)
+   *   แต่ถ้าเอาไปฟันแทนเลขปกติ เงินไม่ได้ดีกว่าทั้ง 2 ครึ่งในหุ้นไหนเลย → เป็นป้ายเสริม ไม่เปลี่ยนเลขล็อก
+   */
+  const PAIR_STRONG = 0.235;
+  const pairEvidence = "วันแบบนี้ย้อนหลัง 2 ตัวมาครบ 23–30% เทียบวันปกติ 17–20% (ข้อมูลของหุ้นแต่ละตัวเอง)";
+  /** วิธีช่วง % — เก็บเฉพาะนิเคอิเช้า / ดาวโจนส์ / ไต้หวัน (ผู้ใช้เลือก 4 พ.ย. 69 จากผลจริง: ตัวอื่นแพ้เลขฟันปกติ) */
+  const pctLine = nikkeiSession(stock.symbol) === "am" || dow || tw;
   // รอบบ่ายจีน/นิเคอิ: เลขเสมอเลือกจากเลขที่ออกรอบเช้า (ดู formulas/stocks/index.ts)
   const amSrc = manualOpen ? await prisma.stock.findMany({ where: { userId }, select: { symbol: true, records: { select: { date: true, closeValue: true, closeChange: true } } } }) : [];
   const am = amDigitsFor(amSrc, stock.symbol);
@@ -110,7 +113,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
     const hit1 = pick !== null && closeDigits ? closeDigits.includes(pick) : null;
     const hit2 = pair && closeDigits ? pair.filter((d) => closeDigits.includes(d)) : null;
     // คู่ผูก (ถูกต้องครบทั้ง 2 ตัว) — แสดงให้อียิปต์และนิเคอิเหมือนกัน (อียิปต์ ≥23.5% ถูกจริง 24.6% · นิเคอิบ่าย 24.8%)
-    const pp = egypt || china ? pickPair(r.openValue, r.openChange, history) : null; // นิเคอิไม่แสดงคู่ผูก (ผู้ใช้สั่งเอาออก 21 ต.ค. 69) · SENSEX ไม่แสดงคู่ผูก (17.6% ต่ำกว่าอียิปต์ 20.3% — ผู้ใช้ไม่เอา)
+    const pp = (() => { const x = pickPair(r.openValue, r.openChange, history); return x.pBoth >= PAIR_STRONG ? x : null; })(); // คู่ผูก: เฉพาะวันแข็ง
     const pairBoth = pp && closeDigits ? pp.pair.every((d) => closeDigits.includes(d)) : null;
     const star = two.standout.digit;
     const hitStar = closeDigits ? closeDigits.includes(star) : null;
@@ -147,7 +150,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
     // รอบบ่ายไม่ใช้ (ผู้ใช้สั่ง 16 ต.ค. 69) · % ปิดงวดก่อน = แถวที่ปิดแล้วล่าสุดก่อนวันนี้
     const prevRow = history[history.length - 1];
     const prevPct = prevRow && hasClose(prevRow) && prevRow.closeValue - prevRow.closeChange ? (prevRow.closeChange / (prevRow.closeValue - prevRow.closeChange)) * 100 : null;
-    const op = orHist && !manualOpen && r.openChange && !amWait ? openRangePick(orHist, r.date.toISOString().slice(0, 10), (r.openChange / (r.openValue - r.openChange)) * 100, r.openValue - r.openChange, prevPct) : null;
+    const op = pctLine && orHist && !manualOpen && r.openChange && !amWait ? openRangePick(orHist, r.date.toISOString().slice(0, 10), (r.openChange / (r.openValue - r.openChange)) * 100, r.openValue - r.openChange, prevPct) : null;
     const opRes = op ? { ...op, hit: closeDigits ? op.pick.filter((d) => closeDigits.includes(d)) : null, money: closeNums ? { mine: betResult(op.pick, [], closeNums[0], closeNums[1]).profit, base: betResult(pair, [], closeNums[0], closeNums[1]).profit } : null } : null;
     return { opRes, late, r, oTop, oBot, noOpenChange, fromOpen, winSetDigits, win3Hit, win2Hit, winBoth, pWin: two.win.pWin, pBoth: two.win.pBoth, pp, pairBoth, dTwo, cnDoubleLow, pick, pair, star, weak, closeDigits, hit1, hit2, hitStar, drill, drillHits, pDouble: two.pDouble, dblWatch, closeDbl, amWait };
   }).reverse();
@@ -336,7 +339,7 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                         {amWait ? <span className="text-xs text-amber-700">⏳ รอผลรอบเช้าเข้าระบบ (บ่ายใช้เลขเช้าด้วย)</span>
                           : <PickRow digits={pair} star={star} hit={hit2 ? hit2 : hasClose(r) ? [] : null} drill={drill} isHit={drillHits ? (m) => drillHits.includes(m) : undefined} />}
                         {!hasClose(r) && <div className="mt-2"><LateCard recordId={r.id} prevClose={r.openValue - r.openChange} saved={r.liveValue !== null && r.liveAt ? { price: r.liveValue, at: r.liveAt.toISOString() } : null} /></div>}
-                        <TryRangeForm recordId={r.id} from={tryId === r.id && Number.isFinite(tryFrom) ? String(tryFrom) : ""} to={tryId === r.id && Number.isFinite(tryTo) ? String(tryTo) : ""} />
+                        {pctLine && <TryRangeForm recordId={r.id} from={tryId === r.id && Number.isFinite(tryFrom) ? String(tryFrom) : ""} to={tryId === r.id && Number.isFinite(tryTo) ? String(tryTo) : ""} />}
                         {tryId === r.id && !tryOk && <p className="mt-1 rounded bg-amber-50 px-1.5 py-1 text-[11px] text-amber-800"><ScrollHere />พิมพ์ช่วง % ทั้ง 2 ช่องก่อนกดวิเคราะห์ เช่น -0.7 ถึง -0.8</p>}
                         {tryId === r.id && tryOk && (
                           <div id={`try-${r.id}`} className="mt-1 scroll-mt-24 rounded bg-blue-50 px-1.5 py-1 text-[11px] text-blue-950 ring-2 ring-blue-300">
@@ -364,11 +367,11 @@ export default async function StockDetailPage({ params, searchParams }: PageProp
                           );
                         })()}
                         {late && <div className="mt-1 text-[11px] text-slate-600">ช่วงท้าย ({late.up ? "▲" : "▼"}): <span className="font-mono font-semibold">★{late.pick[0]} {late.pick[1]}</span>{late.hit && <span className={late.hit.length ? "text-emerald-700" : "text-red-600"}> {late.hit.length ? `✓ ${late.hit.join(" ")}` : "✗"}</span>}{late.drillHit !== null && <span className={late.drillHit ? "text-amber-700" : "text-slate-400"}> · เจาะ{late.drillHit ? "เข้า" : "ไม่เข้า"}</span>}{late.money && <span className="text-slate-400"> · {late.money.late >= 0 ? "+" : ""}{late.money.late.toLocaleString()} (ปกติ {late.money.base >= 0 ? "+" : ""}{late.money.base.toLocaleString()})</span>}</div>}
-                        {/* คู่ผูก (เฉพาะอียิปต์): ต้องมาครบทั้ง 2 ตัวถึงถูก — ★ วันที่โมเดลให้ ≥23.5% (ของจริง 24.6% เทียบวันอื่น 18.4%) */}
+                        {/* คู่ผูก: ต้องมาครบทั้ง 2 ตัวถึงถูก — โชว์เฉพาะวันแข็ง (ดู PAIR_STRONG) */}
                         {pp && (
                           <span className={`mt-1.5 block text-[11px] ${pairBoth ? "font-semibold text-emerald-700" : pairBoth === false ? "text-slate-400" : "text-slate-500"}`}>
                             คู่ผูก <span className="font-mono font-bold">{pp.pair.join("-")}</span> {Math.round(pp.pBoth * 100)}%
-                            {pp.pBoth >= pairStrong && <span className="ml-1 rounded bg-amber-100 px-1 font-medium text-amber-800" title={pairEvidence}>★ งวดคู่ผูกแข็ง</span>}
+                            <span className="ml-1 rounded bg-amber-100 px-1 font-medium text-amber-800" title={pairEvidence}>★ วันคู่ผูกแข็ง</span>
                             {pairBoth === true && " ✓ ครบ"}{pairBoth === false && " ✗"}
                           </span>
                         )}

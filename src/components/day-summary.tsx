@@ -140,10 +140,20 @@ function MonthBar({ month, vipOnly = false }: { month: { label: string; regular:
   return (
     <div className="rounded-md bg-slate-50 px-3 py-2">
       <p className="text-sm">
-        <span className="font-medium">รวมเดือน {month.label}:</span> ลงทุน {baht(t.cost)} · ได้ {baht(t.win)} · {t.profit >= 0 ? "กำไร" : "ขาดทุน"} <P v={t.profit} />
-        <span className="text-slate-400"> ({month.days} วัน · รวม {t.n} งวด{vipOnly ? "" : "จากทุกหุ้นและทุกรอบ"})</span>
+        <span className="font-medium">รวมเดือน {month.label}:</span> {t.profit >= 0 ? "กำไรสุทธิ" : "ขาดทุนสุทธิ"} <P v={t.profit} />
+        <span className="text-slate-400"> ({month.days} วัน · {t.n} งวด · เฉลี่ยวันละ {signed(month.days ? Math.round(t.profit / month.days) : 0)})</span>
       </p>
-      <p className="text-xs text-slate-600">{!vipOnly && <>หุ้นปกติ <P v={month.regular.profit} /> <span className="text-slate-400">({month.regular.n} งวด)</span> · หุ้น VIP <P v={month.vip.profit} /> <span className="text-slate-400">({month.vip.n} งวด)</span> · </>}เฉลี่ยวันละ <P v={month.days ? Math.round(t.profit / month.days) : 0} /></p>
+      {/* แยก VIP / ปกติ + ทุนหมุน (ผู้ใช้ขอ 5 พ.ย. 69) — ทุนที่ใช้จริง = เงินตัวเองที่ต้องใส่ เมื่อเอากำไรมาแทงงวดต่อไป */}
+      <ul className="mt-1 space-y-0.5 text-sm">
+        {([["หุ้น VIP", month.vip], ...(vipOnly ? [] : [["หุ้นปกติ", month.regular]])] as [string, MoneyTotal][]).filter(([, g]) => g.n).map(([name, g]) => (
+          <li key={name}>
+            <span className="font-medium">{name}</span> {g.profit < 0
+              ? <>ยังไม่ได้กำไร · ใช้เงินไปแล้ว <P v={g.profit} /></>
+              : <>กำไร <P v={g.profit} /> <span className="text-slate-500">(เอากำไรเล่นต่อได้ ไม่ต้องควักทุนเพิ่ม)</span></>}
+            <span className="text-slate-400"> ({g.n} งวด · ยอดแทงหมุน {baht(g.cost)})</span>
+          </li>
+        ))}
+      </ul>
       <p className="text-[11px] text-slate-400">วิธีแทง: รูดเลขฟัน 2 ตัว (19 ประตู) เลขละ {stake} บาท บน+ล่าง · เจาะ 12 ตัว ตัวละ {stake} กลับเลข บน+ล่าง · จ่ายบาทละ {BET.payout} → ทุน {baht(betCost(2, 12, stake))} ต่องวด · ถูก 1 ใบ = {baht(stake * BET.payout)} · ตัวเลขของวันที่เลือกอยู่ที่หัวแต่ละฝั่งด้านล่าง</p>
     </div>
   );

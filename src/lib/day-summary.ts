@@ -15,6 +15,13 @@ import { VIP_MARKETS, vipWaitReason } from "@/lib/vip";
 import { lockedStockPick } from "@/lib/stock-lock";
 import type { DaySummaryItem } from "@/components/day-summary";
 import { betCost, betResult } from "@/lib/bet";
+import { nikkeiSession } from "@/lib/stocks/nikkei";
+import { chinaSession } from "@/lib/stocks/china";
+import { hangSengSession } from "@/lib/stocks/hangseng";
+import { isTaiwan } from "@/lib/stocks/taiwan";
+import { isSingapore } from "@/lib/stocks/singapore";
+import { isEgypt } from "@/lib/stocks/egypt";
+import { isDowJones } from "@/lib/stocks/dowjones";
 
 /**
  * ตลาด VIP ที่ยังไม่นับในหน้าสรุป (ผู้ใช้สั่ง 12 ต.ค. 69): อินเดีย VIP ยังไม่น่าลงทุน — เก็บสถิติทุกวันในหน้า VIP ต่อไปจนครบ ~100 งวดก่อน
@@ -111,8 +118,38 @@ export async function vipSummary(userId: string, today: string, stake?: number, 
   return out;
 }
 
-export type MoneyTotal = { n: number; cost: number; win: number; profit: number };
+export type MoneyTotal = {
+  n: number; cost: number; win: number; profit: number;
+  /** ทุนหมุน (ผู้ใช้ขอ 5 พ.ย. 69: "เอากำไรมาเล่นด้วย" ลงทุนรวมทุกงวดดูบวม) — เดินยอดทีละงวดตามเวลาออกผล ·
+   *  own = เงินตัวเองที่ต้องใส่จริง (ยอดที่ต้องเติมมากสุดเมื่อเงินในมือไม่พอแทงงวดนั้น) · low = กำไรสะสมต่ำสุดระหว่างเดือน */
+  own?: number; low?: number;
+};
 const addTo = (t: MoneyTotal, r: { cost: number; win: number; profit: number }) => { t.n++; t.cost += r.cost; t.win += r.win; t.profit += r.profit; };
+
+/** เวลาออกผลหุ้นปกติ (ไทย โดยประมาณ) ไว้เรียงงวดในวันเดียวกันตอนเดินทุนหมุน · ดาวโจนส์ออกตี 4 ของวันถัดไป → "28:00" */
+function stockResultThai(symbol: string): string {
+  const nk = nikkeiSession(symbol), cn = chinaSession(symbol), hk = hangSengSession(symbol);
+  if (nk) return nk === "am" ? "09:30" : "13:00";
+  if (cn) return cn === "am" ? "10:30" : "14:00";
+  if (hk) return hk === "am" ? "11:00" : "15:00";
+  if (isTaiwan(symbol)) return "12:30";
+  if (isSingapore(symbol)) return "16:00";
+  if (/SENSEX|BSESN/i.test(symbol)) return "17:00";
+  if (isEgypt(symbol)) return "19:30";
+  if (isDowJones(symbol)) return "28:00";
+  return "23:59";
+}
+
+/** เดินยอดทีละงวด (เรียงตามเวลาออกผล) — กำไรที่ได้เอามาแทงงวดต่อไป ขาดเมื่อไหร่ค่อยควักเพิ่ม */
+function bankroll(t: MoneyTotal, ev: { at: string; cost: number; profit: number }[]) {
+  let bal = 0, own = 0, low = 0;
+  for (const e of [...ev].sort((a, b) => a.at.localeCompare(b.at))) {
+    own = Math.max(own, e.cost - bal);
+    bal += e.profit;
+    low = Math.min(low, bal);
+  }
+  t.own = own; t.low = low;
+}
 
 /** ผลรายตัว (หุ้น/ตลาด × รอบ) ของเดือน — ใช้ทำ dashboard */
 export type MonthItem = MoneyTotal & {
@@ -134,9 +171,11 @@ export async function monthMoney(userId: string, stocks: (Stock & { records: Row
   const items: MonthItem[] = [];
   const item = (key: string, label: string, href: string, group: MonthItem["group"]): MonthItem => ({ key, label, href, group, n: 0, cost: 0, win: 0, profit: 0, star: 0, any: 0, drill: 0, curve: [] });
   /** บันทึกผล 1 งวดลงทั้งยอดรวมกลุ่มและรายตัว */
-  const record = (total: MoneyTotal, it: MonthItem, pick: string[], drill: string[], top: string, bottom: string) => {
+  const events: { total: MoneyTotal; at: string; cost: number; profit: number }[] = [];
+  const record = (total: MoneyTotal, it: MonthItem, pick: string[], drill: string[], top: string, bottom: string, date: string, time: string) => {
     const r = betResult(pick, drill, top, bottom, stake);
     addTo(total, r); addTo(it, r);
+    events.push({ total, at: `${date} ${time}`, cost: r.cost, profit: r.profit });
     const dg = [...new Set(top + bottom)];
     if (dg.includes(pick[0])) it.star++;
     if (pick.some((d) => dg.includes(d))) it.any++;
@@ -152,7 +191,7 @@ export async function monthMoney(userId: string, stocks: (Stock & { records: Row
       const locked = lockedStockPick(rec);
       if (!locked) return;
       days.add(rec.date.toISOString().slice(0, 10));
-      record(regular, it, locked.pick, locked.drill.flat(), top2(rec.closeValue!), bottom2(rec.closeChange!));
+      record(regular, it, locked.pick, locked.drill.flat(), top2(rec.closeValue!), bottom2(rec.closeChange!), rec.date.toISOString().slice(0, 10), stockResultThai(s.symbol));
     });
     if (it.n) items.push(it);
   }
@@ -172,9 +211,11 @@ export async function monthMoney(userId: string, stocks: (Stock & { records: Row
       const drill = lockedDrill(row.drill) ?? (() => { const c = F.pick(hist, row.open, row.round); return c ? F.drill({ ...c, digits }, hist) : null; })();
       if (!drill) return;
       days.add(row.date.toISOString().slice(0, 10));
-      record(vip, it, digits, drill.flatMap((x) => x.numbers), row.top.slice(-2), row.bottom);
+      record(vip, it, digits, drill.flatMap((x) => x.numbers), row.top.slice(-2), row.bottom, row.date.toISOString().slice(0, 10), (m.closeThai as Partial<Record<number, string>>)[row.round] ?? "23:59");
     });
     for (const it of per.values()) if (it.n) items.push(it);
   }
+  bankroll(regular, events.filter((e) => e.total === regular));
+  bankroll(vip, events.filter((e) => e.total === vip));
   return { from, regular, vip, days: days.size, items };
 }
